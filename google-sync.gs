@@ -52,6 +52,39 @@ const ACCOUNTS_SHEET_NAME = 'CloudAccounts';
 const APP_CLIENT_ID = '';
 
 /* ============================================================
+   ACCOUNTS (email + password) — sign up with admin approval
+   ============================================================
+   Every account is saved in a hidden "Users" sheet on this server:
+     email | salt | hash | token | status | role | createdAt |
+     lastLogin | failed | lockUntil
+   - status: pending → approved → rejected (admin decides)
+   - role:   'user' or 'admin'
+   - passwords are NEVER stored; only a salted SHA-256 hash.
+   - Set ADMIN_EMAILS below to make those accounts auto-approved
+     with the admin role (that's you — do this BEFORE first use).
+   - All ledger data actions are scoped to the signed-in account,
+     so user A can never read or write user B's ledger.
+   ============================================================ */
+const USERS_SHEET_NAME = 'Users';
+
+// Accounts you own. On signing up, these are auto-approved as
+// admins. Add YOUR email here before you (or anyone) signs up.
+// Example: const ADMIN_EMAILS = ['owner@gmail.com'];
+const ADMIN_EMAILS = [];
+
+// OPTIONAL sign-up restrictions (leave empty to allow anyone to
+// request an account). Example:
+//   ALLOWED_DOMAINS = ['gmail.com'];   // only @gmail.com
+//   ALLOWED_EMAILS  = ['a@x.com','b@x.com']; // only these exact emails
+const ALLOWED_DOMAINS = [];
+const ALLOWED_EMAILS = [];
+
+const MIN_PASSWORD_LEN = 6;
+const MAX_LOGIN_FAILS = 5;          // 5 wrong passwords…
+const LOCK_MINUTES = 15;            // …locks the account for 15 minutes
+const SESSION_TTL_DAYS = 60;        // force re-login after 60 days
+
+/* ============================================================
    WEB APP ENTRY — doPost / doGet
    ============================================================ */
 
@@ -65,50 +98,43 @@ function doPost(e) {
     const body = JSON.parse(e.postData.contents);
     const action = body.action || 'save';
     const payload = body.payload || null;
+    const token = body.token || '';
     const idToken = body.idToken || '';
 
-    // Cloud (multi-tenant) mode: requests that carry a Google ID token are
-    // verified server-side and scoped to that account's own data.
-    const auth = resolveAccount_(idToken);
-    if (auth.email) {
-      if (action === 'save') {
-        if (!payload) return json_({ ok: false, message: 'Missing payload.' });
-        return json_(setCloudState_(auth.email, payload));
-      }
-      if (action === 'backup') {
-        if (!payload) return json_({ ok: false, message: 'Missing payload.' });
-        return json_(saveBackupToCloud_(auth.email, payload));
-      }
-      if (action === 'list') return json_(listCloudBackups_(auth.email));
-      if (action === 'restore') {
-        if (!body.fileName) return json_({ ok: false, message: 'Missing fileName.' });
-        return json_(readCloudBackup_(auth.email, body.fileName));
-      }
-      if (action === 'clear') return json_(clearCloudState_(auth.email));
-      return json_({ ok: false, message: 'Unknown action: ' + action });
+    // ---- ACCOUNT ACTIONS (no session required) ---------------------------
+    if (action === 'signup') return json_(signupAccount_(body));
+    if (action === 'login')  return json_(loginAccount_(body));
+    if (action === 'logout') return json_(logoutAccount_(token));
+    if (action === 'me')     return json_(me_(token));
+
+    // ---- ADMIN ACTIONS (admin session required) --------------------------
+    if (action === 'listUsers' || action === 'approve' || action === 'reject') {
+      return json_(adminAction_(action, token, body));
     }
 
-    // ---- LEGACY single-sheet mode (no ID token). Kept for backward
-    // compatibility with existing deployments that don't use accounts. ----
+    // ---- DATA ACTIONS (session or legacy Google id token required) -------
+    // The account that owns the session token is the ONLY account the
+    // request may read or write. User A can never reach user B's row.
+    const auth = resolveAnyAuth_(token, idToken);
+    if (!auth.email) {
+      return json_({ ok: false, message: 'Please sign in to access your data.' });
+    }
+
     if (action === 'save') {
       if (!payload) return json_({ ok: false, message: 'Missing payload.' });
-      return json_(saveToSheet_(payload));
+      return json_(setCloudState_(auth.email, payload));
     }
     if (action === 'backup') {
       if (!payload) return json_({ ok: false, message: 'Missing payload.' });
-      if (!DRIVE_FOLDER_ID) return json_({ ok: false, message: 'Drive backup is not enabled on this script.' });
-      return json_(saveBackupToDrive_(payload));
+      return json_(saveBackupToCloud_(auth.email, payload));
     }
-    if (action === 'list') {
-      if (!DRIVE_FOLDER_ID) return json_({ ok: false, message: 'Drive backup is not enabled on this script.' });
-      return json_(listDriveBackups_());
-    }
+    if (action === 'list') return json_(listCloudBackups_(auth.email));
     if (action === 'restore') {
       if (!body.fileName) return json_({ ok: false, message: 'Missing fileName.' });
-      return json_(readDriveBackup_(body.fileName));
+      return json_(readCloudBackup_(auth.email, body.fileName));
     }
-    if (action === 'clear') return json_(clearSheet_());
-    return json_({ ok: false, message: 'Unknown action: ' + action + ' (send an idToken to use cloud mode).' });
+    if (action === 'clear') return json_(clearCloudState_(auth.email));
+    return json_({ ok: false, message: 'Unknown action: ' + action });
   } catch (err) {
     console.error('doPost error: ' + err);
     return json_({ ok: false, message: 'Error: ' + err });
@@ -122,21 +148,17 @@ function doPost(e) {
 function doGet(e) {
   try {
     const action = e && e.parameter && e.parameter.action ? e.parameter.action : '';
+    const token = (e && e.parameter && e.parameter.token) || '';
     const idToken = (e && e.parameter && e.parameter.idToken) || '';
     if (action === 'get') {
-      // Cloud mode: fetch this account's own state (scoped, verified).
-      if (idToken) {
-        const auth = resolveAccount_(idToken);
-        if (auth.email) {
-          const p = getCloudState_(auth.email);
-          if (!p) return json_({ ok: false, message: 'No cloud data for this account yet.', payload: null });
-          return json_({ ok: true, payload: p });
-        }
+      // Read the signed-in account's OWN stored state (scoped + verified).
+      const auth = resolveAnyAuth_(token, idToken);
+      if (!auth.email) {
+        return json_({ ok: false, message: 'Please sign in to access your data.' });
       }
-      // Legacy single-sheet mode.
-      const payload = readFromLedger_();
-      if (!payload) return json_({ ok: false, message: 'No state found.' });
-      return json_({ ok: true, payload: payload });
+      const p = getCloudState_(auth.email);
+      if (!p) return json_({ ok: false, message: 'No data for this account yet.', payload: null });
+      return json_({ ok: true, payload: p });
     }
     return json_({ ok: false, message: 'Unknown action.' });
   } catch (err) {
@@ -456,6 +478,121 @@ function clearCloudState_(email) {
   return { ok: true, message: 'Cloud state cleared for ' + email + '.' };
 }
 
+/* ============================================================
+   ACCOUNTS — sign up / log in / sessions / admin approval
+   ============================================================ */
+
+function getUsersSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let s = ss.getSheetByName(USERS_SHEET_NAME);
+  if (!s) {
+    s = ss.insertSheet(USERS_SHEET_NAME);
+    s.appendRow(['email', 'salt', 'hash', 'token', 'status', 'role', 'createdAt', 'lastLogin', 'failed', 'lockUntil']);
+  }
+  return s;
+}
+
+function userRow_(email) {
+  const s = getUsersSheet_();
+  const last = s.getLastRow();
+  if (last < 1) return -1;
+  const vals = s.getRange(2, 1, last, 1).getValues();
+  for (let i = 0; i < last; i++) {
+    if (String(vals[i][0] || '').toLowerCase() === String(email).toLowerCase()) return i + 2;
+  }
+  return -1;
+}
+
+function sha256Hex_(str) {
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(str),
+    Utilities.Charset.UTF_8
+  );
+  return digest.map(function (b) {
+    const v = b < 0 ? b + 256 : b;
+    return ('0' + v.toString(16)).slice(-2);
+  }).join('');
+}
+function hashPassword_(salt, password) { return sha256Hex_(salt + '::' + password); }
+function makeSalt_() { return Utilities.getUuid(); }
+function makeToken_() { return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, ''); }
+
+/** Validate an account session token. Returns { email, role } or { email: '' }. */
+function resolveAccountByToken_(token) {
+  if (!token) return { email: '' };
+  const s = getUsersSheet_();
+  const last = s.getLastRow();
+  if (last < 1) return { email: '' };
+  const vals = s.getRange(2, 1, last, 10).getValues();
+  for (let i = 0; i < last; i++) {
+    if (String(vals[i][3] || '') === String(token)) {
+      const status = String(vals[i][4] || 'pending');
+      if (status !== 'approved') return { email: '' };
+      const lastLogin = vals[i][7] ? Date.parse(vals[i][7]) : 0;
+      if (SESSION_TTL_DAYS > 0 && lastLogin && (Date.now() - lastLogin > SESSION_TTL_DAYS * 86400000)) {
+        s.getRange(i + 2, 4).setValue(''); // expired -> revoke
+        return { email: '' };
+      }
+      return { email: String(vals[i][0]).toLowerCase(), role: String(vals[i][5] || 'user') };
+    }
+  }
+  return { email: '' };
+}
+
+/** Session token first (new accounts), legacy Google id token second. */
+function resolveAnyAuth_(token, idToken) {
+  if (token) {
+    const a = resolveAccountByToken_(token);
+    if (a.email) return a;
+  }
+  if (idToken) {
+    const b = resolveAccount_(idToken);
+    if (b.email) return b;
+  }
+  return { email: '' };
+}
+
+function signupAccount_(body) {
+  const email = String(body.email || '').trim().toLowerCase();
+  const password = String(body.password || '');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, message: 'Enter a valid email address.' };
+  if (password.length < MIN_PASSWORD_LEN) {
+    return { ok: false, message: 'Password must be at least ' + MIN_PASSWORD_LEN + ' characters.' };
+  }
+  if (ALLOWED_EMAILS.length && ALLOWED_EMAILS.indexOf(email) === -1) {
+    return { ok: false, message: 'Sign-ups are restricted to approved emails. Contact the app owner.' };
+  }
+  if (ALLOWED_DOMAINS.length) {
+    const dom = String(email.split('@')[1] || '').toLowerCase();
+    const allowed = ALLOWED_DOMAINS.map(function (d) { return String(d).toLowerCase(); });
+    if (allowed.indexOf(dom) === -1) {
+      return { ok: false, message: 'Sign-ups are restricted to allowed email domains. Contact the app owner.' };
+    }
+  }
+  const s = getUsersSheet_();
+  if (userRow_(email) > 0) {
+    return { ok: false, message: 'An account with this email already exists. Sign in instead.' };
+  }
+  const salt = makeSalt_();
+  const hash = hashPassword_(salt, password);
+  const admins = ADMIN_EMAILS.map(function (a) { return String(a).toLowerCase(); });
+  // First account ever created = the owner (auto admin). Otherwise admins
+  // come from ADMIN_EMAILS. Everyone else starts as 'pending'.
+  const isFirst = s.getLastRow() <= 1;
+  const isAdmin = admins.indexOf(email) !== -1 || isFirst;
+  s.appendRow([email, salt, hash, '', isAdmin ? 'approved' : 'pending', isAdmin ? 'admin' : 'user',
+    new Date().toISOString(), '', '0', '']);
+  return {
+    ok: true,
+    status: isAdmin ? 'approved' : 'pending',
+    role: isAdmin ? 'admin' : 'user',
+    message: isAdmin
+      ? 'Admin account created. You can sign in now.'
+      : 'Account created — it is awaiting admin approval. You will be able to sign in once the owner approves it.'
+  };
+}
+
 /* ---------- Per-account Drive backups ---------- */
 function cloudFolder_(email) {
   const parent = DriveApp.getFolderById(DRIVE_FOLDER_ID);
@@ -528,14 +665,122 @@ function json_(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+function loginAccount_(body) {
+  const email = String(body.email || '').trim().toLowerCase();
+  const password = String(body.password || '');
+  const idx = userRow_(email);
+  if (idx < 0) return { ok: false, message: 'Incorrect email or password.' };
+  const s = getUsersSheet_();
+  const row = s.getRange(idx, 1, 1, 10).getValues()[0];
+  const status = String(row[4] || 'pending');
+  const lockUntil = row[9] ? Date.parse(row[9]) : 0;
+  const now = new Date().getTime();
+  if (lockUntil && now < lockUntil) {
+    const mins = Math.max(1, Math.ceil((lockUntil - now) / 60000));
+    return { ok: false, message: 'Too many failed attempts. Try again in about ' + mins + ' minute(s).' };
+  }
+  let failed = parseInt(row[8] || '0', 10) || 0;
+  const actual = hashPassword_(String(row[1]), password);
+  if (actual !== String(row[2])) {
+    failed += 1;
+    let lock = '';
+    if (failed >= MAX_LOGIN_FAILS) {
+      lock = new Date(now + LOCK_MINUTES * 60000).toISOString();
+      failed = 0;
+    }
+    s.getRange(idx, 9, 1, 2).setValues([[failed, lock]]);
+    return { ok: false, message: 'Incorrect email or password.' };
+  }
+  if (status === 'pending') {
+    return { ok: false, message: 'Your account is awaiting admin approval. Please wait.' };
+  }
+  if (status === 'rejected') {
+    return { ok: false, message: 'This account was not approved. Contact the app owner.' };
+  }
+  const token = makeToken_();
+  // token(4), status(5), role(6), createdAt(7) unchanged, lastLogin(8), failed(9), lockUntil(10)
+  s.getRange(idx, 4, 1, 7).setValues([[token, status, row[5], row[6], new Date().toISOString(), '0', '']]);
+  return {
+    ok: true,
+    token: token,
+    email: email,
+    role: String(row[5] || 'user'),
+    name: email.split('@')[0]
+  };
+}
+
+function logoutAccount_(token) {
+  if (!token) return { ok: true };
+  const s = getUsersSheet_();
+  const last = s.getLastRow();
+  if (last < 1) return { ok: true };
+  const vals = s.getRange(2, 4, last, 1).getValues();
+  for (let i = 0; i < last; i++) {
+    if (vals[i][0] === token) { s.getRange(i + 2, 4).setValue(''); break; }
+  }
+  return { ok: true, message: 'Signed out.' };
+}
+
+function me_(token) {
+  const a = resolveAccountByToken_(token);
+  if (!a.email) return { ok: false, message: 'Session expired or invalid. Sign in again.' };
+  return { ok: true, email: a.email, role: a.role };
+}
+
+function adminAction_(action, token, body) {
+  const a = resolveAccountByToken_(token);
+  if (a.role !== 'admin') return { ok: false, message: 'Admin access required.' };
+  const s = getUsersSheet_();
+
+  if (action === 'listUsers') {
+    const last = s.getLastRow();
+    const out = [];
+    if (last >= 1) {
+      const vals = s.getRange(2, 1, last, 8).getValues();
+      for (let i = 0; i < last; i++) {
+        out.push({
+          email: vals[i][0],
+          status: vals[i][4],
+          role: vals[i][5],
+          createdAt: vals[i][6],
+          lastLogin: vals[i][7]
+        });
+      }
+    }
+    return { ok: true, users: out };
+  }
+
+  const email = String(body.email || '').trim().toLowerCase();
+  const idx = userRow_(email);
+  if (idx < 0) return { ok: false, message: 'No account with that email.' };
+
+  if (action === 'approve') {
+    s.getRange(idx, 5, 1, 1).setValue('approved');
+    s.getRange(idx, 9, 1, 2).setValues([['0', '']]); // clear lockout
+    return { ok: true, message: 'Approved ' + email + '. They can sign in now.' };
+  }
+  if (action === 'reject') {
+    s.getRange(idx, 5, 1, 1).setValue('rejected');
+    s.getRange(idx, 4, 1, 1).setValue(''); // revoke any live session
+    return { ok: true, message: 'Rejected ' + email + '.' };
+  }
+  return { ok: false, message: 'Unknown admin action.' };
+}
+
 /**
  * Optional: an onOpen menu for manual operations in the Sheet editor.
  */
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Crispy Roll Ledger')
+    .addItem('Open Users sheet (approve accounts)', 'openUsersSheet_')
     .addItem('Clear ledger sheet', 'clearSheetAndLog_')
     .addToUi();
+}
+
+function openUsersSheet_() {
+  const s = getUsersSheet_();
+  SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(s);
 }
 
 function clearSheetAndLog_() {

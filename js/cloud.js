@@ -19,10 +19,13 @@
    ============================================================ */
 
 function cloudRawIdToken() { return (googleAuthUser && googleAuthUser.rawCredential) || ''; }
-function cloudSignedInEmail() { return (googleAuthUser && googleAuthUser.email) || ''; }
+/* Account session token first (new login), legacy Google id token second. */
+function cloudAccountToken() { return authToken() || cloudRawIdToken(); }
+function cloudSignedInEmail() { return authEmail() || ((googleAuthUser && googleAuthUser.email) || ''); }
 function cloudCfg() { return getGoogleSyncConfig(); }
 function cloudBoundEmail() { return (cloudCfg().cloud || {}).email || ''; }
-function cloudEndpoint() { return cloudCfg().sheetUrl || ''; }
+/* The backend URL: the login screen's saved URL wins, otherwise the old per-company config. */
+function cloudEndpoint() { return authServerUrl() || cloudCfg().sheetUrl || ''; }
 
 function setCloudBoundEmail(email) {
   const cfg = getGoogleSyncConfig();
@@ -31,25 +34,27 @@ function setCloudBoundEmail(email) {
   setGoogleSyncConfig(cfg);
 }
 
-/* Is this workspace currently ONLINE (token + matching binding + endpoint)? */
+/* Is this workspace currently ONLINE (logged in + backend reachable)? */
 function cloudIsOnline() {
   const email = cloudSignedInEmail();
-  return !!(
-    cloudRawIdToken() && email &&
-    cloudBoundEmail().toLowerCase() === email.toLowerCase() &&
-    cloudEndpoint()
-  );
+  const token = cloudAccountToken();
+  if (!token || !email || !cloudEndpoint()) return false;
+  if (authEmail()) return true; // account session token is the authorization
+  const bound = cloudBoundEmail();
+  return !bound || bound.toLowerCase() === email.toLowerCase();
 }
-/* Is a cloud deployment reachable at all (endpoint + token)? */
-function cloudIsAvailable() { return !!cloudEndpoint() && !!cloudRawIdToken(); }
+/* Is a cloud deployment reachable at all (endpoint + some credential)? */
+function cloudIsAvailable() { return !!cloudEndpoint() && !!cloudAccountToken(); }
 /* ---------- Low-level request helpers ---------- */
 async function cloudPost(action, extra) {
-  const cfg = cloudCfg();
-  if (!cfg.sheetUrl) return { ok: false, message: 'No Apps Script URL configured.' };
-  if (!cloudRawIdToken()) return { ok: false, message: 'Sign in with Google first.' };
-  const body = Object.assign({ action: action, idToken: cloudRawIdToken() }, extra || {});
+  const url = cloudEndpoint();
+  if (!url) return { ok: false, message: 'No Apps Script URL configured.' };
+  const authTokenValue = authToken();
+  const idToken = cloudRawIdToken();
+  if (!authTokenValue && !idToken) return { ok: false, message: 'Sign in first.' };
+  const body = Object.assign({ action: action, token: authTokenValue, idToken: idToken }, extra || {});
   try {
-    const resp = await fetch(cfg.sheetUrl, {
+    const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(body)
@@ -63,14 +68,15 @@ async function cloudPost(action, extra) {
 }
 
 async function cloudGet() {
-  const cfg = cloudCfg();
-  if (!cfg.sheetUrl) return { ok: false, error: 'No Apps Script URL configured.' };
-  if (!cloudRawIdToken()) return { ok: false, error: 'Sign in with Google first.' };
+  const url = cloudEndpoint();
+  if (!url) return { ok: false, error: 'No Apps Script URL configured.' };
+  if (!cloudAccountToken()) return { ok: false, error: 'Sign in first.' };
   try {
-    const url = new URL(cfg.sheetUrl);
-    url.searchParams.set('action', 'get');
-    url.searchParams.set('idToken', cloudRawIdToken());
-    const resp = await fetch(url.toString(), { method: 'GET' });
+    const u = new URL(url);
+    u.searchParams.set('action', 'get');
+    u.searchParams.set('token', authToken());
+    u.searchParams.set('idToken', cloudRawIdToken());
+    const resp = await fetch(u.toString(), { method: 'GET' });
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     return await resp.json();
   } catch (e) {
@@ -109,25 +115,29 @@ function applyCloudRemote(remote) {
   return true;
 }
 
-/* ---------- Reconcile after Google sign-in ----------
+/* ---------- Reconcile after sign-in ----------
    Pulls the newer copy (cloud -> device) or pushes local when the
-   device holds newer data (or the cloud is empty for this account). */
+   device holds newer data (or the cloud is empty for this account).
+   Works for account login (session token) and legacy Google sign-in. */
 async function cloudAfterSignIn() {
   const email = cloudSignedInEmail();
-  if (!email || !cloudRawIdToken()) return false;
+  if (!email || !cloudAccountToken()) return false;
   renderCloudStatus();
   if (!cloudEndpoint()) {
-    updateGoogleSyncStatus('Signed in with Google. Add your Apps Script URL in the Online/Cloud card to go online.', 'info');
+    updateGoogleSyncStatus('Signed in. Add your Apps Script URL in the Online/Cloud card to go online.', 'info');
     return false;
   }
-  const bound = cloudBoundEmail();
-  if (!bound) {
-    setCloudBoundEmail(email); // first time -> bind this account to this workspace
-    updateGoogleSyncStatus('Bound this workspace to ' + email + '. Syncing now…', 'info');
-  } else if (bound.toLowerCase() !== email.toLowerCase()) {
-    updateGoogleSyncStatus('This workspace is bound to ' + bound + '. Sign into that Google account to sync it.', 'info');
-    renderCloudStatus();
-    return false;
+  // Legacy Google-account binding only (not used in account mode).
+  if (!authEmail()) {
+    const bound = cloudBoundEmail();
+    if (!bound) {
+      setCloudBoundEmail(email); // first time -> bind this account to this workspace
+      updateGoogleSyncStatus('Bound this workspace to ' + email + '. Syncing now…', 'info');
+    } else if (bound.toLowerCase() !== email.toLowerCase()) {
+      updateGoogleSyncStatus('This workspace is bound to ' + bound + '. Sign into that Google account to sync it.', 'info');
+      renderCloudStatus();
+      return false;
+    }
   }
   const localCount = Object.keys(state.entries || {}).length;
   const res = await cloudGet();
@@ -136,7 +146,7 @@ async function cloudAfterSignIn() {
 
   if (remoteCount === 0 && localCount === 0) {
     // Brand-new account: nothing anywhere yet.
-    showToast('Online as ' + email + '. Your entries will auto-save to your Google account.', 'success');
+    showToast('Online as ' + email + '. Your entries will auto-save to your account.', 'success');
     updateGoogleSyncStatus('Online as ' + email + '. Auto-save is on.', 'success');
     renderCloudStatus();
     return true;

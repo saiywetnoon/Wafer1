@@ -32,9 +32,18 @@ function companyEntryCount(id) {
 }
 
 /* ---------- Boot ---------- */
-/* Called once by init.js. Returns TRUE when a workspace is active
-   (app may start) or FALSE when the login/workspace screen shows. */
+/* Called once by init.js after the auth gate. Returns TRUE when a workspace
+   is active (app may start) or FALSE when a screen must show instead.
+   With an account login, each account owns a deterministic workspace
+   namespace ('acct-<email>'), so the same user is scoped consistently. */
 function companyBootstrap() {
+  const em = authEmail();
+  if (em) {
+    ACTIVE_COMPANY = { id: 'acct-' + em, name: displayNameFromEmail(em) };
+    try { localStorage.setItem(ACTIVE_COMPANY_KEY, ACTIVE_COMPANY.id); } catch (e) {}
+    updateCompanyBadge();
+    return true;
+  }
   readCompanies();
   const firstRun = companies.length === 0;
   if (firstRun) { companies = [{ id: 'default', name: 'My Business' }]; persistCompanies(); }
@@ -51,6 +60,10 @@ function companyBootstrap() {
   }
   showCompanyScreen();
   return false;
+}
+function displayNameFromEmail(email) {
+  const base = String(email || '').split('@')[0] || 'My Business';
+  return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
 function updateCompanyBadge() {

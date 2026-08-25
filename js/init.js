@@ -228,9 +228,26 @@ function triggerGoogleSync() {
   }, 700);
 }
 
-const companyBooted = companyBootstrap();
-if (companyBooted) {
+/* ============================================================
+   BOOT — the account gate comes first, then the ledger starts.
+   ============================================================ */
+async function appStart() {
+  // 1) Account gate: without a valid session nobody reaches the app.
+  const authed = await authBootstrap();
+  if (!authed) return; // login / sign-up screen is showing
+
+  // 2) Establish this account's workspace namespace.
+  const companyBooted = companyBootstrap();
+  if (!companyBooted) { showAuthScreen('Please sign in to use this app.'); return; }
+
+  // 3) One-time import of pre-account browser data (owner's device).
+  maybeImportLegacy();
+
+  // 4) Load, render, then reconcile with the account's cloud copy.
   loadState();
   renderAll();
   initGoogleSignIn();
+  cloudAfterSignIn();
 }
+
+appStart();

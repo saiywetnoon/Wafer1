@@ -156,7 +156,56 @@ Because everything routes through `js/cloud.js`, swapping Google for Supabase
 new provider module — no other file needs to change. That keeps today's
 free/quick setup from boxing you in.
 
+## v1.5 upgrade — Private accounts with admin approval 🛡️
+
+The app is now **locked behind a real email + password account system**, like
+Gmail / TikTok: nobody can use the ledger until the **owner approves** their
+account.
+
+```
+Open app  →  Login / Create Account screen
+                ├─ "Create Account" (email + password) → saved on the server as ⏳ PENDING
+                ├─ Owner clicks Admin → Approve         → status = ✅ approved
+                └─ User logs in → only then is the ledger unlocked
+```
+
+- **Accounts live on your server** — a hidden `Users` sheet in the same Google
+  Sheet as your Apps Script (`email | salt | hash | token | status | role |
+  createdAt | lastLogin | failed | lockUntil`).
+- **Passwords are never stored** — only a salted SHA-256 hash, computed
+  server-side.
+- **Per-user isolation** — every ledger read/write is scoped to the logged-in
+  account's own session token. User A can never see or write User B's data
+  (also enforced per-account in the `CloudAccounts` sheet + per-account Drive
+  folder from v1.4).
+- **Admin console** — when you (role `admin`) log in, an **Admin** button
+  appears in the header. It lists every account with PENDING / APPROVED /
+  REJECTED status and one-click **Approve** / **Reject**.
+- **Brute-force guard** — 5 failed logins locks the account for 15 minutes.
+- **First account = owner** — the very first account created on a fresh
+  backend becomes the admin automatically, so you can't lock yourself out.
+- **Optional sign-up restrictions** in `google-sync.gs`:
+  `ALLOWED_EMAILS` (exact emails) and `ALLOWED_DOMAINS` (e.g. `['gmail.com']`)
+  stop strangers from requesting accounts.
+- **Legacy data is safe** — on first login the app offers to import the old
+  "My Business" browser ledger into your new account.
+
+### Setup (you already have a deployment — just upgrade it)
+1. **Back up** the current `google-sync.gs`, then paste the new one into your
+   Apps Script project (**replace the whole file**) and save.
+2. Optional: set `ADMIN_EMAILS = ['you@gmail.com']` in the script (not
+   required — the first sign-up becomes admin anyway).
+3. **Deploy → Manage deployments → Edit → New version** → same settings as
+   before (*Execute as: Me*, *Who has access: Anyone with a Google account*).
+   Copy the updated `/exec` URL.
+4. Open your hosted app → on the login screen click **Server settings** and
+   paste the `/exec` URL (it's also still shown in the Google Sync tab).
+5. Create YOUR account first — it becomes the **admin** automatically.
+6. Share your app link. Users request an account → you approve them in the
+   **Admin** console (or directly in the `Users` sheet). Approved users can
+   then log in and each has their own private ledger on any device.
+
 > ⚠️ `daily-ledger-1.1.html` is a byte-for-byte backup of the ORIGINAL app and
 > does **not** contain these upgrades. Always open **index.html**. `_split.ps1`
-> regenerates only the original content — the new `cash.js` module and HTML
+> regenerates only the original content — the new `auth.js` module and HTML
 > upgrades are additive and not part of that script.

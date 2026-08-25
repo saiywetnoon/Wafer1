@@ -139,7 +139,7 @@ function renderRecurring() {
     return '<div class="flex items-center justify-between gap-2 py-1.5 border-b border-gray-700 last:border-0">' +
       '<span class="truncate text-xs">' + esc(r.name) + '</span>' +
       '<span class="flex items-center gap-2 shrink-0"><span class="font-semibold text-red-400">' + fmtKs(r.amount) + '/mo</span>' +
-      '<button onclick="removeRecurring(\\'' + r.id + '\\')" class="text-red-500 hover:text-red-400" title="Remove"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></span></div>';
+      '<button onclick="removeRecurring(\'' + r.id + '\')" class="text-red-500 hover:text-red-400" title="Remove"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></span></div>';
   }).join('') + '<div class="flex justify-between pt-2 font-bold text-xs"><span>Total fixed / month</span><span class="text-red-400">' + fmtKs(total) + '</span></div>'
     : '<div class="text-gray-500">No recurring costs added. Add rent, internet, or other fixed monthly bills here.</div>';
   lucide.createIcons();

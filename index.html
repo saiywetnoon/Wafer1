@@ -29,6 +29,8 @@ tailwind.config = {
 <body class="bg-gray-950 text-gray-100 min-h-screen">
 
 <!-- ===================== HEADER ===================== -->
+<!-- ===================== APP (hidden until login) ===================== -->
+<div id="appContainer" class="hidden">
 <header class="sticky top-0 z-40 bg-gray-900/90 backdrop-blur border-b border-gray-800">
   <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
     <div class="flex items-center gap-3">
@@ -47,6 +49,12 @@ tailwind.config = {
       <div id="googleSignInDiv" class="hidden"></div>
       <button id="googleSignOutBtn" class="hidden px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1.5 text-emerald-400">
         <i data-lucide="log-out" class="w-4 h-4"></i> <span id="googleUserLabel">Sign Out</span>
+      </button>
+      <button id="adminBtn" class="hidden px-3 py-2 rounded-lg bg-purple-900/50 hover:bg-purple-800/70 transition text-xs font-semibold flex items-center gap-1.5 text-purple-300" title="Approve new accounts">
+        <i data-lucide="shield" class="w-4 h-4"></i> Admin
+      </button>
+      <button id="authLogoutBtn" class="hidden px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1.5 text-red-400" title="Sign out of your account">
+        <i data-lucide="log-out" class="w-4 h-4"></i> <span id="authUserLabel">Sign out</span>
       </button>
       <button id="demoBtn" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1.5">
         <i data-lucide="flask-conical" class="w-4 h-4"></i> Sample Data
@@ -812,9 +820,81 @@ tailwind.config = {
   </section>
 
 </main>
+</div><!-- /#appContainer -->
 
 <!-- Toast Container -->
 <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2 w-80 max-w-[90vw]"></div>
+
+<!-- ===================== ACCOUNT LOGIN / SIGN UP ===================== -->
+<div id="authScreen" class="fixed inset-0 z-[200] bg-gray-950 overflow-y-auto">
+  <div class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md py-8">
+      <div class="flex flex-col items-center gap-3 mb-6">
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amberdeep-700 flex items-center justify-center shadow-lg shadow-amber-500/30">
+          <i data-lucide="shield-check" class="w-6 h-6 text-cream-100"></i>
+        </div>
+        <div class="text-center">
+          <h1 class="text-xl font-extrabold tracking-tight text-amber-400">Daily Crispy Roll Ledger</h1>
+          <p class="text-xs text-gray-400 mt-1">Private account access — sign in to use the ledger</p>
+        </div>
+      </div>
+      <div class="card bg-gray-900 rounded-2xl border border-gray-800 p-6">
+        <div class="flex gap-2 mb-5">
+          <button class="auth-tab-btn" data-tab="login">Log In</button>
+          <button class="auth-tab-btn" data-tab="signup">Create Account</button>
+        </div>
+        <label for="authEmail" class="text-xs font-semibold text-gray-400 block mb-1">Email address</label>
+        <input id="authEmail" type="email" placeholder="you@example.com" autocomplete="email"
+               class="w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 mb-3">
+        <label for="authPassword" class="text-xs font-semibold text-gray-400 block mb-1">Password</label>
+        <input id="authPassword" type="password" placeholder="At least 6 characters" autocomplete="current-password"
+               class="w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+
+        <details class="mt-4">
+          <summary class="text-xs text-gray-500 cursor-pointer select-none hover:text-gray-400">Server settings</summary>
+          <div class="mt-2">
+            <label for="authServerUrl" class="text-[10px] font-semibold text-gray-500 block mb-1">Apps Script Web App URL (required once)</label>
+            <input id="authServerUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec"
+                   class="w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-amber-500">
+            <p class="text-[10px] text-gray-500 mt-1">The backend that stores accounts and ledgers. Paste your deployed Apps Script URL here once per device.</p>
+          </div>
+        </details>
+
+        <div id="loginPane" class="mt-5">
+          <button id="authLoginBtn" class="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition">Log In</button>
+        </div>
+        <div id="signupPane" class="hidden mt-5">
+          <button id="authSignupBtn" class="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-gray-900 text-sm font-bold transition">Request Account</button>
+          <p class="text-[10px] text-gray-500 mt-2">After signing up, the owner must approve your account before you can log in.</p>
+        </div>
+        <div id="authMsg" class="hidden"></div>
+      </div>
+      <p class="text-center text-[11px] text-gray-500 mt-4">Every account is private — you only ever see your own ledger.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== ADMIN CONSOLE ===================== -->
+<div id="adminModal" class="hidden fixed inset-0 z-[150] bg-gray-950/95 backdrop-blur flex items-center justify-center p-4 overflow-y-auto">
+  <div class="w-full max-w-2xl py-6">
+    <div class="flex items-center justify-center gap-3 mb-6">
+      <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-600 to-purple-900 flex items-center justify-center shadow-lg shadow-purple-500/30">
+        <i data-lucide="shield" class="w-6 h-6 text-cream-100"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-extrabold tracking-tight text-purple-300 leading-none">Admin — Account Approvals</h1>
+        <p class="text-[11px] text-gray-400 mt-1">Only approved accounts can sign in.</p>
+      </div>
+    </div>
+    <div class="card bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <div id="adminUserList" class="text-sm max-h-72 overflow-y-auto scrollbar-thin"></div>
+      <div id="adminMsg" class="text-xs font-semibold mt-3"></div>
+      <div class="border-t border-gray-800 pt-4 mt-2">
+        <button id="adminCloseBtn" class="w-full py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-semibold transition">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ===================== WORKSPACE / LOGIN SCREEN ===================== -->
 <div id="companyScreen" class="hidden fixed inset-0 z-[100] bg-gray-950/95 backdrop-blur flex items-center justify-center p-4 overflow-y-auto">
@@ -864,6 +944,7 @@ tailwind.config = {
     <script src="js/tools.js"></script>
     <script src="js/cash.js"></script>
     <script src="js/companies.js"></script>
+    <script src="js/auth.js"></script>
     <script src="js/cloud.js"></script>
     <script src="js/init.js"></script>
 
