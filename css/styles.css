@@ -1,0 +1,22 @@
+  :root { color-scheme: dark; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+  .card { transition: box-shadow .2s ease; }
+  .card:hover { box-shadow: 0 10px 30px -12px rgba(0,0,0,.5); }
+  .toast { animation: slideIn .3s ease; }
+  @keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .toast.out { animation: slideOut .3s ease forwards; }
+  @keyframes slideOut { to { transform: translateX(120%); opacity: 0; } }
+  .field-error { border-color: #EF4444 !important; box-shadow: 0 0 0 2px rgba(239,68,68,.25); }
+  .scrollbar-thin::-webkit-scrollbar { height: 8px; width: 8px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #4B5563; border-radius: 8px; }
+  .cal-day { aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 8px; font-size: 12px; cursor: pointer; transition: transform .1s ease; }
+  .cal-day:hover { transform: scale(1.08); }
+  .cal-day.empty { opacity: .25; cursor: default; }
+  .cal-day.empty:hover { transform: none; }
+  .cal-day.profit { background: rgba(16,185,129,.25); border: 1px solid rgba(16,185,129,.5); color: #34D399; }
+  .cal-day.loss { background: rgba(239,68,68,.25); border: 1px solid rgba(239,68,68,.5); color: #F87171; }
+  .cal-day.none { background: rgba(75,85,99,.2); border: 1px solid rgba(75,85,99,.4); color: #9CA3AF; }
+  .cal-day.today { outline: 2px solid #D97706; }
+  .cal-day.selected { outline: 2px solid #10B981; }
+  input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+  .price-input, .usage-input { font-variant-numeric: tabular-nums; }

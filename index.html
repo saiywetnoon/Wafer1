@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Crispy Roll Ledger — Google Synced Daily Record-Keeping</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://accounts.google.com/gsi/client"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        cream: { 50:'#FFFDF5', 100:'#FFF8E7', 200:'#F7EED8', 300:'#EFE3C3' },
+        amberdeep: { 400:'#D97706', 500:'#B45309', 600:'#92400E', 700:'#78350F', 800:'#5B2A0A' },
+        emeraldx: { 400:'#34D399', 500:'#10B981', 600:'#059669', 700:'#047857' }
+      }
+    }
+  }
+}
+</script>
+
+<link rel="stylesheet" href="css/styles.css">
+
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+
+<!-- ===================== HEADER ===================== -->
+<header class="sticky top-0 z-40 bg-gray-900/90 backdrop-blur border-b border-gray-800">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+    <div class="flex items-center gap-3">
+      <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500 to-amberdeep-700 flex items-center justify-center shadow-lg shadow-amber-500/30">
+        <i data-lucide="calendar-check" class="w-6 h-6 text-cream-100"></i>
+      </div>
+      <div>
+        <h1 class="text-lg sm:text-xl font-extrabold tracking-tight text-amber-400 leading-none">Daily Crispy Roll Ledger</h1>
+        <p class="text-[11px] sm:text-xs text-gray-400 mt-0.5">High-Frequency Daily Record-Keeping · Google Sheets Sync · Drive Backup</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="companyNameBtn" onclick="openCompanySwitch()" title="Switch workspace" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1.5 max-w-[160px]">
+        <i data-lucide="building-2" class="w-4 h-4 text-amber-400 shrink-0"></i> <span id="companyName" class="truncate">—</span>
+      </button>
+      <div id="googleSignInDiv" class="hidden"></div>
+      <button id="googleSignOutBtn" class="hidden px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1.5 text-emerald-400">
+        <i data-lucide="log-out" class="w-4 h-4"></i> <span id="googleUserLabel">Sign Out</span>
+      </button>
+      <button id="demoBtn" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1.5">
+        <i data-lucide="flask-conical" class="w-4 h-4"></i> Sample Data
+      </button>
+      <button id="clearBtn" class="px-3 py-2 rounded-lg bg-red-900/40 hover:bg-red-900/60 transition text-xs font-semibold flex items-center gap-1.5 text-red-400">
+        <i data-lucide="trash-2" class="w-4 h-4"></i> Clear All
+      </button>
+    </div>
+  </div>
+  <nav class="max-w-7xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto scrollbar-thin">
+    <button data-tab="log" class="tab-btn active flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 text-gray-900 whitespace-nowrap transition">
+      <i data-lucide="clipboard-list" class="w-4 h-4"></i> Daily Log
+    </button>
+    <button data-tab="dashboard" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+      <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
+    </button>
+    <button data-tab="calendar" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+      <i data-lucide="calendar" class="w-4 h-4"></i> Calendar & Audit
+    </button>
+    <button data-tab="inventory" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+      <i data-lucide="package" class="w-4 h-4"></i> Inventory
+    </button>
+    <button data-tab="customers" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+      <i data-lucide="users" class="w-4 h-4"></i> Customers
+    </button>
+    <button data-tab="suppliers" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+      <i data-lucide="store" class="w-4 h-4"></i> Suppliers
+    </button>
+    <button data-tab="tools" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+      <i data-lucide="wrench" class="w-4 h-4"></i> Business Tools
+    </button>
+    <button data-tab="cash" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+      <i data-lucide="banknote" class="w-4 h-4"></i> Cash Drawer
+    </button>
+    <button data-tab="sync" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+      <i data-lucide="cloud" class="w-4 h-4"></i> Google Sync & Backup
+    </button>
+  </nav>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-6">
+
+  <!-- ===================== DAILY LOG ===================== -->
+  <section id="tab-log" class="tab-panel">
+    <div class="grid lg:grid-cols-2 gap-4">
+      <!-- Price List (persistent) -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+          <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="tags" class="w-5 h-5 text-amber-400"></i> Ingredient Price List</h3>
+          <div class="flex gap-2">
+            <button id="addIngredientBtn" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1">
+              <i data-lucide="plus" class="w-3 h-3"></i> Add Ingredient
+            </button>
+            <button id="exportPricesBtn" class="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition flex items-center gap-1">
+              <i data-lucide="file-down" class="w-3 h-3"></i> Export
+            </button>
+            <button id="importPricesBtn" class="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition flex items-center gap-1">
+              <i data-lucide="file-up" class="w-3 h-3"></i> Import
+            </button>
+            <button id="resetPricesBtn" class="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition flex items-center gap-1">
+              <i data-lucide="rotate-ccw" class="w-3 h-3"></i> Reset
+            </button>
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 mb-4">Set the price per <b>kg</b> (gram ingredients) or per <b>unit</b> (counted items like eggs, electricity, bags). Prices persist until you change them — they apply to every future day automatically.</p>
+        <div class="overflow-x-auto scrollbar-thin mb-3">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-left text-gray-400 border-b border-gray-700">
+                <th class="py-1.5 pr-2">Ingredient</th>
+                <th class="py-1.5 pr-2">Unit</th>
+                <th class="py-1.5 pr-2">Price (Ks)</th>
+                <th class="py-1.5 pr-2">g / unit</th>
+                <th class="py-1.5">Remark</th>
+              </tr>
+            </thead>
+            <tbody id="priceTable"></tbody>
+          </table>
+        </div>
+        <div class="p-3 rounded-lg bg-gray-800/60 text-xs text-gray-400">
+          <i data-lucide="info" class="w-3.5 h-3.5 inline text-amber-400"></i>
+          <b>g / unit</b> = assumed grams per unit for counted items (e.g., 1 egg ≈ 50g). Used to compute total mix weight. Leave blank for gram-based items.
+        </div>
+      </div>
+
+      <!-- Today's Usage & Production -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+          <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="scale" class="w-5 h-5 text-amber-400"></i> Today's Usage & Production</h3>
+          <div class="flex flex-wrap gap-2">
+            <button id="standOrderBtn" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1">
+              <i data-lucide="users" class="w-3.5 h-3.5"></i> Use Standing Orders
+            </button>
+            <button id="copyYesterdayBtn" class="px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition flex items-center gap-1">
+              <i data-lucide="copy" class="w-3 h-3"></i> Copy Yesterday's Usage
+            </button>
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 mb-4">Enter today's quantity for each ingredient (grams or units). Cost auto-calculates from the price list. Each day is saved as its own record — previous days are never overwritten.</p>
+
+        <div class="mb-3">
+          <label class="text-xs font-semibold text-gray-400">Date</label>
+          <input id="logDate" type="date" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+        </div>
+
+        <div class="overflow-x-auto scrollbar-thin mb-3">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-left text-gray-400 border-b border-gray-700">
+                <th class="py-1.5 pr-2">Ingredient</th>
+                <th class="py-1.5 pr-2">Today's Qty</th>
+                <th class="py-1.5 pr-2">Unit</th>
+                <th class="py-1.5">Cost (Ks)</th>
+              </tr>
+            </thead>
+            <tbody id="usageTable"></tbody>
+          </table>
+        </div>
+
+        <div class="p-3 rounded-lg bg-gray-800/60 text-sm mb-4 space-y-1.5">
+          <div class="flex justify-between"><span class="text-gray-400">Ingredient Cost (auto)</span><span id="ingredientCost" class="font-bold text-amber-400">0 Ks</span></div>
+          <div class="flex justify-between items-center">
+            <span class="text-gray-400">Additional Costs (Ks)</span>
+            <input id="additionalCost" type="number" min="0" step="100" placeholder="0" class="w-32 px-2 py-1 rounded-lg border border-gray-700 bg-gray-800 text-sm text-right font-bold text-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+          <div class="flex justify-between border-t border-gray-700 pt-1.5"><span class="font-semibold">Total Capital Today</span><span id="totalCapital" class="font-bold text-amber-400">0 Ks</span></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-4">
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Total Bags Produced</label>
+            <input id="logBagsProduced" type="number" min="0" step="1" placeholder="e.g. 40" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Actual Pieces Rolled</label>
+            <input id="logPieces" type="number" min="0" step="1" placeholder="e.g. 240" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Bags Sold Today</label>
+            <input id="logBagsSold" type="number" min="0" step="1" placeholder="e.g. 35" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Price Per Bag (Ks)</label>
+            <input id="logPrice" type="number" min="0" step="50" value="1300" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm font-bold text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Labor Worked (Minutes)</label>
+            <input id="logLabor" type="number" min="0" step="5" placeholder="e.g. 240" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+        </div>
+
+        <div class="p-3 rounded-lg bg-gray-800/60 text-sm mb-4 space-y-1.5">
+          <div class="flex justify-between"><span class="text-gray-400">Total Daily Revenue</span><span id="liveRevenue" class="font-bold text-emerald-400">0 Ks</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">Labor Hours</span><span id="liveLaborHrs" class="font-bold">0.00 hrs</span></div>
+          <div class="flex justify-between items-center">
+            <span class="text-gray-400">Hourly Wage (Ks)</span>
+            <input id="hourlyWage" type="number" min="0" step="100" placeholder="e.g. 1500" class="w-28 px-2 py-1 rounded-lg border border-gray-700 bg-gray-800 text-sm text-right font-bold text-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+          <div class="flex justify-between"><span class="text-gray-400">Labor Cost</span><span id="liveLaborCost" class="font-bold text-amber-400">0 Ks</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">Total Mix Weight</span><span id="totalMixWeight" class="font-bold">0 g</span></div>
+          <div class="flex justify-between border-t border-gray-700 pt-1.5"><span class="font-semibold">Net Daily Gain</span><span id="liveNet" class="font-bold text-emerald-400">0 Ks</span></div>
+          <div class="flex justify-between border-t border-gray-700 pt-1.5"><span class="font-semibold text-emerald-400">Net Gain After Labor</span><span id="liveNetAfterLabor" class="font-bold text-emerald-400">0 Ks</span></div>
+        </div>
+
+        <button id="saveLogBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold shadow-lg shadow-emerald-500/30 hover:opacity-90 transition flex items-center justify-center gap-2">
+          <i data-lucide="save" class="w-5 h-5"></i> Save Daily Entry
+        </button>
+        <div class="mt-3 p-3 rounded-lg bg-gray-800/40 text-xs text-gray-400">
+          <i data-lucide="info" class="w-3.5 h-3.5 inline text-amber-400"></i>
+          Saving on an existing date updates that day's record. Quantities are saved per day; prices are global and persist.
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Entries -->
+    <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 mt-4">
+      <h3 class="font-bold text-base mb-3 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5 text-amber-400"></i> Recent Daily Entries</h3>
+      <div class="overflow-x-auto scrollbar-thin">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-xs text-gray-400 border-b border-gray-700">
+              <th class="py-2 pr-2">Date</th><th class="py-2 pr-2">Capital</th><th class="py-2 pr-2">Bags Prod.</th>
+              <th class="py-2 pr-2">Pieces</th><th class="py-2 pr-2">Bags Sold</th><th class="py-2 pr-2">Revenue</th>
+              <th class="py-2 pr-2">Labor Hrs</th><th class="py-2 pr-2">Net Gain</th>
+              <th class="py-2 pr-2">Cost/Bag</th><th class="py-2 pr-2">Margin</th><th class="py-2">Action</th>
+            </tr>
+          </thead>
+          <tbody id="recentBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== DASHBOARD ===================== -->
+  <section id="tab-dashboard" class="tab-panel hidden">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="banknote" class="w-4 h-4 text-emerald-400"></i> Daily Gross Earnings</div>
+        <div id="kpiRevenue" class="text-lg font-extrabold text-emerald-400">0 Ks</div>
+        <div class="text-[10px] text-gray-500 mt-1">today's revenue</div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="coins" class="w-4 h-4 text-amber-400"></i> Daily Capital Spent</div>
+        <div id="kpiCapital" class="text-lg font-extrabold text-amber-400">0 Ks</div>
+        <div class="text-[10px] text-gray-500 mt-1">today's outlay</div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="trending-up" class="w-4 h-4 text-emerald-400"></i> Net Daily Gain</div>
+        <div id="kpiNet" class="text-lg font-extrabold text-emerald-400">0 Ks</div>
+        <div class="text-[10px] text-gray-500 mt-1">revenue − capital</div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="percent" class="w-4 h-4 text-amber-400"></i> Cumulative Profit/Capital</div>
+        <div id="kpiRatio" class="text-lg font-extrabold text-amber-400">0%</div>
+        <div class="text-[10px] text-gray-500 mt-1">all-time return</div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="store" class="w-4 h-4 text-red-400"></i> Total Payable (to shops)</div>
+        <div id="kpiPayable" class="text-lg font-extrabold text-red-400">0 Ks</div>
+        <div class="text-[10px] text-gray-500 mt-1">stock you owe suppliers</div>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <h3 class="font-bold text-sm flex items-center gap-2"><i data-lucide="line-chart" class="w-4 h-4 text-emerald-400"></i> Day-by-Day Trends</h3>
+      <div class="flex items-center gap-2 text-xs">
+        <span class="text-gray-400">Range</span>
+        <select id="chartRange" class="px-2 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          <option value="14">Last 14 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="60">Last 60 days</option>
+          <option value="9999">All time</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-2 gap-4 mb-6">
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <h3 class="font-bold text-sm mb-3 flex items-center gap-2"><i data-lucide="line-chart" class="w-4 h-4 text-emerald-400"></i> Net Gain (Ks)</h3>
+        <div class="h-64"><canvas id="gainChart"></canvas></div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <h3 class="font-bold text-sm mb-3 flex items-center gap-2"><i data-lucide="bar-chart-3" class="w-4 h-4 text-amber-400"></i> Bags Produced</h3>
+        <div class="h-64"><canvas id="volumeChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+      <h3 class="font-bold text-sm mb-3 flex items-center gap-2"><i data-lucide="activity" class="w-4 h-4 text-amber-400"></i> Summary</h3>
+      <div id="summaryText" class="text-sm text-gray-400">No data recorded yet.</div>
+    </div>
+
+    <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 mt-4">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="calendar-range" class="w-5 h-5 text-emerald-400"></i> Monthly Profit Report</h3>
+        <select id="reportMonth" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"></select>
+      </div>
+      <div id="monthlyReport" class="text-sm text-gray-400">Select a month to see its full profit report.</div>
+    </div>
+  </section>
+
+  <!-- ===================== CALENDAR & AUDIT ===================== -->
+  <section id="tab-calendar" class="tab-panel hidden">
+    <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="calendar" class="w-5 h-5 text-amber-400"></i> Continuous Calendar & Audit Trail</h3>
+        <button id="exportCsvBtn" class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold transition flex items-center gap-1.5">
+          <i data-lucide="file-down" class="w-4 h-4"></i> Export Ledger CSV
+        </button>
+      </div>
+
+      <div class="grid sm:grid-cols-3 gap-3 mb-4">
+        <div>
+          <label class="text-xs font-semibold text-gray-400">From Date</label>
+          <input id="filterFrom" type="date" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-400">To Date</label>
+          <input id="filterTo" type="date" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-400">Quick Week Select</label>
+          <select id="weekSelect" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+            <option value="">All time</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between mb-3">
+        <button id="prevMonth" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-bold transition flex items-center gap-1"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+        <h4 id="calTitle" class="font-bold text-base"></h4>
+        <button id="nextMonth" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm font-bold transition flex items-center gap-1"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+      </div>
+      <div class="grid grid-cols-7 gap-1.5 mb-1">
+        <div class="text-center text-xs font-bold text-gray-500">Sun</div><div class="text-center text-xs font-bold text-gray-500">Mon</div>
+        <div class="text-center text-xs font-bold text-gray-500">Tue</div><div class="text-center text-xs font-bold text-gray-500">Wed</div>
+        <div class="text-center text-xs font-bold text-gray-500">Thu</div><div class="text-center text-xs font-bold text-gray-500">Fri</div>
+        <div class="text-center text-xs font-bold text-gray-500">Sat</div>
+      </div>
+      <div id="calendarGrid" class="grid grid-cols-7 gap-1.5 mb-4"></div>
+
+      <div class="flex gap-4 text-xs text-gray-400 mb-4">
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500/40 border border-emerald-500/60 inline-block"></span> Profitable day</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-red-500/40 border border-red-500/60 inline-block"></span> Loss day</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-gray-600/40 border border-gray-600/60 inline-block"></span> No production</span>
+      </div>
+
+      <div class="overflow-x-auto scrollbar-thin">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-xs text-gray-400 border-b border-gray-700">
+              <th class="py-2 pr-2">Date</th><th class="py-2 pr-2">Capital</th><th class="py-2 pr-2">Bags Prod.</th>
+              <th class="py-2 pr-2">Pieces</th><th class="py-2 pr-2">Bags Sold</th><th class="py-2 pr-2">Revenue</th>
+              <th class="py-2 pr-2">Labor Hrs</th><th class="py-2 pr-2">Net Gain</th>
+              <th class="py-2 pr-2">Cost/Bag</th><th class="py-2 pr-2">Margin</th><th class="py-2">Details</th>
+            </tr>
+          </thead>
+          <tbody id="auditBody"></tbody>
+        </table>
+      </div>
+      <div id="auditEmpty" class="text-center text-sm text-gray-500 py-8 hidden">No entries in this range.</div>
+    </div>
+  </section>
+
+  <!-- ===================== INVENTORY ===================== -->
+  <section id="tab-inventory" class="tab-panel hidden">
+    <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="package" class="w-5 h-5 text-amber-400"></i> Ingredient Inventory</h3>
+        <button id="addStockBtn" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition flex items-center gap-1.5">
+          <i data-lucide="plus" class="w-4 h-4"></i> Add Stock
+        </button>
+      </div>
+      <p class="text-xs text-gray-400 mb-4">Track current ingredient stock. When you save a daily entry, the ingredients used are automatically deducted. Add stock when you buy new supplies.</p>
+      <div class="flex flex-wrap gap-3 mb-4">
+        <div class="p-3 rounded-lg bg-gray-800/60 flex-1 min-w-[150px]">
+          <div class="text-xs text-gray-400">Stock Value on Hand (cost)</div>
+          <div id="inventoryValue" class="font-bold text-amber-400 text-lg">0 Ks</div>
+        </div>
+      </div>
+      <div class="overflow-x-auto scrollbar-thin">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-left text-xs text-gray-400 border-b border-gray-700">
+              <th class="py-2 pr-2">Ingredient</th>
+              <th class="py-2 pr-2">Unit</th>
+              <th class="py-2 pr-2">Stock On Hand</th>
+              <th class="py-2 pr-2">Low Alert</th>
+              <th class="py-2 pr-2">Status</th>
+              <th class="py-2">Action</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryBody"></tbody>
+        </table>
+      </div>
+      <div id="lowStockAlert" class="mt-4 hidden p-3 rounded-lg bg-red-900/30 border border-red-700/60 text-xs text-red-300 font-semibold"></div>
+    </div>
+  </section>
+
+  <!-- ===================== CUSTOMERS ===================== -->
+  <section id="tab-customers" class="tab-panel hidden">
+    <div class="grid lg:grid-cols-2 gap-4">
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5 text-amber-400"></i> Regular Customers</h3>
+        <p class="text-xs text-gray-400 mb-3">Track standing orders and what each customer owes.</p>
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Customer Name</label>
+            <input id="custName" type="text" placeholder="e.g. Happy Cafe" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Phone</label>
+            <input id="custPhone" type="text" placeholder="Optional" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Standing Order (bags/day)</label>
+            <input id="custOrder" type="number" min="0" step="1" placeholder="e.g. 10" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Price/Bag (Ks)</label>
+            <input id="custPrice" type="number" min="0" step="50" placeholder="1300" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+        </div>
+        <button id="addCustomerBtn" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition flex items-center justify-center gap-2">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i> Add Customer
+        </button>
+        <div class="mt-4 max-h-80 overflow-y-auto scrollbar-thin">
+          <table class="w-full text-xs">
+            <thead><tr class="text-left text-gray-400 border-b border-gray-700"><th class="py-1.5 pr-2">Name</th><th class="py-1.5 pr-2">Order</th><th class="py-1.5 pr-2">Debt (Ks)</th><th class="py-1.5"></th></tr></thead>
+            <tbody id="customerListBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-3 flex items-center gap-2"><i data-lucide="wallet" class="w-5 h-5 text-emerald-400"></i> Credit / Debt Tracker</h3>
+        <div class="mb-3 p-3 rounded-lg bg-gray-800/50 border border-gray-700">
+          <div class="flex justify-between py-1"><span class="text-gray-400">Today's Standing Orders</span><span id="standingOrdersTotal" class="font-bold text-amber-400">0 bags</span></div>
+          <div class="flex justify-between py-1"><span class="text-gray-400">Expected Revenue (standing)</span><span id="standingRevenueTotal" class="font-bold text-emerald-400">0 Ks</span></div>
+          <div class="flex justify-between py-1 border-t border-gray-700 mt-1 pt-1"><span class="font-semibold">Total Customer Debt</span><span id="totalDebt" class="font-bold text-red-400">0 Ks</span></div>
+        </div>
+        <div class="mb-3">
+          <label class="text-xs font-semibold text-gray-400">Record Payment / New Debt</label>
+          <div class="flex gap-2 mt-1">
+            <select id="paymentCustomer" class="flex-1 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"></select>
+            <input id="paymentAmount" type="number" min="0" step="100" placeholder="Amount" class="w-28 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+            <button id="paymentMinusBtn" class="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold">−</button>
+            <button id="paymentPlusBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">+</button>
+          </div>
+        </div>
+        <div class="p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-xs text-gray-400">
+          <b>−</b> means customer pays you (reduces debt). <b>+</b> means they take more on credit (adds debt). Standing orders are tallied automatically from the customer list for today.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== SUPPLIERS / PURCHASES & PAYABLES ===================== -->
+  <section id="tab-suppliers" class="tab-panel hidden">
+    <div class="grid lg:grid-cols-2 gap-4">
+      <!-- Suppliers list -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="store" class="w-5 h-5 text-amber-400"></i> Suppliers (Shops)</h3>
+        <p class="text-xs text-gray-400 mb-3">Shops and vendors you buy stock from. Track what you owe each one.</p>
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Shop Name</label>
+            <input id="supplierName" type="text" placeholder="e.g. Sun Market" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Phone</label>
+            <input id="supplierPhone" type="text" placeholder="Optional" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+        </div>
+        <button id="addSupplierBtn" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition flex items-center justify-center gap-2">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i> Add Supplier
+        </button>
+        <div class="mt-4 max-h-64 overflow-y-auto scrollbar-thin">
+          <table class="w-full text-xs">
+            <thead><tr class="text-left text-gray-400 border-b border-gray-700"><th class="py-1.5 pr-2">Shop</th><th class="py-1.5 pr-2">What You Owe</th><th class="py-1.5"></th></tr></thead>
+            <tbody id="supplierListBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Record purchase -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="shopping-bag" class="w-5 h-5 text-emerald-400"></i> Record Stock Purchase</h3>
+        <p class="text-xs text-gray-400 mb-3">Log ingredients bought from a shop. Stock is added to your inventory automatically. Unpaid amounts become debt you owe the shop.</p>
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Shop</label>
+            <select id="purchaseSupplier" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"></select>
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-400">Date</label>
+            <input id="purchaseDate" type="date" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+        </div>
+
+        <label class="text-xs font-semibold text-gray-400">Items</label>
+        <div id="purchaseItems" class="space-y-2 mb-3"></div>
+        <button id="addPurchaseItemBtn" class="w-full py-2 rounded-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white text-xs font-bold transition flex items-center justify-center gap-1.5">
+          <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Item
+        </button>
+
+        <div class="p-3 my-3 rounded-lg bg-gray-800/50 border border-gray-700 flex items-center justify-between">
+          <span class="text-gray-400 text-sm">Item Total</span>
+          <span id="purchaseItemTotal" class="font-bold text-amber-400 text-base">0 Ks</span>
+        </div>
+
+        <div class="flex items-center gap-3 mb-3">
+          <label class="text-xs font-semibold text-gray-400 shrink-0">Paid Now (Ks)</label>
+          <input id="purchasePaidNow" type="number" min="0" step="100" value="0" class="flex-1 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+
+        <button id="savePurchaseBtn" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition flex items-center justify-center gap-2">
+          <i data-lucide="check-circle" class="w-4 h-4"></i> Save Purchase & Update Stock
+        </button>
+        <div class="mt-2 text-[11px] text-gray-500">Unpaid amount (item total − pay now) is added to the shop's payable balance.</div>
+      </div>
+
+      <!-- Payables & payments -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 lg:col-span-2">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="wallet" class="w-5 h-5 text-red-400"></i> Payables & Record Payment</h3>
+        <p class="text-xs text-gray-400 mb-3">How much you currently owe your suppliers. Record a payment to settle credit.</p>
+        <div class="mb-3 p-3 rounded-lg bg-gray-800/50 border border-gray-700">
+          <div class="flex justify-between py-1"><span class="font-semibold">Total Payable (to shops)</span><span id="totalPayable" class="font-bold text-red-400">0 Ks</span></div>
+          <div class="flex justify-between py-1 border-t border-gray-700 mt-1 pt-1"><span class="text-gray-400">Customer debt owed to you</span><span id="netReceivable" class="font-bold text-emerald-400">0 Ks</span></div>
+          <div class="flex justify-between py-1"><span class="text-gray-400">Net position</span><span id="netPosition" class="font-bold text-amber-400">0 Ks</span></div>
+        </div>
+        <div class="flex flex-wrap gap-2 mb-3 items-end">
+          <div class="min-w-40 flex-1">
+            <label class="text-xs font-semibold text-gray-400">Shop</label>
+            <select id="paymentShop" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"></select>
+          </div>
+          <div class="w-32">
+            <label class="text-xs font-semibold text-gray-400">Amount (Ks)</label>
+            <input id="supplierPaymentAmount" type="number" min="0" step="100" placeholder="Amount" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
+          </div>
+          <div class="w-40">
+            <label class="text-xs font-semibold text-gray-400">Date</label>
+            <input id="supplierPaymentDate" type="date" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
+          </div>
+          <button id="recordSupplierPaymentBtn" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-bold transition flex items-center gap-1.5">
+            <i data-lucide="banknote" class="w-4 h-4"></i> Record Payment
+          </button>
+        </div>
+        <div class="mb-2 flex items-center gap-2">
+          <span class="font-bold text-gray-300 text-sm">Purchase History</span>
+          <span class="text-[10px] text-gray-500">unpaid shown in red</span>
+        </div>
+        <div id="purchaseHistory" class="text-xs text-gray-400 max-h-72 overflow-y-auto scrollbar-thin"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-tools" class="tab-panel hidden">
+    <div class="grid lg:grid-cols-2 gap-4">
+      <!-- Recipes -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="book-open" class="w-5 h-5 text-amber-400"></i> Recipes / Variants</h3>
+        <p class="text-xs text-gray-400 mb-3">Save different recipes (original, spicy, chocolate, mini) with their own ingredient quantities. Switch with one click.</p>
+        <div class="flex gap-2 mb-3">
+          <input id="recipeName" type="text" placeholder="Recipe name (e.g. Spicy)" class="flex-1 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <button id="saveRecipeBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">Save Current</button>
+        </div>
+        <div id="recipeList" class="space-y-2 max-h-64 overflow-y-auto scrollbar-thin"></div>
+      </div>
+
+      <!-- Break-even -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="target" class="w-5 h-5 text-emerald-400"></i> Break-Even Calculator</h3>
+        <p class="text-xs text-gray-400 mb-3">Know exactly how many bags you must sell to cover today's costs.</p>
+        <div class="p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-sm space-y-1.5">
+          <div class="flex justify-between"><span class="text-gray-400">Today's Capital</span><span id="beCapital" class="font-bold text-amber-400">0 Ks</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">Today's Labor Cost</span><span id="beLabor" class="font-bold text-amber-400">0 Ks</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">Price / Bag</span><span id="bePrice" class="font-bold text-emerald-400">0 Ks</span></div>
+          <div class="flex justify-between border-t border-gray-700 pt-1.5"><span class="font-semibold">Break-even (bags)</span><span id="beBags" class="font-bold text-emerald-400 text-lg">0</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">Break-even (incl. labor)</span><span id="beBagsLabor" class="font-bold text-emerald-400">0</span></div>
+        </div>
+      </div>
+
+      <!-- Waste / Scrap -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="recycle" class="w-5 h-5 text-amber-400"></i> Waste / Scrap Tracking</h3>
+        <p class="text-xs text-gray-400 mb-3">Log breakage or waste to spot production problems.</p>
+        <div class="flex gap-2 mb-3">
+          <input id="wasteDate" type="date" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <input id="wasteQty" type="number" min="0" step="1" placeholder="Pieces wasted" class="flex-1 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <button id="addWasteBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">Log</button>
+        </div>
+        <div id="wasteList" class="text-xs text-gray-400 max-h-40 overflow-y-auto scrollbar-thin"></div>
+      </div>
+
+      <!-- Price History -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="line-chart" class="w-5 h-5 text-amber-400"></i> Ingredient Price History</h3>
+        <p class="text-xs text-gray-400 mb-3">See when prices changed and how it affected your margins.</p>
+        <div id="priceHistoryList" class="text-xs text-gray-400 max-h-40 overflow-y-auto scrollbar-thin"></div>
+      </div>
+
+      <!-- Expenses -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="receipt" class="w-5 h-5 text-amber-400"></i> One-Time Expenses</h3>
+        <p class="text-xs text-gray-400 mb-3">Track equipment, bulk purchases, and other one-time costs separately from daily production.</p>
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <input id="expenseDate" type="date" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <input id="expenseAmount" type="number" min="0" step="100" placeholder="Amount (Ks)" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <input id="expenseDesc" type="text" placeholder="Description (e.g. new fryer)" class="col-span-2 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+        </div>
+        <button id="addExpenseBtn" class="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">Add Expense</button>
+        <div id="expenseList" class="text-xs text-gray-400 mt-3 max-h-40 overflow-y-auto scrollbar-thin"></div>
+      </div>
+
+      <!-- Recurring Monthly Expenses -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="repeat" class="w-5 h-5 text-amber-400"></i> Recurring Monthly Costs</h3>
+        <p class="text-xs text-gray-400 mb-3">Rent, internet, phone, transport — fixed bills that hit every month. They are deducted automatically in the monthly profit report.</p>
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <input id="recurringName" type="text" placeholder="Name (e.g. Rent)" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <input id="recurringAmount" type="number" min="0" step="100" placeholder="Amount / month (Ks)" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+        </div>
+        <button id="addRecurringBtn" class="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">Add Recurring Cost</button>
+        <div id="recurringList" class="text-xs text-gray-400 mt-3 max-h-40 overflow-y-auto scrollbar-thin"></div>
+      </div>
+
+      <!-- Forecast + Printable -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="trending-up" class="w-5 h-5 text-emerald-400"></i> Sales Forecast & Reports</h3>
+        <p class="text-xs text-gray-400 mb-3">Predict tomorrow's demand from your history, and print/share clean reports.</p>
+        <div id="forecastBox" class="p-3 rounded-lg bg-gray-800/50 border border-gray-700 text-sm mb-3"></div>
+        <div class="flex flex-wrap gap-2">
+          <button id="printReportBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">🖨 Print Report</button>
+          <button id="exportMonthlyCsvBtn" class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold">Export Monthly CSV</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== GOOGLE SYNC & BACKUP ===================== -->
+  <section id="tab-sync" class="tab-panel hidden">
+    <!-- Online / Cloud — multi-tenant, access from any device -->
+    <div class="card bg-gray-900 rounded-xl p-5 border border-emerald-800/60 mb-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="cloud" class="w-5 h-5 text-emerald-400"></i> Online / Cloud <span id="cloudStatusPill" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-700 text-gray-300">OFFLINE</span></h3>
+        <div class="flex flex-wrap gap-2">
+          <button id="cloudSyncNowBtn" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1">
+            <i data-lucide="refresh-cw" class="w-3 h-3"></i> Sync Now
+          </button>
+          <button id="cloudUploadBtn" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-gray-900 text-xs font-bold transition flex items-center gap-1">
+            <i data-lucide="upload-cloud" class="w-3 h-3"></i> Upload Now
+          </button>
+          <button id="cloudBackupBtn" class="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-xs font-bold transition flex items-center gap-1">
+            <i data-lucide="archive" class="w-3 h-3"></i> Cloud Backup
+          </button>
+        </div>
+      </div>
+      <div id="cloudStatus" class="text-xs text-gray-400">Sign in with Google and set your Apps Script URL (below) to go online. Your ledger then lives in the cloud and follows this workspace to any device.</div>
+      <div class="mt-3">
+        <div class="text-xs font-semibold text-gray-400 mb-1">Cloud backups for this account</div>
+        <div id="cloudBackupList" class="text-xs text-gray-400 max-h-36 overflow-y-auto scrollbar-thin">No cloud backups listed yet — click "Cloud Backup" to create one.</div>
+      </div>
+    </div>
+
+    <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+      <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="cloud" class="w-5 h-5 text-emerald-400"></i> Google Sheets Sync & Drive Backup</h3>
+      <p class="text-xs text-gray-400 mb-4">Connect your Google Apps Script Web App URL to synchronize all entries to a Google Sheet and store automatic backups to Google Drive. Changes are pushed automatically after each save.</p>
+
+      <div class="grid lg:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="text-xs font-semibold text-gray-400">Google Apps Script URL (one deployment for Sheets + Drive)</label>
+          <input id="googleSheetUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          <p class="text-[10px] text-gray-500 mt-1">A single script handles sync, pull, and Drive backup. No second URL needed.</p>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-400">Drive Backup Frequency</label>
+          <select id="backupFrequency" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+            <option value="daily">Daily snapshot (recommended)</option>
+            <option value="every-save">Every save (2× API calls each)</option>
+            <option value="manual">Manual only (button)</option>
+          </select>
+          <p class="text-[10px] text-gray-500 mt-1">Daily is efficient: the sheet is always live; Drive keeps rolling snapshots.</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap gap-2 mb-4">
+        <button id="saveGoogleConfigBtn" class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold transition flex items-center gap-1.5">
+          <i data-lucide="save" class="w-4 h-4"></i> Save Config
+        </button>
+        <button id="syncNowBtn" class="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm font-bold transition flex items-center gap-1.5">
+          <i data-lucide="download-cloud" class="w-4 h-4"></i> Sync From Google Sheet
+        </button>
+        <button id="pullNowBtn" class="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-gray-900 text-sm font-bold transition flex items-center gap-1.5">
+          <i data-lucide="upload-cloud" class="w-4 h-4"></i> Upload To Google Sheet
+        </button>
+        <button id="backupToDriveBtn" class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold transition flex items-center gap-1.5">
+          <i data-lucide="archive" class="w-4 h-4"></i> Backup To Drive Now
+        </button>
+        <button id="exportFullBackupBtn" class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold transition flex items-center gap-1.5">
+          <i data-lucide="file-down" class="w-4 h-4"></i> Download Full Backup
+        </button>
+        <button id="restoreFullBackupBtn" class="px-4 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm font-bold transition flex items-center gap-1.5">
+          <i data-lucide="file-up" class="w-4 h-4"></i> Restore From Backup
+        </button>
+      </div>
+
+      <div id="googleSyncStatus" class="text-[10px] text-gray-400 mt-2"></div>
+      <div class="text-[10px] text-gray-500 mt-1">Browser storage used: <span id="storageUsed">0 KB</span> — the app warns automatically before your browser storage fills up. Export the full backup regularly as a safety net.</div>
+      <input type="file" id="restoreFileInput" accept=".json" class="hidden">
+
+      <div class="mt-4 p-4 rounded-lg bg-gray-800/50 border border-gray-700">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+          <div class="font-bold text-gray-300 text-sm flex items-center gap-2"><i data-lucide="archive" class="w-4 h-4 text-emerald-400"></i> Google Drive Backups</div>
+          <button id="listBackupsBtn" class="px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-xs font-bold transition flex items-center gap-1">
+            <i data-lucide="refresh-cw" class="w-3 h-3"></i> Refresh List
+          </button>
+        </div>
+        <div id="backupList" class="text-xs text-gray-400">Click "Refresh List" to see backups stored in your Google Drive folder.</div>
+      </div>
+
+      <div class="mt-4 p-4 rounded-lg bg-gray-800/50 border border-gray-700 text-xs text-gray-400">
+        <div class="font-bold text-gray-300 mb-2">Setup instructions (one time)</div>
+        <ol class="list-decimal list-inside space-y-1">
+          <li>Create a Google Sheet and open <b>Extensions → Apps Script</b>.</li>
+          <li>Paste the <b>Google Apps Script</b> code (see file <code>google-sync.gs</code> in this folder) that handles <b>save</b>, <b>get</b>, and <b>backup</b> actions.</li>
+          <li>Click <b>Deploy → New deployment → Web app</b>.</li>
+          <li>Set <b>Execute as: Me</b> and <b>Who has access: Anyone with a Google account</b> (or <i>Anyone</i>).</li>
+          <li>Copy the Web App URL and paste it above into the <b>Google Apps Script URL</b> field.</li>
+          <li>Set <b>DRIVE_FOLDER_ID</b> in <code>google-sync.gs</code> to enable automatic Drive backups from the same deployment.</li>
+          <li>Click <b>Save Config</b>, then <b>Sync Now</b>. Your ledger will auto-sync after every save and auto-backup per your frequency setting.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+<!-- ===================== CASH DRAWER ===================== -->
+  <section id="tab-cash" class="tab-panel hidden">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="banknote" class="w-4 h-4 text-emerald-400"></i> Cash On Hand</div>
+        <div id="cashCurrent" class="text-2xl font-extrabold text-emerald-400">0 Ks</div>
+        <div class="text-[10px] text-gray-500 mt-1">opening + in − out</div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="arrow-down-circle" class="w-4 h-4 text-emerald-400"></i> Total Cash In</div>
+        <div id="cashIn" class="text-lg font-extrabold text-emerald-400">0 Ks</div>
+        <div class="text-[10px] text-gray-500 mt-1">sales + payments + adjustments</div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="arrow-up-circle" class="w-4 h-4 text-red-400"></i> Total Cash Out</div>
+        <div id="cashOut" class="text-lg font-extrabold text-red-400">0 Ks</div>
+        <div class="text-[10px] text-gray-500 mt-1">stock, suppliers, expenses, labor</div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="users" class="w-4 h-4 text-amber-400"></i> Customer Receivables</div>
+        <div id="cashReceivable" class="text-lg font-extrabold text-amber-400">0 Ks</div>
+        <div class="text-[10px] text-gray-500 mt-1">money customers owe you</div>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-2 gap-4 mb-6">
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="wallet" class="w-5 h-5 text-amber-400"></i> Opening Balance</h3>
+        </div>
+        <p class="text-xs text-gray-400 mb-3">Set the cash you started this ledger with once. Everything after that is tracked automatically from your entries, purchases, payments, expenses and adjustments.</p>
+        <label class="text-xs font-semibold text-gray-400">Opening cash (Ks)</label>
+        <input id="cashOpening" type="number" min="0" step="1000" value="0" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+
+        <h3 class="font-bold text-base mt-5 mb-2 flex items-center gap-2"><i data-lucide="plus-minus" class="w-5 h-5 text-amber-400"></i> Manual Adjustment</h3>
+        <p class="text-xs text-gray-400 mb-3">Money in/out that the ledger can't see — a loan, your own drawing, a deposit to the bank, gifts, etc.</p>
+        <div class="grid grid-cols-2 gap-2 mb-2">
+          <input id="cashAdjustAmount" type="number" placeholder="Amount (Ks)" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <input id="cashAdjustLabel" type="text" placeholder="Description" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+        </div>
+        <div class="flex gap-2">
+          <button id="cashAdjustInBtn" class="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">+ Cash In</button>
+          <button id="cashAdjustOutBtn" class="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-bold">− Cash Out</button>
+        </div>
+
+        <h3 class="font-bold text-base mt-5 mb-2 flex items-center gap-2"><i data-lucide="list" class="w-5 h-5 text-amber-400"></i> Recent Adjustments</h3>
+        <div id="cashAdjustList" class="text-xs text-gray-400 max-h-52 overflow-y-auto scrollbar-thin"></div>
+      </div>
+
+      <div class="grid gap-4">
+        <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+          <h3 class="font-bold text-base mb-2 flex items-center gap-2"><i data-lucide="trending-down" class="w-5 h-5 text-emerald-400"></i> Where Cash Comes From</h3>
+          <div id="cashInList" class="text-xs"></div>
+        </div>
+        <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+          <h3 class="font-bold text-base mb-2 flex items-center gap-2"><i data-lucide="trending-up" class="w-5 h-5 text-red-400"></i> Where Cash Goes</h3>
+          <div id="cashOutList" class="text-xs"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+      <p class="text-xs text-gray-400">
+        <i data-lucide="info" class="w-3.5 h-3.5 inline text-amber-400"></i>
+        <b>How this works:</b> Sales are assumed to be cash on delivery. Stock purchases count as cash-out when you note what you paid (<b>Paid Now</b> + later supplier payments). Ingredients consumed in daily entries are a <b>cost</b>, not a cash outlay — that's a separate P&amp;L figure. Use manual adjustments for anything the app can't infer. This gives you a running "does the cash drawer match the books?" sanity check each week.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<!-- Toast Container -->
+<div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2 w-80 max-w-[90vw]"></div>
+
+<!-- ===================== WORKSPACE / LOGIN SCREEN ===================== -->
+<div id="companyScreen" class="hidden fixed inset-0 z-[100] bg-gray-950/95 backdrop-blur flex items-center justify-center p-4 overflow-y-auto">
+  <div class="w-full max-w-lg py-6">
+    <div class="flex items-center justify-center gap-3 mb-6">
+      <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amberdeep-700 flex items-center justify-center shadow-lg shadow-amber-500/30">
+        <i data-lucide="building-2" class="w-6 h-6 text-cream-100"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-extrabold tracking-tight text-amber-400 leading-none">Daily Crispy Roll Ledger</h1>
+        <p class="text-[11px] text-gray-400 mt-1">Company workspaces</p>
+      </div>
+    </div>
+    <div class="card bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <h2 id="companyScreenTitle" class="text-xl font-extrabold text-amber-400 mb-1">Select your workspace</h2>
+      <p class="text-xs text-gray-400 mb-5">Each business keeps its own ledgers, inventory, pricing and Google sync. Choose one to continue, or create a new one.</p>
+      <div id="companyList" class="space-y-2 max-h-64 overflow-y-auto scrollbar-thin mb-5"></div>
+      <div class="border-t border-gray-800 pt-4">
+        <label class="text-xs font-semibold text-gray-400 block mb-1">New business</label>
+        <input id="companyNameInput" type="text" placeholder="e.g. Crispy Roll — Shop A" class="w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+        <div class="flex gap-2 mt-2">
+          <button id="companyCreateBtn" class="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">Create &amp; Sign In</button>
+          <button id="companyCancelBtn" class="hidden px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-semibold">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <p class="text-center text-[11px] text-gray-500 mt-4">Workspace data lives in this browser only. Each workspace has its own Google Sync / Drive backup — connect one per company in the Google Sync tab.</p>
+  </div>
+</div>
+
+
+    <script src="js/config.js"></script>
+    <script src="js/storage.js"></script>
+    <script src="js/google.js"></script>
+    <script src="js/helpers.js"></script>
+    <script src="js/pricing.js"></script>
+    <script src="js/usage.js"></script>
+    <script src="js/ledger.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/calendar.js"></script>
+    <script src="js/csv.js"></script>
+    <script src="js/sync-ui.js"></script>
+    <script src="js/sample-data.js"></script>
+    <script src="js/inventory.js"></script>
+    <script src="js/customers.js"></script>
+    <script src="js/suppliers.js"></script>
+    <script src="js/tools.js"></script>
+    <script src="js/cash.js"></script>
+    <script src="js/companies.js"></script>
+    <script src="js/cloud.js"></script>
+    <script src="js/init.js"></script>
+
+</body>
+</html>
