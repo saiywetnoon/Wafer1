@@ -57,8 +57,8 @@ const GOOGLE_SHEET_NAME = 'LedgerState';
    handled by Supabase automatically, exactly like a real app.
    Leave empty to keep using the legacy Apps-Script backend.
 ============================================================ */
-const SUPABASE_URL = '';
-const SUPABASE_ANON_KEY = '';
+const SUPABASE_URL = 'https://yirdgfiklgsygwbafzgk.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_w7aR1Lrjd4ED3k5vPeXfIQ_rxSA8pMN';
 
 /* ---------- Default Price List (persistent) ----------
    unit: 'g'  → price is Ks per KILOGRAM, qty entered in grams
