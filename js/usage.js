@@ -76,33 +76,31 @@ $('copyYesterdayBtn').addEventListener('click', function () {
 });
 
 /* ============================================================
-   LIVE CALCULATION
+   LIVE CALCULATION (production form — your cost to roll today)
    ============================================================ */
 function updateLive() {
   const usage = currentUsage();
   const ingCost = ingredientCostFor(usage);
   const extra = parseFloat($('additionalCost').value) || 0;
   const capital = ingCost + extra;
-  const bagsSold = parseFloat($('logBagsSold').value) || 0;
-  const price = parseFloat($('logPrice').value) || 0;
+  const parts = parseFloat($('logPieces').value) || 0;
+  const bags = parseFloat($('logBagsProduced').value) || 0;
   const laborMin = parseFloat($('logLabor').value) || 0;
   const wage = parseFloat($('hourlyWage').value) || state.settings.hourlyWage || 0;
   const laborHrs = laborMin / 60;
   const laborCost = laborHrs * wage;
-  const revenue = bagsSold * price;
-  const net = revenue - capital;
-  const netAfterLabor = net - laborCost;
-  $('liveRevenue').textContent = fmtKs(revenue);
+  $('liveCapital').textContent = fmtKs(capital);
   $('liveLaborHrs').textContent = laborHrs.toFixed(2) + ' hrs';
   $('liveLaborCost').textContent = fmtKs(laborCost);
   $('totalMixWeight').textContent = fmt(Math.round(totalMixWeightFor(usage))) + ' g';
-  $('liveNet').textContent = fmtKs(net);
-  $('liveNet').className = 'font-bold ' + (net >= 0 ? 'text-emerald-400' : 'text-red-400');
-  $('liveNetAfterLabor').textContent = fmtKs(netAfterLabor);
-  $('liveNetAfterLabor').className = 'font-bold ' + (netAfterLabor >= 0 ? 'text-emerald-400' : 'text-red-400');
+  $('liveCostPiece').textContent = parts > 0 ? fmtKs(Math.round((capital / parts) * 100) / 100) : '—';
+  $('liveCostBag').textContent = bags > 0 ? fmtKs(Math.round((capital / bags) * 100) / 100) : '—';
+  const onHand = (state.stock && state.stock.pieces) || 0;
+  $('liveStockAfter').textContent = fmt(onHand + parts) + ' ready';
 }
-['logBagsProduced', 'logPieces', 'logBagsSold', 'logPrice', 'logLabor', 'hourlyWage', 'additionalCost'].forEach(function (id) {
-  $(id).addEventListener('input', function () {
+['logBagsProduced', 'logPieces', 'logLabor', 'hourlyWage', 'additionalCost'].forEach(function (id) {
+  const el = $(id);
+  if (el) el.addEventListener('input', function () {
     updateUsageCosts();
     persistDraft();
   });

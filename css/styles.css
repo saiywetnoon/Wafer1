@@ -15,6 +15,7 @@
   .cal-day.empty:hover { transform: none; }
   .cal-day.profit { background: rgba(16,185,129,.25); border: 1px solid rgba(16,185,129,.5); color: #34D399; }
   .cal-day.loss { background: rgba(239,68,68,.25); border: 1px solid rgba(239,68,68,.5); color: #F87171; }
+.cal-day.neutral { background: rgba(234,179,8,.18); border: 1px solid rgba(234,179,8,.4); color: #FBBF24; }
   .cal-day.none { background: rgba(75,85,99,.2); border: 1px solid rgba(75,85,99,.4); color: #9CA3AF; }
   .cal-day.today { outline: 2px solid #D97706; }
   .cal-day.selected { outline: 2px solid #10B981; }

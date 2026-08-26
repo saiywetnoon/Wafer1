@@ -25,6 +25,118 @@ function entriesSorted() {
   });
 }
 
+/* ---------- Production / Sales / Stock (ready-to-sell goods) ---------- */
+/* Production = what you ROLLED. Sales = what you SOLD that day (may come from
+   rolls made today, tomorrow, or previous batches). Finished goods sit in
+   state.stock until sold, so a day's cost is never forced into the same day's
+   profit. pieces-per-bag is entered per sale because it varies. */
+
+function prodList() {
+  return (state.production || []).slice().sort(function (a, b) {
+    return a.date === b.date ? 0 : (a.date < b.date ? -1 : 1);
+  });
+}
+function salesList() {
+  return (state.sales || []).slice().sort(function (a, b) {
+    return a.date === b.date ? 0 : (a.date < b.date ? -1 : 1);
+  });
+}
+
+/* Aggregate money + quantities across ALL production and sales. */
+function financeTotalsAll() {
+  var prod = prodList();
+  var sales = salesList();
+  return {
+    capital: prod.reduce(function (s, p) { return s + (p.capital || 0); }, 0),
+    productionBags: prod.reduce(function (s, p) { return s + (p.bags || 0); }, 0),
+    productionPieces: prod.reduce(function (s, p) { return s + (p.pieces || 0); }, 0),
+    laborMin: prod.reduce(function (s, p) { return s + (p.laborMinutes || 0); }, 0),
+    laborCost: prod.reduce(function (s, p) { return s + (p.laborCost || 0); }, 0),
+    revenue: sales.reduce(function (s, sl) { return s + (sl.amount || 0); }, 0),
+    cogs: sales.reduce(function (s, sl) { return s + (sl.cogs || 0); }, 0),
+    salesBags: sales.reduce(function (s, sl) { return s + (sl.bags || 0); }, 0),
+    salesPieces: sales.reduce(function (s, sl) { return s + (sl.pieces || 0); }, 0),
+    net: sales.reduce(function (s, sl) { return s + ((sl.amount || 0) - (sl.cogs || 0)); }, 0)
+  };
+}
+
+/* Rebuild finished-goods stock and each sale's cost-of-goods by replaying
+   production (adds pieces+cost) and sales (subtracts pieces at average cost)
+   in date order. Run after any create / edit / delete so cogs stays correct
+   even when today's production sells over several days. */
+function rebuildStockAndCogs() {
+  var events = [];
+  (state.production || []).forEach(function (p) { events.push({ date: p.date, type: 0, p: p }); });
+  (state.sales || []).forEach(function (s) { events.push({ date: s.date, type: 1, s: s }); });
+  events.sort(function (a, b) {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    return a.type - b.type; // production before sales on the same day
+  });
+  var stock = { pieces: 0, cost: 0 };
+  events.forEach(function (ev) {
+    if (ev.type === 0) {
+      stock.pieces += (ev.p.pieces || 0);
+      stock.cost += (ev.p.capital || 0);
+    } else {
+      var s = ev.s;
+      var avg = stock.pieces > 0 ? (stock.cost / stock.pieces) : 0;
+      var cogs = Math.round((s.pieces || 0) * avg);
+      s.cogs = cogs;
+      s.avgCost = Math.round(avg * 100) / 100;
+      s.net = Math.round((s.amount || 0) - cogs);
+      stock.pieces = Math.max(0, stock.pieces - (s.pieces || 0));
+      stock.cost = Math.max(0, stock.cost - cogs);
+    }
+  });
+  if (!state.stock) state.stock = { pieces: 0, cost: 0 };
+  state.stock.pieces = Math.round(stock.pieces);
+  state.stock.cost = Math.round(stock.cost);
+}
+
+/* Number of ready-to-sell bags (using the most recent sale's pieces-per-bag
+   as a hint, defaulting to the last production's average — just a guide). */
+function stockBagsHint() {
+  var perBag = 6;
+  var sales = salesList();
+  if (sales.length) {
+    var last = sales[sales.length - 1];
+    if (last.bags > 0) perBag = Math.round((last.pieces || 0) / last.bags) || 6;
+  }
+  var avg = stockAvgPiecesPerBag();
+  if (avg > 0) perBag = Math.round(avg);
+  return (state.stock && state.stock.pieces > 0) ? Math.max(0, Math.round((state.stock.pieces || 0) / perBag)) : 0;
+}
+function stockAvgPiecesPerBag() {
+  var p = prodList();
+  if (!p.length) return 0;
+  var totB = 0, totP = 0;
+  p.forEach(function (x) { totB += (x.bags || 0); totP += (x.pieces || 0); });
+  return totB > 0 ? totP / totB : 0;
+}
+function stockAvgCostPerPiece() {
+  var s = state.stock || {};
+  return (s && s.pieces > 0) ? (s.cost / s.pieces) : 0;
+}
+
+/* One combined array keyed by date with what was ROLLED and what was SOLD,
+   so the dashboard/calendar/monthly have a single view of the day. */
+function entriesProdSales() {
+  var map = {};
+  (state.production || []).forEach(function (p) {
+    if (!map[p.date]) map[p.date] = { date: p.date, prodBags: 0, prodPieces: 0, capital: 0, laborMin: 0, laborCost: 0, soldBags: 0, soldPieces: 0, revenue: 0, cogs: 0, net: 0 };
+    var d = map[p.date];
+    d.prodBags += (p.bags || 0); d.prodPieces += (p.pieces || 0); d.capital += (p.capital || 0);
+    d.laborMin += (p.laborMinutes || 0); d.laborCost += (p.laborCost || 0);
+  });
+  (state.sales || []).forEach(function (s) {
+    if (!map[s.date]) map[s.date] = { date: s.date, prodBags: 0, prodPieces: 0, capital: 0, laborMin: 0, laborCost: 0, soldBags: 0, soldPieces: 0, revenue: 0, cogs: 0, net: 0 };
+    var d = map[s.date];
+    d.soldBags += (s.bags || 0); d.soldPieces += (s.pieces || 0); d.revenue += (s.amount || 0);
+    d.cogs += (s.cogs || 0); d.net += ((s.amount || 0) - (s.cogs || 0));
+  });
+  return Object.keys(map).sort().map(function (k) { return map[k]; });
+}
+
 /* ---------- Cash-sync-safe / metrics helpers ---------- */
 function storageUsedKB() {
   try {
@@ -120,6 +232,7 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     if (btn.dataset.tab === 'tools') renderTools();
     if (btn.dataset.tab === 'cash') renderCash();
     if (btn.dataset.tab === 'sync') renderSyncTab();
+    if (btn.dataset.tab === 'sales') { updateSaleLive(); renderSalesTab(); }
   });
 });
 

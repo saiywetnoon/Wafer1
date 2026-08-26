@@ -63,7 +63,8 @@ function renderBreakEven() {
   const laborMin = parseFloat($('logLabor').value) || 0;
   const wage = parseFloat($('hourlyWage').value) || state.settings.hourlyWage || 0;
   const laborCost = (laborMin / 60) * wage;
-  const price = parseFloat($('logPrice').value) || 1300;
+  const sales = salesList();
+  const price = (sales.length ? (sales[sales.length - 1].price || 1300) : 1300);
   $('beCapital').textContent = fmtKs(capital);
   $('beLabor').textContent = fmtKs(laborCost);
   $('bePrice').textContent = fmtKs(price);
@@ -169,11 +170,11 @@ function removeRecurring(id) {
 /* ---------- Forecast ---------- */
 function renderForecast() {
   const box = $('forecastBox');
-  const entries = entriesSorted();
+  const entries = entriesProdSales();
   if (entries.length < 3) { box.innerHTML = '<span class="text-gray-500">Add at least 3 days of data to see a sales forecast.</span>'; return; }
   const recent = entries.slice(-7);
-  const avgSold = recent.reduce(function (s, e) { return s + (e.bagsSold || 0); }, 0) / recent.length;
-  const avgProd = recent.reduce(function (s, e) { return s + (e.bagsProduced || 0); }, 0) / recent.length;
+  const avgSold = recent.reduce(function (s, e) { return s + (e.soldBags || 0); }, 0) / recent.length;
+  const avgProd = recent.reduce(function (s, e) { return s + (e.prodBags || 0); }, 0) / recent.length;
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const off = tomorrow.getTimezoneOffset();
@@ -186,15 +187,16 @@ function renderForecast() {
 
 /* ---------- Printable Report ---------- */
 $('printReportBtn').addEventListener('click', function () {
-  const entries = entriesSorted();
-  if (!entries.length) { showToast('No data to print.', 'info'); return; }
+  const f = financeTotalsAll();
+  const entries = entriesProdSales();
+  if (!f.revenue && !f.capital && !entries.length) { showToast('No data to print.', 'info'); return; }
   const w = window.open('', '_blank');
   w.document.write('<html><head><title>Crispy Roll Ledger Report</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#111}h1{color:#B45309}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:12px}th{background:#f5f5f5}.pos{color:#059669;font-weight:bold}.neg{color:#dc2626;font-weight:bold}</style></head><body>');
   w.document.write('<h1>Daily Crispy Roll Ledger Report</h1>');
   w.document.write('<p>Generated: ' + new Date().toLocaleString() + '</p>');
-  w.document.write('<table><tr><th>Date</th><th>Capital</th><th>Bags</th><th>Pieces</th><th>Sold</th><th>Revenue</th><th>Labor Hrs</th><th>Net</th></tr>');
+  w.document.write('<table><tr><th>Date</th><th>Capital</th><th>Rolled (bags)</th><th>Rolled (pcs)</th><th>Sold (bags)</th><th>Revenue</th><th>Labor Hrs</th><th>Net (sold)</th></tr>');
   entries.forEach(function (e) {
-    w.document.write('<tr><td>' + e.date + '</td><td>' + fmtKs(e.capital) + '</td><td>' + fmt(e.bagsProduced) + '</td><td>' + fmt(e.pieces) + '</td><td>' + fmt(e.bagsSold) + '</td><td>' + fmtKs(e.revenue) + '</td><td>' + ((e.laborMinutes || 0) / 60).toFixed(2) + '</td><td class="' + (e.net >= 0 ? 'pos' : 'neg') + '">' + fmtKs(e.net) + '</td></tr>');
+    w.document.write('<tr><td>' + e.date + '</td><td>' + fmtKs(e.capital) + '</td><td>' + fmt(e.prodBags) + '</td><td>' + fmt(e.prodPieces) + '</td><td>' + fmt(e.soldBags) + '</td><td>' + fmtKs(e.revenue) + '</td><td>' + ((e.laborMin || 0) / 60).toFixed(2) + '</td><td class="' + (e.net >= 0 ? 'pos' : 'neg') + '">' + fmtKs(e.net) + '</td></tr>');
   });
   w.document.write('</table></body></html>');
   w.document.close();
@@ -202,12 +204,12 @@ $('printReportBtn').addEventListener('click', function () {
 });
 
 $('exportMonthlyCsvBtn').addEventListener('click', function () {
-  const entries = entriesSorted();
+  const entries = entriesProdSales();
   if (!entries.length) { showToast('No data to export.', 'info'); return; }
-  const header = ['Date', 'Capital (Ks)', 'Bags Produced', 'Pieces', 'Bags Sold', 'Revenue (Ks)', 'Labor Hrs', 'Net (Ks)'];
+  const header = ['Date', 'Capital (Ks)', 'Bags Rolled', 'Pieces Rolled', 'Bags Sold', 'Revenue (Ks)', 'Labor Hrs', 'Net (Ks)'];
   const lines = [header.join(',')];
   entries.forEach(function (e) {
-    lines.push([e.date, e.capital, e.bagsProduced, e.pieces, e.bagsSold, e.revenue, ((e.laborMinutes || 0) / 60).toFixed(2), e.net].join(','));
+    lines.push([e.date, e.capital, e.prodBags, e.prodPieces, e.soldBags, e.revenue, ((e.laborMin || 0) / 60).toFixed(2), e.net].join(','));
   });
   const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');

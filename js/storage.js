@@ -2,7 +2,10 @@
 let state = {
   version: 2,
   prices: JSON.parse(JSON.stringify(DEFAULT_PRICES)),
-  entries: {},
+  entries: {},          // legacy (pre-accounts) — migrated into production/sales on first load
+  production: [],       // batches you ROLLED: { id, date, pieces, bags, usage, additionalCost, capital, laborMinutes, laborCost, costPerPiece }
+  sales: [],            // what you SOLD: { id, date, bags, pieces, price, amount, cogs, avgCost, net }
+  stock: { pieces: 0, cost: 0 }, // finished goods ready to sell (cost basis for cogs)
   settings: { hourlyWage: 1500 },
   inventory: {},   // { ingredientName: { stock, lowAlert } }
   customers: [],   // [{ id, name, phone, standingOrder, price, debt }]
@@ -61,9 +64,60 @@ function loadState() {
         if (!Array.isArray(state.cash.adjustments)) state.cash.adjustments = [];
       }
       if (parsed && parsed.updatedAt) state.updatedAt = parsed.updatedAt;
+      // Production / Sales / Stock (v3 — separate roll dates from sale dates)
+      if (Array.isArray(parsed.production)) state.production = parsed.production;
+      if (Array.isArray(parsed.sales)) state.sales = parsed.sales;
+      if (parsed.stock && typeof parsed.stock === 'object') {
+        state.stock = { pieces: parseFloat(parsed.stock.pieces) || 0, cost: parseFloat(parsed.stock.cost) || 0 };
+      }
       state.version = 2;
     }
   } catch (e) { console.warn('Failed to load state', e); }
+}
+
+/* One-time migration: older saved ledgers kept one "Daily entry" that bundled
+   production + sale on the same date. Split them into production[] (rolled)
+   and sales[] (sold that day), seed the finished-goods stock, then clear the
+   old entries so nothing is double-counted. */
+function migrateLegacyEntries() {
+  var legacy = state.entries || {};
+  var keys = Object.keys(legacy);
+  if ((state.production && state.production.length) || !keys.length) {
+    if (!keys.length) state.entries = {};
+    return;
+  }
+  keys.forEach(function (date) {
+    var e = legacy[date] || {};
+    var pieces = parseInt(e.pieces, 10) || 0;
+    var bags = parseInt(e.bagsProduced, 10) || 0;
+    var soldBags = parseInt(e.bagsSold, 10) || 0;
+    var capital = parseFloat(e.capital) || 0;
+    var laborHrs = (parseFloat(e.laborMinutes) || 0) / 60;
+    var laborCost = parseFloat(e.laborCost) || (laborHrs * (state.settings.hourlyWage || 1500));
+    var soldPieces = 0;
+    if (pieces > 0 && bags > 0 && soldBags > 0) soldPieces = Math.round(soldBags * (pieces / bags));
+    else soldPieces = soldBags;
+    if (pieces > 0 || capital > 0) {
+      state.production.push({
+        id: uid(), date: date, pieces: pieces, bags: bags,
+        usage: e.usage || {}, additionalCost: parseFloat(e.additionalCost) || 0,
+        capital: Math.round(capital), laborMinutes: parseFloat(e.laborMinutes) || 0,
+        laborCost: Math.round(laborCost),
+        costPerPiece: pieces > 0 ? Math.round(capital / pieces * 100) / 100 : 0
+      });
+    }
+    if (soldBags > 0 || parseFloat(e.revenue) > 0) {
+      state.sales.push({
+        id: uid(), date: date, bags: soldBags, pieces: soldPieces,
+        price: parseFloat(e.price) || 0, amount: Math.round(parseFloat(e.revenue) || 0),
+        cogs: 0, avgCost: 0, net: 0
+      });
+    }
+  });
+  state.entries = {};
+  saveState();
+  rebuildStockAndCogs();
+  saveState();
 }
 
 /* ---------- Draft Persistence (auto-save before refresh) ---------- */
@@ -81,8 +135,6 @@ function captureDraft() {
     additionalCost: $('additionalCost') ? (parseFloat($('additionalCost').value) || 0) : 0,
     bagsProduced: $('logBagsProduced') ? (parseFloat($('logBagsProduced').value) || 0) : 0,
     pieces: $('logPieces') ? (parseFloat($('logPieces').value) || 0) : 0,
-    bagsSold: $('logBagsSold') ? (parseFloat($('logBagsSold').value) || 0) : 0,
-    price: $('logPrice') ? (parseFloat($('logPrice').value) || 0) : 1300,
     laborMinutes: $('logLabor') ? (parseFloat($('logLabor').value) || 0) : 0,
     hourlyWage: $('hourlyWage') ? (parseFloat($('hourlyWage').value) || 0) : 0
   };
@@ -102,15 +154,13 @@ function loadDraftIfNewer() {
     if (!d || !d.usage) return;
     // Only restore draft if it's for today or is newer than a full entry on that date
     if (d.date !== today()) return;
-    const existing = state.entries[d.date];
-    if (existing) return; // A saved entry exists → don't overwrite with draft
+    const existing = (state.production || []).find(function (p) { return p.date === d.date; });
+    if (existing) return; // A saved production exists for that date → don't overwrite with draft
     draftUsage = Object.assign({}, d.usage);
     $('logDate').value = d.date || today();
     $('additionalCost').value = d.additionalCost || 0;
     $('logBagsProduced').value = d.bagsProduced || 0;
     $('logPieces').value = d.pieces || 0;
-    $('logBagsSold').value = d.bagsSold || 0;
-    $('logPrice').value = d.price || 1300;
     $('logLabor').value = d.laborMinutes || 0;
     $('hourlyWage').value = d.hourlyWage || state.settings.hourlyWage || 1500;
     draftRestored = true;

@@ -205,6 +205,31 @@ Open app  →  Login / Create Account screen
    **Admin** console (or directly in the `Users` sheet). Approved users can
    then log in and each has their own private ledger on any device.
 
+## v1.6 upgrade — Production ≠ Sales (roll today, sell tomorrow) 🥖
+
+The single "Daily entry" assumed you sold everything the day you rolled it.
+The app now treats **production** (rolling) and **sales** (selling) as
+two separate things, with a **ready-to-sell stock** between them.
+
+- **Production tab** — what you ROLLED: date, bags packed, actual pieces
+  rolled, ingredient usage, labor, and capital cost. Adds those pieces to
+  stock. No sale is recorded here.
+- **Sales & Stock tab** — what you SOLD, on the actual day you sold it (today,
+  tomorrow, next week). You enter **bags sold**, **pieces actually in those
+  bags** (because the per-bag count varies), and price per bag. The sale
+  deducts pieces from stock and records the true profit.
+- **Ready-to-sell stock** — a running balance of pieces on hand with a cost
+  basis, plus approximate bags, and the cash invested in unsold goods.
+- **Correct profit** — a sale is matched to the *cost of the pieces actually
+  sold* (average cost, COGS), not "today's production cost". So rolling 100
+  today and selling 40 today no longer shows a bogus loss — the unsold 60
+  stay as stock and their profit is booked when they're actually sold.
+- **Exports / reports** — full CSV, sales-only CSV, printable report, monthly
+  report, Dashboard, calendar and audit all use the new model (rolled vs sold).
+- **Existing data migrates automatically** — your old "daily entries" are
+  split into a production batch + a same-day sale on first load (one time),
+  and old `My Business` browser data still imports into your account.
+
 > ⚠️ `daily-ledger-1.1.html` is a byte-for-byte backup of the ORIGINAL app and
 > does **not** contain these upgrades. Always open **index.html**. `_split.ps1`
 > regenerates only the original content — the new `auth.js` module and HTML

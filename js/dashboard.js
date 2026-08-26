@@ -5,22 +5,24 @@ let gainChart = null;
 let volumeChart = null;
 
 function renderDashboard() {
-  const entries = entriesSorted();
   const todayStr = today();
-  const todayEntry = state.entries[todayStr];
-  const totalRevenue = entries.reduce(function (s, e) { return s + (e.revenue || 0); }, 0);
-  const totalCapital = entries.reduce(function (s, e) { return s + (e.capital || 0); }, 0);
-  const totalNet = entries.reduce(function (s, e) { return s + (e.net || 0); }, 0);
-  const ratio = totalCapital > 0 ? (totalNet / totalCapital) * 100 : 0;
-  $('kpiRevenue').textContent = fmtKs(todayEntry ? todayEntry.revenue : 0);
-  $('kpiCapital').textContent = fmtKs(todayEntry ? todayEntry.capital : 0);
-  $('kpiNet').textContent = fmtKs(todayEntry ? todayEntry.net : 0);
-  $('kpiNet').className = 'text-lg font-extrabold ' + ((todayEntry && todayEntry.net >= 0) ? 'text-emerald-400' : 'text-red-400');
+  const t = financeTotalsAll();
+  const todayProduction = prodList().filter(function (p) { return p.date === todayStr; });
+  const todaySales = salesList().filter(function (s) { return s.date === todayStr; });
+  const revenueToday = todaySales.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
+  const capitalToday = todayProduction.reduce(function (s, p) { return s + (p.capital || 0); }, 0);
+  const netToday = todaySales.reduce(function (s, x) { return s + ((x.amount || 0) - (x.cogs || 0)); }, 0);
+  const ratio = t.capital > 0 ? (t.net / t.capital) * 100 : 0;
+  $('kpiRevenue').textContent = fmtKs(revenueToday);
+  $('kpiCapital').textContent = fmtKs(capitalToday);
+  $('kpiNet').textContent = fmtKs(netToday);
+  $('kpiNet').className = 'text-lg font-extrabold ' + (netToday >= 0 ? 'text-emerald-400' : 'text-red-400');
   $('kpiRatio').textContent = ratio.toFixed(1) + '%';
+  $('kpiRatio').title = 'Profit (all sales revenue − their goods cost) ÷ all production cost';
   $('kpiPayable').textContent = fmtKs(totalPayable());
   $('kpiPayable').className = 'text-lg font-extrabold ' + (totalPayable() > 0 ? 'text-red-400' : 'text-emerald-400');
   renderCharts();
-  renderSummary(entries, totalRevenue, totalCapital, totalNet);
+  renderSummary(entriesProdSales());
   renderMonthlyReport();
 }
 
@@ -148,6 +150,71 @@ function renderSummary(entries, totalRevenue, totalCapital, totalNet) {
     '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Profitable Days</div><div class="font-bold text-emerald-400 text-lg">' + profitableDays + ' / ' + entries.length + '</div></div>' +
     '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Avg Net / Day</div><div class="font-bold text-lg">' + fmtKs(totalNet / entries.length) + '</div></div>' +
     '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Inventory Value (stock cost)</div><div class="font-bold text-amber-400 text-lg">' + fmtKs(Math.round(inventoryValue())) + '</div></div>' +
+    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Standing Orders</div><div class="font-bold text-lg">' + fmt(totalStandingOrders()) + ' bags/day</div><div class="text-[10px] text-gray-500">customers commit to these</div></div>' +
+    '</div>';
+}
+/* ---- v1.6 overrides: charts + summary use production & sales ---- */
+function renderCharts() {
+  const gridColor = 'rgba(255,255,255,0.08)';
+  const tickColor = '#9CA3AF';
+  const days = parseInt($('chartRange') ? $('chartRange').value : '30', 10) || 30;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  const off = cutoff.getTimezoneOffset();
+  const cutoffStr = new Date(cutoff.getTime() - off * 60000).toISOString().slice(0, 10);
+  const recent = entriesProdSales().filter(function (e) { return e.date >= cutoffStr; });
+  const labels = recent.map(function (e) { return e.date.slice(5); });
+  const gains = recent.map(function (e) { return e.net; });
+  const volumes = recent.map(function (e) { return e.prodBags; });
+  if (gainChart) gainChart.destroy();
+  gainChart = new Chart($('gainChart'), {
+    type: 'line',
+    data: { labels: labels, datasets: [{ label: 'Daily Profit (Ks, on sold)', data: gains, borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.15)', fill: true, tension: 0.4, pointRadius: 3 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: tickColor } } },
+      scales: {
+        x: { ticks: { color: tickColor, maxRotation: 45 }, grid: { color: gridColor } },
+        y: { ticks: { color: tickColor }, grid: { color: gridColor } }
+      }
+    }
+  });
+  if (volumeChart) volumeChart.destroy();
+  volumeChart = new Chart($('volumeChart'), {
+    type: 'bar',
+    data: { labels: labels, datasets: [{ label: 'Bags Produced (rolled)', data: volumes, backgroundColor: volumes.map(function (v) { return v > 0 ? '#D97706' : 'rgba(75,85,99,0.4)'; }), borderRadius: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: tickColor } } },
+      scales: {
+        x: { ticks: { color: tickColor, maxRotation: 45 }, grid: { color: gridColor } },
+        y: { ticks: { color: tickColor }, grid: { color: gridColor } }
+      }
+    }
+  });
+}
+
+function renderSummary(entries) {
+  const el = $('summaryText');
+  if (!entries.length) { el.textContent = 'No data recorded yet. Start by logging a production batch (the rolls you make) and a sale.'; return; }
+  const t = financeTotalsAll();
+  const totalBags = entries.reduce(function (s, e) { return s + (e.prodBags || 0); }, 0);
+  const totalPieces = entries.reduce(function (s, e) { return s + (e.prodPieces || 0); }, 0);
+  const soldPieces = entries.reduce(function (s, e) { return s + (e.soldPieces || 0); }, 0);
+  const onHand = (state.stock && state.stock.pieces) || 0;
+  const profitableDays = entries.filter(function (e) { return e.net >= 0; }).length;
+  const netAfterLabor = t.net - t.laborCost;
+  el.innerHTML = '<div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">' +
+    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Total Sales Revenue (all time)</div><div class="font-bold text-emerald-400 text-lg">' + fmtKs(t.revenue) + '</div></div>' +
+    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Total Capital Spent Rolling</div><div class="font-bold text-amber-400 text-lg">' + fmtKs(t.capital) + '</div></div>' +
+    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Total Profit (on sold)</div><div class="font-bold text-emerald-400 text-lg">' + fmtKs(t.net) + '</div></div>' +
+    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Total Profit After Labor</div><div class="font-bold text-emerald-400 text-lg">' + fmtKs(netAfterLabor) + '</div></div>' +
+    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Rolled</div><div class="font-bold text-lg">' + fmt(totalBags) + ' bags · ' + fmt(totalPieces) + ' pcs</div></div>' +
+    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Sold</div><div class="font-bold text-lg">' + fmt(t.salesBags) + ' bags · ' + fmt(soldPieces) + ' pcs</div></div>' +
+    '<div class="p-3 rounded-lg bg-emerald-600/20 border border-emerald-600/40"><div class="text-xs text-gray-300">Ready-to-sell stock</div><div class="font-bold text-emerald-400 text-lg">' + fmt(onHand) + ' pcs</div><div class="text-[10px] text-gray-500">≈ ' + fmt(stockBagsHint()) + ' bags on hand</div></div>' +
+    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Profitable Days (sold)</div><div class="font-bold text-emerald-400 text-lg">' + profitableDays + ' / ' + entries.length + '</div></div>' +
+    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Cumulative Labor</div><div class="font-bold text-lg">' + (t.laborMin / 60).toFixed(1) + ' hrs (' + fmtKs(t.laborCost) + ')</div></div>' +
+    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Inventory Value (ingredients)</div><div class="font-bold text-amber-400 text-lg">' + fmtKs(Math.round(inventoryValue())) + '</div></div>' +
     '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Standing Orders</div><div class="font-bold text-lg">' + fmt(totalStandingOrders()) + ' bags/day</div><div class="text-[10px] text-gray-500">customers commit to these</div></div>' +
     '</div>';
 }

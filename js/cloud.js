@@ -97,6 +97,9 @@ function applyCloudRemote(remote) {
   const r = remote.state;
   if (r.prices && Array.isArray(r.prices) && r.prices.length) state.prices = r.prices;
   if (r.entries) state.entries = r.entries;
+  if (r.production) state.production = Array.isArray(r.production) ? r.production : [];
+  if (r.sales) state.sales = Array.isArray(r.sales) ? r.sales : [];
+  if (r.stock && typeof r.stock === 'object') state.stock = { pieces: parseFloat(r.stock.pieces) || 0, cost: parseFloat(r.stock.cost) || 0 };
   if (r.settings) state.settings = Object.assign({ hourlyWage: 1500 }, r.settings);
   if (r.inventory) state.inventory = r.inventory;
   if (r.customers) state.customers = r.customers;

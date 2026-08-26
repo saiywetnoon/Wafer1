@@ -38,8 +38,7 @@ function removeCashAdjustment(id) {
 }
 
 function financeTotals() {
-  var entries = Object.keys(state.entries || {}).map(function (d) { return state.entries[d]; });
-  var sales = entries.reduce(function (s, e) { return s + (e.revenue || 0); }, 0);
+  var sales = (state.sales || []).reduce(function (s, x) { return s + (x.amount || 0); }, 0);
   var customerPay = (state.customerPayments || []).reduce(function (s, p) { return s + (p.amount || 0); }, 0);
   var adjustIn = cashAdjustments().reduce(function (s, a) { return s + (a.amount > 0 ? a.amount : 0); }, 0);
   var cashIn = sales + customerPay + adjustIn;
@@ -47,7 +46,7 @@ function financeTotals() {
   var purchasesPaid = (state.purchases || []).reduce(function (s, p) { return s + ((p.paidNow || 0) + (p.paid || 0)); }, 0);
   var supplierPay = (state.payments || []).reduce(function (s, p) { return s + (p.amount || 0); }, 0);
   var oneTime = (state.expenses || []).reduce(function (s, e) { return s + (e.amount || 0); }, 0);
-  var labor = entries.reduce(function (s, e) { return s + (e.laborCost || 0); }, 0);
+  var labor = (state.production || []).reduce(function (s, p) { return s + (p.laborCost || 0); }, 0);
   var adjustOut = cashAdjustments().reduce(function (s, a) { return s + (a.amount < 0 ? Math.abs(a.amount) : 0); }, 0);
   var cashOut = purchasesPaid + supplierPay + oneTime + labor + adjustOut;
 

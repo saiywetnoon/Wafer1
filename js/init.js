@@ -2,26 +2,24 @@
    INIT
    ============================================================ */
 function renderAll() {
+  migrateLegacyEntries();
+  rebuildStockAndCogs();
   $('logDate').value = today();
+  $('saleDate').value = today();
   $('hourlyWage').value = state.settings.hourlyWage || 1500;
-  const todayEntry = state.entries[today()];
-  $('logPrice').value = todayEntry && todayEntry.price ? todayEntry.price : 1300;
   renderPriceTable();
   renderUsageTable();
-  if (todayEntry) {
-    draftUsage = Object.assign({}, todayEntry.usage || {});
-    state.prices.forEach(function (ing) {
-      const input = document.querySelector('.usage-input[data-name="' + ing.name + '"]');
-      if (input) input.value = draftUsage[ing.name] || 0;
-    });
-    $('additionalCost').value = todayEntry.additionalCost || 0;
-    $('logBagsProduced').value = todayEntry.bagsProduced || 0;
-    $('logPieces').value = todayEntry.pieces || 0;
-    $('logBagsSold').value = todayEntry.bagsSold || 0;
-    $('logPrice').value = todayEntry.price || 1300;
-    $('logLabor').value = todayEntry.laborMinutes || 0;
-  }
-  renderRecent();
+  draftUsage = {};
+  state.prices.forEach(function (ing) {
+    const input = document.querySelector('.usage-input[data-name="' + ing.name + '"]');
+    if (input) input.value = draftUsage[ing.name] || 0;
+  });
+  $('additionalCost').value = 0;
+  $('logBagsProduced').value = 0;
+  $('logPieces').value = 0;
+  $('logLabor').value = 0;
+  renderProduction();
+  renderSalesTab();
   renderDashboard();
   renderCalendar();
   renderInventory();
