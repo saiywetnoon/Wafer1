@@ -89,16 +89,22 @@ function updateLive() {
   const wage = parseFloat($('hourlyWage').value) || state.settings.hourlyWage || 0;
   const laborHrs = laborMin / 60;
   const laborCost = laborHrs * wage;
+  const mixWeight = totalMixWeightFor(usage);
+  const wPerRoll = parseFloat($('logWeightPerRoll').value) || 0;
+  const expectedRolls = (wPerRoll > 0) ? Math.floor(mixWeight / wPerRoll) : 0;
   $('liveCapital').textContent = fmtKs(capital);
   $('liveLaborHrs').textContent = laborHrs.toFixed(2) + ' hrs';
   $('liveLaborCost').textContent = fmtKs(laborCost);
-  $('totalMixWeight').textContent = fmt(Math.round(totalMixWeightFor(usage))) + ' g';
+  $('totalMixWeight').textContent = fmt(Math.round(mixWeight)) + ' g';
+  $('liveExpectedRolls').textContent = expectedRolls > 0 ? fmt(expectedRolls) + ' rolls (~' + fmt(Math.round(mixWeight % wPerRoll)) + ' g left)' : '—';
+  $('liveRollDiff').textContent = expectedRolls > 0 ? (parts - expectedRolls >= 0 ? '+' : '') + fmt(parts - expectedRolls) : '—';
+  $('liveRollDiff').className = 'font-bold ' + (expectedRolls > 0 ? (parts >= expectedRolls ? 'text-emerald-400' : 'text-amber-400') : 'text-gray-500');
   $('liveCostPiece').textContent = parts > 0 ? fmtKs(Math.round((capital / parts) * 100) / 100) : '—';
   $('liveCostBag').textContent = bags > 0 ? fmtKs(Math.round((capital / bags) * 100) / 100) : '—';
   const onHand = (state.stock && state.stock.pieces) || 0;
   $('liveStockAfter').textContent = fmt(onHand + parts) + ' ready';
 }
-['logBagsProduced', 'logPieces', 'logLabor', 'hourlyWage', 'additionalCost'].forEach(function (id) {
+['logBagsProduced', 'logPieces', 'logWeightPerRoll', 'logNotes', 'logLabor', 'hourlyWage', 'additionalCost'].forEach(function (id) {
   const el = $(id);
   if (el) el.addEventListener('input', function () {
     updateUsageCosts();

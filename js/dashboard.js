@@ -18,17 +18,21 @@ function renderDashboard() {
   $('kpiNet').textContent = fmtKs(netToday);
   $('kpiNet').className = 'text-lg font-extrabold ' + (netToday >= 0 ? 'text-emerald-400' : 'text-red-400');
   $('kpiRatio').textContent = ratio.toFixed(1) + '%';
-  $('kpiRatio').title = 'Profit (all sales revenue − their goods cost) ÷ all production cost';
+  $('kpiRatio').title = 'Profit (all sales revenue minus their goods cost) divided by all production cost';
   $('kpiPayable').textContent = fmtKs(totalPayable());
   $('kpiPayable').className = 'text-lg font-extrabold ' + (totalPayable() > 0 ? 'text-red-400' : 'text-emerald-400');
   renderCharts();
   renderSummary(entriesProdSales());
   renderMonthlyReport();
 }
+// @@DASH2@@
 
+/* ============================================================
+   MONTHLY REPORT — production & sales model
+   ============================================================ */
 function renderMonthlyReport() {
   const sel = $('reportMonth');
-  const entries = entriesSorted();
+  const entries = entriesProdSales();
   const months = new Set();
   entries.forEach(function (e) { months.add(e.date.slice(0, 7)); });
   const current = sel.value;
@@ -42,17 +46,17 @@ function renderMonthlyReport() {
   const m = sel.value;
   if (!m) { $('monthlyReport').textContent = 'Select a month to see its full profit report.'; return; }
   const monthEntries = entries.filter(function (e) { return e.date.slice(0, 7) === m; });
-  if (!monthEntries.length) { $('monthlyReport').textContent = 'No entries for this month.'; return; }
+  if (!monthEntries.length) { $('monthlyReport').textContent = 'No activity for this month.'; return; }
   const rev = monthEntries.reduce(function (s, e) { return s + (e.revenue || 0); }, 0);
+  const cogs = monthEntries.reduce(function (s, e) { return s + (e.cogs || 0); }, 0);
   const cap = monthEntries.reduce(function (s, e) { return s + (e.capital || 0); }, 0);
   const net = monthEntries.reduce(function (s, e) { return s + (e.net || 0); }, 0);
-  const netAL = monthEntries.reduce(function (s, e) { return s + (e.netAfterLabor || 0); }, 0);
-  const laborHrs = monthEntries.reduce(function (s, e) { return s + ((e.laborMinutes || 0) / 60); }, 0);
+  const laborHrs = monthEntries.reduce(function (s, e) { return s + ((e.laborMin || 0) / 60); }, 0);
   const laborCost = monthEntries.reduce(function (s, e) { return s + (e.laborCost || 0); }, 0);
-  const bags = monthEntries.reduce(function (s, e) { return s + (e.bagsProduced || 0); }, 0);
-  const pcs = monthEntries.reduce(function (s, e) { return s + (e.pieces || 0); }, 0);
-  const sold = monthEntries.reduce(function (s, e) { return s + (e.bagsSold || 0); }, 0);
-  const profitable = monthEntries.filter(function (e) { return e.net >= 0; }).length;
+  const bags = monthEntries.reduce(function (s, e) { return s + (e.prodBags || 0); }, 0);
+  const pcs = monthEntries.reduce(function (s, e) { return s + (e.prodPieces || 0); }, 0);
+  const sold = monthEntries.reduce(function (s, e) { return s + (e.soldBags || 0); }, 0);
+  const soldPcs = monthEntries.reduce(function (s, e) { return s + (e.soldPieces || 0); }, 0);
   let best = null, worst = null;
   monthEntries.forEach(function (e) {
     if (!best || e.net > best.net) best = e;
@@ -60,101 +64,47 @@ function renderMonthlyReport() {
   });
   const [y, mo] = m.split('-');
   const label = new Date(y, mo - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
-  // One-time expenses for this month
   const monthExpenses = (state.expenses || []).filter(function (e) { return (e.date || '').slice(0, 7) === m; })
     .reduce(function (s, e) { return s + (e.amount || 0); }, 0);
-  // Waste for this month, valued at the month's average cost-per-piece
   const monthWastePcs = (state.waste || []).filter(function (w) { return (w.date || '').slice(0, 7) === m; })
     .reduce(function (s, w) { return s + (w.qty || 0); }, 0);
   const costPerPiece = pcs > 0 ? cap / pcs : 0;
   const wasteValue = monthWastePcs * costPerPiece;
-  // Recurring monthly fixed costs (rent, internet, etc.)
   const recurringTotal = (state.recurringExpenses || []).reduce(function (s, r) { return s + (r.amount || 0); }, 0);
-  const sellout = bags - sold;                     // over-production (+surplus) / under-sold
-  const selloutValue = sellout * (rev > 0 ? rev / sold : 0);
-  const netAfterAll = netAL - monthExpenses - wasteValue - recurringTotal;
+  const surplusPcs = pcs - soldPcs;
+  const surplusValue = surplusPcs * costPerPiece;
+  const netAfterAll = net - laborCost - monthExpenses - wasteValue - recurringTotal;
+  const soldDays = monthEntries.filter(function (e) { return e.soldBags > 0; }).length;
+  const marginPct = rev > 0 ? ((net / rev) * 100).toFixed(1) + '%' : '';
   $('monthlyReport').innerHTML =
     '<div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">' + label + ' Revenue</div><div class="font-bold text-emerald-400 text-lg">' + fmtKs(rev) + '</div><div class="text-[10px] text-gray-500">' + fmt(sold) + ' bags sold</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Capital Spent</div><div class="font-bold text-amber-400 text-lg">' + fmtKs(cap) + '</div><div class="text-[10px] text-gray-500">' + monthEntries.length + ' production days</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Net Gain</div><div class="font-bold ' + (net >= 0 ? 'text-emerald-400' : 'text-red-400') + ' text-lg">' + fmtKs(net) + '</div><div class="text-[10px] text-gray-500">' + profitable + ' profitable / ' + monthEntries.length + ' days</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">After Labor</div><div class="font-bold ' + (netAL >= 0 ? 'text-emerald-400' : 'text-red-400') + ' text-lg">' + fmtKs(netAL) + '</div><div class="text-[10px] text-gray-500">' + laborHrs.toFixed(1) + ' hrs · ' + fmtKs(laborCost) + ' labor</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Production</div><div class="font-bold text-lg">' + fmt(bags) + ' bags</div><div class="text-[10px] text-gray-500">' + fmt(pcs) + ' pieces rolled</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Margin</div><div class="font-bold text-lg">' + (rev > 0 ? ((net / rev) * 100).toFixed(1) + '%' : '—') + '</div><div class="text-[10px] text-gray-500">net / revenue</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Best Day</div><div class="font-bold text-emerald-400 text-sm truncate">' + (best ? best.date + ' · ' + fmtKs(best.net) : '—') + '</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Worst Day</div><div class="font-bold text-red-400 text-sm truncate">' + (worst ? worst.date + ' · ' + fmtKs(worst.net) : '—') + '</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Sell-out / Surplus</div><div class="font-bold text-lg">' + (sellout >= 0 ? fmt(sellout) + ' bags surplus' : fmt(Math.abs(sellout)) + ' bags short') + '</div><div class="text-[10px] text-gray-500">' + fmtKs(Math.round(selloutValue)) + ' tied in stock</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Other Costs</div><div class="font-bold text-red-400 text-sm">Expenses ' + fmtKs(Math.round(monthExpenses)) + '</div><div class="text-[10px] text-gray-500">waste ' + fmtKs(Math.round(wasteValue)) + ' · fixed ' + fmtKs(Math.round(recurringTotal)) + '</div></div>' +
-    '<div class="p-3 rounded-lg bg-emerald-600/20 border border-emerald-600/40 col-span-1 lg:col-span-2"><div class="text-xs text-gray-300">Net After ALL Costs (true monthly profit)</div><div class="font-bold ' + (netAfterAll >= 0 ? 'text-emerald-400' : 'text-red-400') + ' text-xl">' + fmtKs(Math.round(netAfterAll)) + '</div><div class="text-[10px] text-gray-400">revenue − capital − labor − expenses − waste − fixed costs</div></div>' +
+    mtk(label + ' Sales Revenue', fmtKs(rev), fmt(sold) + ' bags on ' + soldDays + ' sale day(s)', 'text-emerald-400') +
+    mtk('Goods Cost (COGS)', fmtKs(Math.round(cogs)), 'of what actually sold', 'text-amber-400') +
+    mtk('Gross Profit', fmtKs(net), marginPct, net >= 0 ? 'text-emerald-400' : 'text-red-400') +
+    mtk('Capital Spent Rolling', fmtKs(cap), monthEntries.length + ' production day(s)', 'text-amber-400') +
+    mtk('Production', fmt(bags) + ' bags', fmt(pcs) + ' pieces rolled', 'text-gray-100') +
+    mtk('Sold', fmt(sold) + ' bags', fmt(soldPcs) + ' pieces', 'text-gray-100') +
+    mtk('Rolled-not-Sold (stock)', fmt(Math.abs(surplusPcs)) + ' pcs', fmtKs(Math.round(surplusValue)) + ' still in ready-to-sell stock', surplusPcs > 0 ? 'text-amber-400' : 'text-emerald-400') +
+    mtk('Labor', laborHrs.toFixed(1) + ' hrs', fmtKs(Math.round(laborCost)), 'text-red-400') +
+    mtk('Other Costs', 'Expenses ' + fmtKs(Math.round(monthExpenses)), 'waste ' + fmtKs(Math.round(wasteValue)) + ' · fixed ' + fmtKs(Math.round(recurringTotal)), 'text-red-400') +
+    mtk('Best Day (sold)', best ? best.date : '—', best ? fmtKs(best.net) : '', 'text-emerald-400') +
+    mtk('Worst Day (sold)', worst ? worst.date : '—', worst ? fmtKs(worst.net) : '', 'text-red-400') +
+    '<div class="p-3 rounded-lg bg-emerald-600/20 border border-emerald-600/40 col-span-1 lg:col-span-2"><div class="text-xs text-gray-300">Net After ALL Costs (true monthly profit)</div><div class="font-bold ' + (netAfterAll >= 0 ? 'text-emerald-400' : 'text-red-400') + ' text-xl">' + fmtKs(Math.round(netAfterAll)) + '</div><div class="text-[10px] text-gray-400">sales − cost of what sold − labor − expenses − waste − fixed costs</div></div>' +
     '</div>';
 }
 $('reportMonth').addEventListener('change', renderMonthlyReport);
-$('chartRange').addEventListener('change', function () { renderDashboard(); });
-
-function renderCharts() {
-  const gridColor = 'rgba(255,255,255,0.08)';
-  const tickColor = '#9CA3AF';
-  const days = parseInt($('chartRange') ? $('chartRange').value : '30', 10) || 30;
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - (days - 1));
-  const off = cutoff.getTimezoneOffset();
-  const cutoffStr = new Date(cutoff.getTime() - off * 60000).toISOString().slice(0, 10);
-  const recent = entriesSorted().filter(function (e) { return e.date >= cutoffStr; });
-  const labels = recent.map(function (e) { return e.date.slice(5); });
-  const gains = recent.map(function (e) { return e.net; });
-  const volumes = recent.map(function (e) { return e.bagsProduced; });
-  if (gainChart) gainChart.destroy();
-  gainChart = new Chart($('gainChart'), {
-    type: 'line',
-    data: { labels: labels, datasets: [{ label: 'Net Gain (Ks)', data: gains, borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.15)', fill: true, tension: 0.4, pointRadius: 3 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: tickColor } } },
-      scales: {
-        x: { ticks: { color: tickColor, maxRotation: 45 }, grid: { color: gridColor } },
-        y: { ticks: { color: tickColor }, grid: { color: gridColor } }
-      }
-    }
-  });
-  if (volumeChart) volumeChart.destroy();
-  volumeChart = new Chart($('volumeChart'), {
-    type: 'bar',
-    data: { labels: labels, datasets: [{ label: 'Bags Produced', data: volumes, backgroundColor: volumes.map(function (v) { return v > 0 ? '#D97706' : 'rgba(75,85,99,0.4)'; }), borderRadius: 4 }] },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: tickColor } } },
-      scales: {
-        x: { ticks: { color: tickColor, maxRotation: 45 }, grid: { color: gridColor } },
-        y: { ticks: { color: tickColor }, grid: { color: gridColor } }
-      }
-    }
-  });
+function mtk(title, value, sub, color) {
+  return '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">' + title + '</div><div class="font-bold ' + (color || 'text-gray-100') + ' text-lg">' + value + '</div>' + (sub ? '<div class="text-[10px] text-gray-500">' + sub + '</div>' : '') + '</div>';
 }
+// @@DASH3@@
 
-function renderSummary(entries, totalRevenue, totalCapital, totalNet) {
-  const el = $('summaryText');
-  if (!entries.length) { el.textContent = "No data recorded yet. Start by logging today's entry."; return; }
-  const totalPieces = entries.reduce(function (s, e) { return s + (e.pieces || 0); }, 0);
-  const totalBags = entries.reduce(function (s, e) { return s + (e.bagsProduced || 0); }, 0);
-  const totalLaborHrs = entries.reduce(function (s, e) { return s + ((e.laborMinutes || 0) / 60); }, 0);
-  const totalLaborCost = entries.reduce(function (s, e) { return s + (e.laborCost || 0); }, 0);
-  const totalNetAfterLabor = entries.reduce(function (s, e) { return s + (e.netAfterLabor || 0); }, 0);
-  const profitableDays = entries.filter(function (e) { return e.net >= 0; }).length;
-  el.innerHTML = '<div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Total Revenue (all time)</div><div class="font-bold text-emerald-400 text-lg">' + fmtKs(totalRevenue) + '</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Total Capital (all time)</div><div class="font-bold text-amber-400 text-lg">' + fmtKs(totalCapital) + '</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Total Net Gain</div><div class="font-bold text-emerald-400 text-lg">' + fmtKs(totalNet) + '</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Total Net After Labor</div><div class="font-bold text-emerald-400 text-lg">' + fmtKs(totalNetAfterLabor) + '</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Production Totals</div><div class="font-bold text-lg">' + fmt(totalBags) + ' bags · ' + fmt(totalPieces) + ' pcs</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Cumulative Labor</div><div class="font-bold text-lg">' + totalLaborHrs.toFixed(1) + ' hrs (' + fmtKs(totalLaborCost) + ')</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Profitable Days</div><div class="font-bold text-emerald-400 text-lg">' + profitableDays + ' / ' + entries.length + '</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Avg Net / Day</div><div class="font-bold text-lg">' + fmtKs(totalNet / entries.length) + '</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Inventory Value (stock cost)</div><div class="font-bold text-amber-400 text-lg">' + fmtKs(Math.round(inventoryValue())) + '</div></div>' +
-    '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Standing Orders</div><div class="font-bold text-lg">' + fmt(totalStandingOrders()) + ' bags/day</div><div class="text-[10px] text-gray-500">customers commit to these</div></div>' +
-    '</div>';
-}
-/* ---- v1.6 overrides: charts + summary use production & sales ---- */
+/* ============================================================
+   CHARTS — built only when the Dashboard tab is visible
+   (avoids destroy/recreate churn on other tabs)
+   ============================================================ */
 function renderCharts() {
+  const pane = $('tab-dashboard');
+  if (pane && pane.classList.contains('hidden')) return; // not on today — skip
   const gridColor = 'rgba(255,255,255,0.08)';
   const tickColor = '#9CA3AF';
   const days = parseInt($('chartRange') ? $('chartRange').value : '30', 10) || 30;
@@ -193,7 +143,11 @@ function renderCharts() {
     }
   });
 }
+$('chartRange').addEventListener('change', function () { renderDashboard(); });
 
+/* ============================================================
+   SUMMARY — production & sales totals
+   ============================================================ */
 function renderSummary(entries) {
   const el = $('summaryText');
   if (!entries.length) { el.textContent = 'No data recorded yet. Start by logging a production batch (the rolls you make) and a sale.'; return; }
@@ -218,4 +172,3 @@ function renderSummary(entries) {
     '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">Standing Orders</div><div class="font-bold text-lg">' + fmt(totalStandingOrders()) + ' bags/day</div><div class="text-[10px] text-gray-500">customers commit to these</div></div>' +
     '</div>';
 }
-

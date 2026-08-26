@@ -69,6 +69,8 @@ function loadEntryIntoForm(date) {
     $('logBagsProduced').value = batch.bags || 0;
     $('logPieces').value = batch.pieces || 0;
     $('logLabor').value = batch.laborMinutes || 0;
+    $('logWeightPerRoll').value = batch.weightPerRoll || 0;
+    $('logNotes').value = batch.notes || '';
     var sb = $('saveLogBtn'); sb.innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Update Production';
   } else {
     document.getElementById('editProdId').value = '';
@@ -76,6 +78,8 @@ function loadEntryIntoForm(date) {
     $('logBagsProduced').value = 0;
     $('logPieces').value = 0;
     $('logLabor').value = 0;
+    $('logWeightPerRoll').value = 0;
+    $('logNotes').value = '';
     $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Save Production Work';
   }
   lucide.createIcons();

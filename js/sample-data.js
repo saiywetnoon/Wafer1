@@ -43,8 +43,13 @@ $('demoBtn').addEventListener('click', function () {
     const capital = ingCost;
     const laborHrs = s.labor / 60;
     const laborCost = laborHrs * state.settings.hourlyWage;
+    const mixW = totalMixWeightFor(usage);
+    const wpr = 11; // typical grams per roll
+    const exp = Math.floor(mixW / wpr);
+    const notes = (s.roll % 3 === 0) ? 'Good & crispy' : (s.roll % 3 === 1 ? 'A bit salty' : 'Slightly under crisp');
     state.production.push({
       id: uid(), date: rdate, pieces: s.pcs, bags: s.bagsP,
+      weightPerRoll: wpr, mixWeight: Math.round(mixW), expectedRolls: exp, notes: notes,
       usage: usage, additionalCost: 0, capital: Math.round(capital),
       laborMinutes: s.labor, laborCost: Math.round(laborCost),
       costPerPiece: Math.round((capital / s.pcs) * 100) / 100

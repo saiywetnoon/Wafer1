@@ -6,8 +6,9 @@
 <title>Daily Crispy Roll Ledger — Google Synced Daily Record-Keeping</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://unpkg.com/lucide@1.34.0"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 tailwind.config = {
   darkMode: 'class',
@@ -197,6 +198,11 @@ tailwind.config = {
             <input id="logPieces" type="number" min="0" step="1" placeholder="e.g. 240" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
           </div>
           <div>
+            <label class="text-xs font-semibold text-gray-400">Weight of 1 roll (g)</label>
+            <input id="logWeightPerRoll" type="number" min="0" step="0.5" placeholder="e.g. 11" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+            <p class="text-[10px] text-gray-500 mt-1">Used to compute expected roll count from the total mix weight.</p>
+          </div>
+          <div>
             <label class="text-xs font-semibold text-gray-400">Labor Worked (Minutes)</label>
             <input id="logLabor" type="number" min="0" step="5" placeholder="e.g. 240" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
           </div>
@@ -211,9 +217,17 @@ tailwind.config = {
           </div>
           <div class="flex justify-between"><span class="text-gray-400">Labor Cost</span><span id="liveLaborCost" class="font-bold text-amber-400">0 Ks</span></div>
           <div class="flex justify-between"><span class="text-gray-400">Total Mix Weight</span><span id="totalMixWeight" class="font-bold">0 g</span></div>
+          <div class="flex justify-between border-t border-gray-700 pt-1.5"><span class="text-gray-400">Expected Rolls (mix ÷ weight/roll)</span><span id="liveExpectedRolls" class="font-bold text-emerald-400">—</span></div>
+          <div class="flex justify-between"><span class="text-gray-400">vs Actual Rolled</span><span id="liveRollDiff" class="font-bold text-amber-400">—</span></div>
           <div class="flex justify-between"><span class="text-gray-400">Cost per Piece</span><span id="liveCostPiece" class="font-bold text-emerald-400">—</span></div>
           <div class="flex justify-between"><span class="text-gray-400">Cost per Bag</span><span id="liveCostBag" class="font-bold text-emerald-400">—</span></div>
           <div class="flex justify-between border-t border-gray-700 pt-1.5"><span class="text-gray-400">Ready-to-sell after this batch</span><span id="liveStockAfter" class="font-bold text-emerald-400">0 ready</span></div>
+        </div>
+
+        <div class="mb-4">
+          <label class="text-xs font-semibold text-gray-400">Outcome / Quality Notes</label>
+          <textarea id="logNotes" rows="2" placeholder="e.g. Good and crispy · a bit salty · not crispy this time · under/over weight" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"></textarea>
+          <p class="text-[10px] text-gray-500 mt-1">Optional — note how the batch turned out (good ⭐, salty, not crispy, etc.) so you can spot trends.</p>
         </div>
 
         <button id="saveLogBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold shadow-lg shadow-emerald-500/30 hover:opacity-90 transition flex items-center justify-center gap-2">
@@ -234,8 +248,8 @@ tailwind.config = {
           <thead>
             <tr class="text-left text-xs text-gray-400 border-b border-gray-700">
               <th class="py-2 pr-2">Date</th><th class="py-2 pr-2">Capital</th><th class="py-2 pr-2">Bags</th>
-              <th class="py-2 pr-2">Pieces</th><th class="py-2 pr-2">Pcs/Bag</th>
-              <th class="py-2 pr-2">Labor Hrs</th><th class="py-2 pr-2">Cost/Pc</th><th class="py-2">Action</th>
+              <th class="py-2 pr-2">Pieces</th><th class="py-2 pr-2">Expected (wt)</th>
+              <th class="py-2 pr-2">vs Actual</th><th class="py-2 pr-2">Quality Notes</th><th class="py-2">Action</th>
             </tr>
           </thead>
           <tbody id="recentBody"></tbody>
@@ -1011,6 +1025,7 @@ tailwind.config = {
 
 
     <script src="js/config.js"></script>
+    <script src="js/supabase.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/google.js"></script>
     <script src="js/helpers.js"></script>

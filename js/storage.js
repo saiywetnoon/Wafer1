@@ -27,6 +27,9 @@ let draftSaveTimer = null;
 let draftGoogleSyncTimer = null;
 let draftRestored = false;
 
+let cloudAutoSync = false;
+function setCloudAutoSync(v) { cloudAutoSync = !!v; }
+
 /* ---------- Persistence (debounced) ---------- */
 function persistState() {
   clearTimeout(saveTimer);
@@ -36,6 +39,12 @@ function saveState() {
   state.updatedAt = new Date().toISOString();
   try {
     localStorage.setItem(companyStateKey(), JSON.stringify(state));
+    // Every save also pushes to the cloud automatically when online (like a real app).
+    // This ensures price, stock and any other edit reaches other devices without
+    // a manual "upload". Guarded until boot/reconcile finishes.
+    if (cloudAutoSync && typeof triggerGoogleSync === 'function') {
+      triggerGoogleSync();
+    }
   } catch (e) {
     console.error('Failed to save state:', e);
     showToast('Warning: Storage is full — export your data soon.', 'error');
@@ -98,8 +107,12 @@ function migrateLegacyEntries() {
     if (pieces > 0 && bags > 0 && soldBags > 0) soldPieces = Math.round(soldBags * (pieces / bags));
     else soldPieces = soldBags;
     if (pieces > 0 || capital > 0) {
+      var mixW = totalMixWeightFor(e.usage || {});
+      var wpr = pieces > 0 && mixW > 0 ? Math.round((mixW / pieces) * 100) / 100 : 0;
       state.production.push({
         id: uid(), date: date, pieces: pieces, bags: bags,
+        weightPerRoll: wpr, mixWeight: Math.round(mixW),
+        expectedRolls: wpr > 0 ? Math.floor(mixW / wpr) : 0, notes: '',
         usage: e.usage || {}, additionalCost: parseFloat(e.additionalCost) || 0,
         capital: Math.round(capital), laborMinutes: parseFloat(e.laborMinutes) || 0,
         laborCost: Math.round(laborCost),
@@ -135,6 +148,8 @@ function captureDraft() {
     additionalCost: $('additionalCost') ? (parseFloat($('additionalCost').value) || 0) : 0,
     bagsProduced: $('logBagsProduced') ? (parseFloat($('logBagsProduced').value) || 0) : 0,
     pieces: $('logPieces') ? (parseFloat($('logPieces').value) || 0) : 0,
+    weightPerRoll: $('logWeightPerRoll') ? (parseFloat($('logWeightPerRoll').value) || 0) : 0,
+    notes: $('logNotes') ? ($('logNotes').value || '') : '',
     laborMinutes: $('logLabor') ? (parseFloat($('logLabor').value) || 0) : 0,
     hourlyWage: $('hourlyWage') ? (parseFloat($('hourlyWage').value) || 0) : 0
   };
@@ -161,6 +176,8 @@ function loadDraftIfNewer() {
     $('additionalCost').value = d.additionalCost || 0;
     $('logBagsProduced').value = d.bagsProduced || 0;
     $('logPieces').value = d.pieces || 0;
+    $('logWeightPerRoll').value = d.weightPerRoll || 0;
+    $('logNotes').value = d.notes || '';
     $('logLabor').value = d.laborMinutes || 0;
     $('hourlyWage').value = d.hourlyWage || state.settings.hourlyWage || 1500;
     draftRestored = true;

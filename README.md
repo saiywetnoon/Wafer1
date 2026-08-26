@@ -229,6 +229,44 @@ two separate things, with a **ready-to-sell stock** between them.
 - **Existing data migrates automatically** — your old "daily entries" are
   split into a production batch + a same-day sale on first load (one time),
   and old `My Business` browser data still imports into your account.
+- **Weight per roll → expected rolls** — on the Production form you enter the
+  weight of one roll (e.g. 11 g). The app computes **Expected Rolls = total
+  mix weight ÷ weight per roll** (e.g. 1120 g ÷ 11 ≈ 101) live, shows how much
+  mix is left over, and the **"vs Actual"** difference (did you make more or
+  fewer than expected). This is stored per batch and shown in the recent list,
+  the full CSV, and the printable report, so you can spot waste/tight rolling.
+- **Outcome / quality notes** — a per-batch notes box to record how each batch
+  turned out (⭐ good, a bit salty, not crispy, over/under weight, etc.), so
+  you can look back and improve consistency. These appear in the recent list,
+  the printable report, and the CSV export.
+
+## v1.7 — Real backend with Supabase (no deployment-ID, automatic sync) 🚀
+
+Use this if you're tired of pasting the Apps-Script URL on every device and
+want true "like a real app" behavior:
+
+- **Real Google/e-mail sign-in** via Supabase Auth (no deployment URL to paste).
+- **Automatic sync** — every save pushes instantly; other devices update by
+  themselves (realtime), like Google/Xiaomi sync.
+- **Account + approval system preserved** — first account is owner/admin;
+  you still approve new members in the Admin console.
+- **Per-user privacy is enforced by the database** (Row-Level Security).
+
+### One-time setup (you do this once, ~10 min)
+1. Sign up at **https://supabase.com** → **New project** (free). Copy the
+   project **URL** and the **anon key** from *Settings → API*.
+2. In Supabase, open **SQL Editor → New query → paste the whole
+   `_supabase-setup.sql` → Run**.
+3. In this app, open **`js/config.js`** and paste the two values:
+   ```js
+   const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
+   const SUPABASE_ANON_KEY = 'YOUR-ANON-KEY';
+   ```
+4. Reload. The app now uses Supabase (the old Apps-Script URL field is hidden).
+   Create **your own account first** — you become the owner/admin automatically.
+
+The app keeps working in the legacy Apps-Script mode until you add the keys,
+so nothing breaks while you get it set up.
 
 > ⚠️ `daily-ledger-1.1.html` is a byte-for-byte backup of the ORIGINAL app and
 > does **not** contain these upgrades. Always open **index.html**. `_split.ps1`

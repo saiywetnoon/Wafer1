@@ -18,6 +18,8 @@ function renderAll() {
   $('logBagsProduced').value = 0;
   $('logPieces').value = 0;
   $('logLabor').value = 0;
+  $('logWeightPerRoll').value = 0;
+  $('logNotes').value = '';
   renderProduction();
   renderSalesTab();
   renderDashboard();
@@ -245,7 +247,13 @@ async function appStart() {
   loadState();
   renderAll();
   initGoogleSignIn();
-  cloudAfterSignIn();
+  // Supabase: subscribe to live updates so other devices appear automatically.
+  if (SUPA.configured() && SUPA.user && SUPA.user.id) {
+    try { supabaseWatch(SUPA.user.id); } catch (e) { console.warn('realtime not available', e); }
+  }
+  try { await cloudAfterSignIn(); } catch (e) { console.warn('cloud reconcile failed', e); }
+  // From here on, EVERY save auto-pushes to the cloud (price, stock, anything).
+  setCloudAutoSync(true);
 }
 
 appStart();

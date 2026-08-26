@@ -24,12 +24,20 @@ function saveProduction() {
   const editId = document.getElementById('editProdId').value;
   const isUpdate = !!editId;
   const costPerPiece = pieces > 0 ? Math.round(capital / pieces * 100) / 100 : 0;
+  const wPerRoll = parseFloat($('logWeightPerRoll').value) || 0;
+  const mixWeight = totalMixWeightFor(usage);
+  const expectedRolls = wPerRoll > 0 ? Math.floor(mixWeight / wPerRoll) : 0;
+  const notes = ($('logNotes').value || '').trim();
 
   const record = {
     id: isUpdate ? editId : uid(),
     date: date,
     pieces: Math.round(pieces),
     bags: Math.round(bags),
+    weightPerRoll: wPerRoll,
+    mixWeight: Math.round(mixWeight),
+    expectedRolls: expectedRolls,
+    notes: notes,
     usage: Object.assign({}, usage),
     additionalCost: extra,
     capital: Math.round(capital),
@@ -82,6 +90,8 @@ function saveProduction() {
   $('logBagsProduced').value = bags || 0;
   $('logPieces').value = pieces || 0;
   $('logLabor').value = laborMin || 0;
+  $('logWeightPerRoll').value = wPerRoll || 0;
+  $('logNotes').value = '';
   updateUsageCosts();
 }
 
@@ -99,14 +109,18 @@ function renderProduction() {
     return;
   }
   tbody.innerHTML = list.map(function (p) {
+    const exp = p.expectedRolls > 0 ? fmt(p.expectedRolls) : '—';
+    const diff = (p.expectedRolls > 0) ? ((p.pieces - p.expectedRolls >= 0 ? '+' : '') + fmt(p.pieces - p.expectedRolls)) : '—';
+    const note = p.notes ? '<span class="text-[10px] text-gray-400" title="' + esc(p.notes).replace(/"/g, '&quot;') + '">' + esc(p.notes).slice(0, 30) + (p.notes.length > 30 ? '…' : '') + '</span>' : '<span class="text-gray-600">—</span>';
+    const wpr = p.weightPerRoll ? fmt(p.weightPerRoll) + 'g' : '—';
     return '<tr class="border-b border-gray-800">' +
       '<td class="py-2 pr-2 whitespace-nowrap">' + esc(p.date) + '</td>' +
       '<td class="py-2 pr-2 text-amber-400 font-semibold">' + fmtKs(p.capital) + '</td>' +
       '<td class="py-2 pr-2">' + fmt(p.bags) + '</td>' +
       '<td class="py-2 pr-2">' + fmt(p.pieces) + '</td>' +
-      '<td class="py-2 pr-2">' + (p.bags > 0 ? (p.pieces / p.bags).toFixed(1) : '—') + '</td>' +
-      '<td class="py-2 pr-2">' + ((p.laborMinutes || 0) / 60).toFixed(2) + '</td>' +
-      '<td class="py-2 pr-2 text-gray-400">' + fmtKs(p.costPerPiece || 0) + '/pc</td>' +
+      '<td class="py-2 pr-2">' + exp + ' / <span class="text-gray-500">' + (p.weightPerRoll ? fmt(p.weightPerRoll) + 'g' : '—') + '</span></td>' +
+      '<td class="py-2 pr-2">' + diff + '</td>' +
+      '<td class="py-2 pr-2">' + note + '</td>' +
       '<td class="py-2"><div class="flex gap-2">' +
       '<button onclick="editProduction(\'' + p.id + '\')" class="text-amber-400 hover:text-amber-300 transition" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>' +
       '<button onclick="deleteProduction(\'' + p.id + '\')" class="text-red-400 hover:text-red-300 transition" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
@@ -129,6 +143,8 @@ function editProduction(id) {
   $('logBagsProduced').value = p.bags || 0;
   $('logPieces').value = p.pieces || 0;
   $('logLabor').value = p.laborMinutes || 0;
+  $('logWeightPerRoll').value = p.weightPerRoll || 0;
+  $('logNotes').value = p.notes || '';
   $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Update Production';
   lucide.createIcons();
   updateUsageCosts();

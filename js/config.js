@@ -49,6 +49,17 @@ let googleSheetsId = null;      // cached spreadsheet ID for this user
 let googleAuthTokenClient = null;
 const GOOGLE_SHEET_NAME = 'LedgerState';
 
+/* ============================================================
+   SUPABASE (OPTION B — the real backend)
+   ============================================================
+   Paste your project URL + anon key here once. After that, nobody
+   sees or enters a deployment URL anywhere — sign-in and sync are
+   handled by Supabase automatically, exactly like a real app.
+   Leave empty to keep using the legacy Apps-Script backend.
+============================================================ */
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
+
 /* ---------- Default Price List (persistent) ----------
    unit: 'g'  → price is Ks per KILOGRAM, qty entered in grams
    unit: 'unit' → price is Ks per UNIT, qty entered in units

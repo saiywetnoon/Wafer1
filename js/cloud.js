@@ -34,40 +34,57 @@ function setCloudBoundEmail(email) {
   setGoogleSyncConfig(cfg);
 }
 
-/* Is this workspace currently ONLINE (logged in + backend reachable)? */
+/* Is this workspace currently ONLINE? In Supabase mode it's online the moment
+   a user session exists (no deployment URL needed). */
 function cloudIsOnline() {
+  if (SUPA.configured()) {
+    return !!(SUPA.user && SUPA.user.id);
+  }
   const email = cloudSignedInEmail();
   const token = cloudAccountToken();
   if (!token || !email || !cloudEndpoint()) return false;
-  if (authEmail()) return true; // account session token is the authorization
+  if (authEmail()) return true;
   const bound = cloudBoundEmail();
   return !bound || bound.toLowerCase() === email.toLowerCase();
 }
-/* Is a cloud deployment reachable at all (endpoint + some credential)? */
-function cloudIsAvailable() { return !!cloudEndpoint() && !!cloudAccountToken(); }
-/* ---------- Low-level request helpers ---------- */
-async function cloudPost(action, extra) {
-  const url = cloudEndpoint();
-  if (!url) return { ok: false, message: 'No Apps Script URL configured.' };
-  const authTokenValue = authToken();
-  const idToken = cloudRawIdToken();
-  if (!authTokenValue && !idToken) return { ok: false, message: 'Sign in first.' };
-  const body = Object.assign({ action: action, token: authTokenValue, idToken: idToken }, extra || {});
-  try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(body)
-    });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    return await resp.json();
-  } catch (e) {
-    console.error('cloud POST ' + action + ' failed', e);
-    return { ok: false, error: String(e) };
-  }
+/* Is a cloud deployment reachable at all? */
+function cloudIsAvailable() {
+  if (SUPA.configured()) return true;
+  return !!cloudEndpoint() && !!cloudAccountToken();
 }
-
+/* Supabase-native push/get (primary path). */
+async function supabasePush() {
+  const uid = SUPA.user && SUPA.user.id;
+  if (!uid) return { ok: false, error: 'Not signed in.' };
+  return SUPA.saveLedger(uid, toGooglePayload());
+}
+async function supabaseGet() {
+  const uid = SUPA.user && SUPA.user.id;
+  if (!uid) return { ok: false, error: 'Not signed in.' };
+  const row = await SUPA.getLedger(uid);
+  if (!row) return { ok: false, payload: null };
+  return { ok: true, payload: row.payload, exportedAt: row.updatedAt };
+}
+/* Auto-apply edits arriving from another device (realtime). */
+function supabaseWatch(uid) {
+  if (!uid) return;
+  SUPA.subscribeRealtime(uid, function (row) {
+    if (!row || !row.payload || !row.payload.state) return;
+    const remoteTs = Date.parse(row.updated_at) || 0;
+    const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
+    if (remoteTs && localTs && remoteTs <= localTs) return; // local is same/newer
+    applyCloudRemote({ state: row.payload.state });
+    renderAll();
+    showToast('Synced from another device automatically.', 'success');
+  });
+}
+/* ---------- Low-level: dispatch to Supabase or legacy Apps Script ---------- */
+async function cloudPush() {
+  if (SUPA.configured()) return supabasePush();
+  return cloudPost('save', { payload: toGooglePayload() });
+}
 async function cloudGet() {
+  if (SUPA.configured()) return supabaseGet();
   const url = cloudEndpoint();
   if (!url) return { ok: false, error: 'No Apps Script URL configured.' };
   if (!cloudAccountToken()) return { ok: false, error: 'Sign in first.' };
@@ -84,13 +101,27 @@ async function cloudGet() {
     return { ok: false, error: String(e) };
   }
 }
-
-/* ---------- Public operations (swap provider here later) ---------- */
-async function cloudPush() { return cloudPost('save', { payload: toGooglePayload() }); }
-async function cloudBackup() { return cloudPost('backup', { payload: toGooglePayload() }); }
-async function cloudList() { return cloudPost('list'); }
-async function cloudRestore(fileName) { return cloudPost('restore', { fileName: fileName }); }
-async function cloudClear() { return cloudPost('clear'); }
+/* ---------- Legacy Apps-Script helper (only used when not configured) ---------- */
+async function cloudPost(action, extra) {
+  const url = cloudEndpoint();
+  if (!url) return { ok: false, message: 'No Apps Script URL configured.' };
+  const authTokenValue = authToken();
+  const idToken = cloudRawIdToken();
+  if (!authTokenValue && !idToken) return { ok: false, message: 'Sign in first.' };
+  const body = Object.assign({ action: action, token: authTokenValue, idToken: idToken }, extra || {});
+  try {
+    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    return await resp.json();
+  } catch (e) {
+    console.error('cloud POST ' + action + ' failed', e);
+    return { ok: false, error: String(e) };
+  }
+}
+async function cloudBackup() { return SUPA.configured() ? { ok: false, message: 'Use Download backup instead (Supabase).' } : cloudPost('backup', { payload: toGooglePayload() }); }
+async function cloudList() { return SUPA.configured() ? { ok: true, backups: [] } : cloudPost('list'); }
+async function cloudRestore() { return SUPA.configured() ? { ok: false, message: 'Use Download backup instead (Supabase).' } : cloudPost('restore', { fileName: '' }); }
+async function cloudClear() { return SUPA.configured() ? { ok: true, message: 'Cleared.' } : cloudPost('clear'); }
 /* ---------- Merge a remote cloud state into the current workspace ---------- */
 function applyCloudRemote(remote) {
   if (!remote || !remote.state) return false;
