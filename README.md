@@ -259,8 +259,8 @@ want true "like a real app" behavior:
    `_supabase-setup.sql` → Run**.
 3. In this app, open **`js/config.js`** and paste the two values:
    ```js
-   const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
-   const SUPABASE_ANON_KEY = 'YOUR-ANON-KEY';
+   const SUPABASE_URL_wafer = 'https://YOUR-PROJECT.supabase.co';
+   const SUPABASE_ANON_KEY_wafer = 'YOUR-ANON-KEY';
    ```
 4. Reload. The app now uses Supabase (the old Apps-Script URL field is hidden).
    Create **your own account first** — you become the owner/admin automatically.

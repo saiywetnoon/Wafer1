@@ -1,7 +1,7 @@
 /* ============================================================
    SUPABASE ADAPTER — real backend (Option B)
    ------------------------------------------------------------
-   All Supabase calls are wrapped here. If SUPABASE_URL is empty
+   All Supabase calls are wrapped here. If SUPABASE_URL_wafer is empty
    (not configured yet) we return null/false so the app falls back
    to the legacy Apps-Script backend instead of crashing.
 
@@ -20,14 +20,14 @@ const SUPA = {
 
   /* True only when the dev has pasted URL + anon key in config.js. */
   configured() {
-    return !!(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase);
+    return !!(SUPABASE_URL_wafer && SUPABASE_ANON_KEY_wafer && window.supabase);
   },
 
   /* Lazy-initialise the Supabase client + reflect auth state. */
   init() {
     if (this.client) return this.client;
     if (!this.configured()) return null;
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    const sb = window.supabase.createClient(SUPABASE_URL_wafer, SUPABASE_ANON_KEY_wafer, {
       auth: { persistSession: true, autoRefreshToken: true }
     });
     this.client = sb;
