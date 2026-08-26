@@ -94,7 +94,7 @@ async function authLogin(email, password) {
     return { ok: true, email: SUPA.user.email, role: SUPA.profile.role, id: SUPA.user.id };
   }
   const r = await authPost('login', { email: email, password: password });
-  if (r && r.ok) moveStoreLogin(r);
+  if (r && r.ok) legacyStoreLogin(r);
   return r;
 }
 async function authLogout() {

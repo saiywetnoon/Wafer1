@@ -42,15 +42,33 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
--- 4) Security: EVERYONE can read their own profile, approve/reject is admin-only.
+-- 4) Security: EVERYONE can read/update their own profile; approve/reject is
+--    admin-only. IMPORTANT: inside a policy, a bare column like `role` refers to
+--    the TARGET row, not the caller. So to detect the admin we must ask "does the
+--    CURRENT user's own profile have role='admin'?" via the is_admin() helper.
 alter table public.profiles enable row level security;
+
+-- True when the currently signed-in user is an owner/admin.
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
+
 drop policy if exists profiles_select on public.profiles;
 create policy profiles_select on public.profiles
-  for select using (auth.uid() = id or role = 'admin');
+  for select using (auth.uid() = id or public.is_admin());
+
 drop policy if exists profiles_update on public.profiles;
 create policy profiles_update on public.profiles
-  for update using (auth.uid() = id or role = 'admin')
-  with check (auth.uid() = id or role = 'admin');
+  for update using (auth.uid() = id or public.is_admin())
+  with check (auth.uid() = id or public.is_admin());
 
 -- 5) Ledgers: strictly per-user (even the admin cannot read another row).
 alter table public.ledgers enable row level security;
