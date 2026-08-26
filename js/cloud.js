@@ -65,19 +65,44 @@ async function supabaseGet() {
   if (!row) return { ok: false, payload: null };
   return { ok: true, payload: row.payload, exportedAt: row.updatedAt };
 }
-/* Auto-apply edits arriving from another device (realtime). */
-function supabaseWatch(uid) {
+/* True when two states are effectively identical (ignores bookkeeping stamps
+   such as updatedAt/version). Used to ignore echoes of our own writes. */
+function statesEqual(a, b) {
+  if (!a || !b) return false;
+  function pure(o) {
+    const c = JSON.parse(JSON.stringify(o));
+    delete c.updatedAt; delete c.version;
+    return JSON.stringify(c);
+  }
+  return pure(a) === pure(b);
+}
+
+/* Auto-apply edits arriving from another device (realtime).
+   Professional behaviour:
+   - Ignore echoes of THIS device's own writes (no re-render, no message).
+   - Apply genuine remote changes and persist them locally WITHOUT pushing them
+     back (push-backs re-broadcast an event and create an endless sync loop).
+   - No toast spam — a quiet status line is enough for an auto-sync. */
+function supabaseUpdate(uid) {
   if (!uid) return;
   SUPA.subscribeRealtime(uid, function (row) {
     if (!row || !row.payload || !row.payload.state) return;
     const remoteTs = Date.parse(row.updated_at) || 0;
     const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
     if (remoteTs && localTs && remoteTs <= localTs) return; // local is same/newer
-    applyCloudRemote({ state: row.payload.state });
+    if (statesEqual(state, row.payload.state)) return;       // echo of our own write
+    /* Apply + persist locally, but suppress the echo push to break the loop. */
+    setCloudSyncSuppressed(true);
+    try {
+      applyCloudRemote({ state: row.payload.state }, remoteTs);
+    } finally {
+      setCloudSyncSuppressed(false);
+    }
     renderAll();
-    showToast('Synced from another device automatically.', 'success');
+    updateGoogleSyncStatus('Last update from another device just now.', 'info');
   });
 }
+function supabaseWatch(uid) { supabaseUpdate(uid); }
 /* ---------- Low-level: dispatch to Supabase or legacy Apps Script ---------- */
 async function cloudPush() {
   if (SUPA.configured()) return supabasePush();
@@ -123,7 +148,7 @@ async function cloudList() { return SUPA.configured() ? { ok: true, backups: [] 
 async function cloudRestore() { return SUPA.configured() ? { ok: false, message: 'Use Download backup instead (Supabase).' } : cloudPost('restore', { fileName: '' }); }
 async function cloudClear() { return SUPA.configured() ? { ok: true, message: 'Cleared.' } : cloudPost('clear'); }
 /* ---------- Merge a remote cloud state into the current workspace ---------- */
-function applyCloudRemote(remote) {
+function applyCloudRemote(remote, remoteTs) {
   if (!remote || !remote.state) return false;
   const r = remote.state;
   if (r.prices && Array.isArray(r.prices) && r.prices.length) state.prices = r.prices;
@@ -144,7 +169,9 @@ function applyCloudRemote(remote) {
   if (r.priceHistory) state.priceHistory = r.priceHistory;
   if (r.cash) state.cash = Object.assign({ opening: 0, adjustments: [] }, r.cash);
   state.version = 2;
-  state.updatedAt = new Date().toISOString();
+  /* Keep the workspace's "modified" stamp in sync with the remote copy so a
+     duplicate/echo event for the same write is recognised as already applied. */
+  state.updatedAt = remoteTs ? new Date(remoteTs).toISOString() : new Date().toISOString();
   saveState();
   return true;
 }

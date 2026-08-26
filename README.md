@@ -272,3 +272,29 @@ so nothing breaks while you get it set up.
 > does **not** contain these upgrades. Always open **index.html**. `_split.ps1`
 > regenerates only the original content — the new `auth.js` module and HTML
 > upgrades are additive and not part of that script.
+
+## Changelog
+
+### v1.2 fixes
+- **Environment keys renamed** — `SUPABASE_URL` → `SUPABASE_URL_wafer` and
+  `SUPABASE_ANON_KEY` → `SUPABASE_ANON_KEY_wafer` throughout
+  (`js/config.js`, `js/supabase.js`, README). If you rely on environment
+  variables, update them to the new names too.
+- **Fixed login crash (`moveStoreLogin is not defined`)** — `js/auth.js`
+  called a non-existent function in the legacy fallback path; the correct
+  `legacyStoreLogin` is now called.
+- **Fixed admin approval (RLS policies)** — `_supabase-setup.sql` section 4
+  policies previously used `role = 'admin'` inside a policy, which refers to
+  the *target* row (never true for pending users), so the admin could neither
+  list nor approve accounts. Replaced with an `is_admin()` SECURITY DEFINER
+  helper that checks the current signed-in user. **Re-run the updated SQL**
+  (or at least the section-4 block) in Supabase SQL Editor.
+- **Fixed realtime sync spamming + infinite loop** — `js/cloud.js` +
+  `js/storage.js`: real-time events reflecting a device's *own* write are now
+  ignored (no toast, no re-render), applied remote changes no longer echo back
+  to the server (breaks a self-perpetuating push loop that hammered the
+  database and spammed "Synced from another device" notifications). Auto-sync
+  now shows a single quiet status line instead of a pop-up toast.
+
+After deploying these JS changes, **hard-refresh** the browser (Ctrl+Shift+R)
+so Netlify's cache doesn't serve stale files.

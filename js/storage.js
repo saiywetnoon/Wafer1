@@ -29,6 +29,11 @@ let draftRestored = false;
 
 let cloudAutoSync = false;
 function setCloudAutoSync(v) { cloudAutoSync = !!v; }
+/* When true, the next saveState() persists locally but does NOT push to the
+   cloud. Used while applying a real-time update we received from the server, so
+   we never echo it back (which would re-trigger an event and loop forever). */
+let cloudSyncSuppressed = false;
+function setCloudSyncSuppressed(v) { cloudSyncSuppressed = !!v; }
 
 /* ---------- Persistence (debounced) ---------- */
 function persistState() {
@@ -42,7 +47,7 @@ function saveState() {
     // Every save also pushes to the cloud automatically when online (like a real app).
     // This ensures price, stock and any other edit reaches other devices without
     // a manual "upload". Guarded until boot/reconcile finishes.
-    if (cloudAutoSync && typeof triggerGoogleSync === 'function') {
+    if (cloudAutoSync && !cloudSyncSuppressed && typeof triggerGoogleSync === 'function') {
       triggerGoogleSync();
     }
   } catch (e) {
