@@ -87,6 +87,29 @@ function statesEqual(a, b) {
   return pure(a) === pure(b);
 }
 
+/* Count how many meaningful data records a ledger state holds. This is what
+   "does this device/cloud have data?" means — the modern ledger uses
+   production/sales/purchases/etc., NOT the legacy `entries` field. Using
+   `entries` here is what made fresh devices look empty and skip the pull. */
+function stateDataCount(s) {
+  if (!s) return 0;
+  var n = 0;
+  if (s.entries) n += Object.keys(s.entries).length;
+  if (Array.isArray(s.production)) n += s.production.length;
+  if (Array.isArray(s.sales)) n += s.sales.length;
+  if (Array.isArray(s.purchases)) n += s.purchases.length;
+  if (Array.isArray(s.payments)) n += s.payments.length;
+  if (Array.isArray(s.customerPayments)) n += s.customerPayments.length;
+  if (Array.isArray(s.expenses)) n += s.expenses.length;
+  if (Array.isArray(s.recurringExpenses)) n += s.recurringExpenses.length;
+  if (Array.isArray(s.waste)) n += s.waste.length;
+  if (Array.isArray(s.customers)) n += s.customers.length;
+  if (Array.isArray(s.suppliers)) n += s.suppliers.length;
+  if (s.cash && Array.isArray(s.cash.adjustments)) n += s.cash.adjustments.length;
+  if (s.inventory && typeof s.inventory === 'object') n += Object.keys(s.inventory).length;
+  return n;
+}
+
 /* Auto-apply edits arriving from another device (realtime).
    Professional behaviour:
    - Ignore echoes of THIS device's own writes (no re-render, no message).
@@ -212,10 +235,10 @@ async function cloudAfterSignIn() {
       return false;
     }
   }
-  const localCount = Object.keys(state.entries || {}).length;
+  const localCount = stateDataCount(state);
   const res = await cloudGet();
   const remote = res && res.ok ? res.payload : null;
-  const remoteCount = remote && remote.state ? Object.keys(remote.state.entries || {}).length : 0;
+  const remoteCount = remote && remote.state ? stateDataCount(remote.state) : 0;
 
   if (remoteCount === 0 && localCount === 0) {
     // Brand-new account: nothing anywhere yet.

@@ -217,8 +217,8 @@ async function cloudSyncNow() {
   const res = await cloudGet();
   const remote = (res && res.ok) ? res.payload : null;
   const remoteState = (remote && remote.state) ? remote.state : null;
-  const localCount = Object.keys(state.entries || {}).length;
-  const remoteCount = remoteState ? Object.keys(remoteState.entries || {}).length : 0;
+  const localCount = stateDataCount(state);
+  const remoteCount = remoteState ? stateDataCount(remoteState) : 0;
 
   // Nothing anywhere yet -> nothing to sync.
   if (remoteCount === 0 && localCount === 0) { updateGoogleSyncStatus('Online — nothing to sync yet.', 'success'); renderCloudStatus(); return; }
