@@ -248,10 +248,10 @@ function adminRow(u) {
   const when = esc(String(u.created_at || u.createdAt || '').replace('T', ' ').slice(0, 16) || '—');
   let actions = '';
   if (st !== 'approved') {
-    actions = '<button onclick="adminAct(\'approve\',\'' + email.replace(/'/g, "\\'") + '\')" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold">Approve</button> ';
+    actions = '<button onclick="adminAct(\'approve\',\'' + esc(u.id || '').replace(/'/g, "\\'") + '\',\'' + email.replace(/'/g, "\\'") + '\')" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold">Approve</button> ';
   }
   if (st === 'pending') {
-    actions += '<button onclick="adminAct(\'reject\',\'' + email.replace(/'/g, "\\'") + '\')" class="px-2 py-1 rounded bg-red-700/70 hover:bg-red-600 text-red-100 text-[10px] font-bold">Reject</button>';
+    actions += '<button onclick="adminAct(\'reject\',\'' + esc(u.id || '').replace(/'/g, "\\'") + '\',\'' + email.replace(/'/g, "\\'") + '\')" class="px-2 py-1 rounded bg-red-700/70 hover:bg-red-600 text-red-100 text-[10px] font-bold">Reject</button>';
   }
   return '<div class="flex items-center justify-between gap-2 py-2 border-b border-gray-700 last:border-0">' +
     '<div class="min-w-0"><div class="text-sm font-semibold truncate">' + email + roleTag + '</div>' +
@@ -264,9 +264,10 @@ function setAdminMsg(text, type) {
   const colors = { error: 'text-red-400', success: 'text-emerald-400', info: 'text-gray-400' };
   el.className = 'text-xs font-semibold mt-3 ' + (colors[type] || colors.info);
 }
-async function adminAct(action, email) {
+async function adminAct(action, id, email) {
+  if (!id) { setAdminMsg('This account has no valid ID.', 'error'); return; }
   let res;
-  if (SUPA.configured()) res = await SUPA.setAccountStatus(email, action === 'approve' ? 'approved' : 'rejected');
+  if (SUPA.configured()) res = await SUPA.setAccountStatus(id, action === 'approve' ? 'approved' : 'rejected');
   else res = await authPost(action, { email: email });
   const ok = !!(res && res.ok);
   setAdminMsg((res && (res.message || res.error)) || (ok ? (action === 'approve' ? 'Approved ' + email : 'Rejected ' + email) : 'Action failed.'), ok ? 'success' : 'error');

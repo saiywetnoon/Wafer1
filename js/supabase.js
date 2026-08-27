@@ -109,7 +109,7 @@ const SUPA = {
     if (this._hl) { try { sb.removeChannel(this._hl); } catch (e) {} }
     const chan = sb.channel('led-' + userId)
       .on('postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'ledgers', filter: 'user_id=eq.' + userId },
+          { event: '*', schema: 'public', table: 'ledgers', filter: 'user_id=eq.' + userId },
           function (payload) { if (cb) { try { cb(payload.new); } catch (e) {} } })
       .subscribe();
     this._hl = chan;
@@ -128,10 +128,11 @@ const SUPA = {
       .select('id,email,status,role,created_at').order('created_at', { ascending: false });
     return error ? [] : (data || []);
   },
-  async setAccountStatus(email, status) {
+  async setAccountStatus(id, status) {
     const sb = this.init(); if (!sb) return { error: 'unconfigured' };
+    if (!['approved', 'rejected'].includes(status)) return { error: 'Invalid account status.' };
     const { error } = await sb.from('profiles')
-      .update({ status: status }).eq('email', email);
+      .update({ status: status }).eq('id', id);
     return error ? { error: error.message } : { ok: true };
   }
 };
