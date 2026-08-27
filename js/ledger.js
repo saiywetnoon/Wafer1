@@ -46,29 +46,23 @@ function saveProduction() {
     costPerPiece: costPerPiece
   };
 
+  const previous = isUpdate ? state.production.find(function (p) { return p.id === record.id; }) : null;
+  const ingredientShortage = inventoryUsageShortage(previous ? previous.usage : {}, usage);
+  if (ingredientShortage) {
+    showToast('Not enough ' + ingredientShortage.name + '. Available: ' + fmt(ingredientShortage.available) + '; this batch needs ' + fmt(ingredientShortage.requested) + ' more.', 'error');
+    return;
+  }
+
   if (isUpdate) {
     const idx = state.production.findIndex(function (p) { return p.id === record.id; });
     if (idx >= 0) {
-      // Return the old batch's ingredients to stock, then deduct the new usage.
       var old = state.production[idx];
-      state.prices.forEach(function (ing) {
-        var oldU = parseFloat((old.usage || {})[ing.name]) || 0;
-        var newU = parseFloat(usage[ing.name]) || 0;
-        var diff = newU - oldU;
-        if (diff !== 0 && state.inventory[ing.name]) {
-          state.inventory[ing.name].stock = Math.max(0, (state.inventory[ing.name].stock || 0) - diff);
-        }
-      });
+      replaceProductionInventory(old, usage, date, record.id);
       state.production[idx] = record;
     }
   } else {
     state.production.push(record);
-    state.prices.forEach(function (ing) {
-      var used = parseFloat(usage[ing.name]) || 0;
-      if (used > 0 && state.inventory[ing.name]) {
-        state.inventory[ing.name].stock = Math.max(0, (state.inventory[ing.name].stock || 0) - used);
-      }
-    });
+    reconcileProductionInventory({}, usage, date, record.id);
   }
 
   rebuildStockAndCogs();
@@ -156,14 +150,7 @@ function deleteProduction(id) {
   const p = state.production.find(function (x) { return x.id === id; });
   if (!p) return;
   if (!confirm('Delete this production batch?')) return;
-  if (p.usage) {
-    state.prices.forEach(function (ing) {
-      var used = parseFloat(p.usage[ing.name]) || 0;
-      if (used > 0 && state.inventory[ing.name]) {
-        state.inventory[ing.name].stock = (state.inventory[ing.name].stock || 0) + used;
-      }
-    });
-  }
+  if (p.usage) reconcileProductionInventory(p.usage, {}, p.date, p.id);
   state.production = state.production.filter(function (x) { return x.id !== id; });
   rebuildStockAndCogs();
   saveState();

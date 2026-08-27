@@ -58,6 +58,41 @@ dail-ledger v1.1/
 
 To regenerate the split from the original, run `_split.ps1` (PowerShell).
 
+## Current production stack
+
+See [ROADMAP.md](ROADMAP.md) for completed feature checks, upcoming work, and
+the release acceptance criteria.
+
+The recommended live setup is **Netlify + Supabase**:
+
+- Netlify hosts this static app (`index.html`, `css/`, and `js/`).
+- Supabase Auth provides email/password accounts and sessions.
+- Supabase Postgres stores each approved user's private ledger.
+- Supabase Realtime updates a signed-in user's other devices after a save.
+
+The Google Apps Script modules remain in the repository as a legacy fallback
+and for existing installations. When the Supabase URL and publishable key are
+configured in `js/config.js`, Supabase is the active backend.
+
+### Production checklist
+
+1. Deploy this folder to Netlify and use the HTTPS site URL everywhere.
+2. In Supabase Auth, enable email confirmation and add the Netlify URL to the
+   allowed redirect URLs.
+3. Run the **complete current** `_supabase-setup.sql` once in Supabase SQL
+   Editor. It is safe to re-run: it upgrades the policies, triggers, and
+   Realtime membership without dropping existing ledger data.
+4. Configure only the project URL and **publishable/anon** key in
+   `js/config.js`. Never put a `service_role` key in frontend code.
+5. Create the owner account first, then use **Admin** in the app to approve
+   every other account.
+6. Keep a downloaded full backup before doing a large import, restore, or
+   deployment change.
+
+> Approval is enforced by Row Level Security, not merely hidden in the UI:
+> pending and rejected accounts cannot read or write ledger data through the
+> Supabase API.
+
 ## v1.2 upgrades (this build adds to the original)
 
 - **Cash Drawer tab** (`js/cash.js`): opening balance + running cash position
@@ -245,7 +280,7 @@ two separate things, with a **ready-to-sell stock** between them.
 Use this if you're tired of pasting the Apps-Script URL on every device and
 want true "like a real app" behavior:
 
-- **Real Google/e-mail sign-in** via Supabase Auth (no deployment URL to paste).
+- **Real email/password sign-in** via Supabase Auth (no deployment URL to paste).
 - **Automatic sync** — every save pushes instantly; other devices update by
   themselves (realtime), like Google/Xiaomi sync.
 - **Account + approval system preserved** — first account is owner/admin;
@@ -267,6 +302,69 @@ want true "like a real app" behavior:
 
 The app keeps working in the legacy Apps-Script mode until you add the keys,
 so nothing breaks while you get it set up.
+
+## v1.8 — Ledger integrity and safer exports ✅
+
+- **Recipes persist everywhere** — saved recipes now survive reloads and cloud
+  sync, instead of existing only until the next refresh.
+- **Waste is real stock movement** — recording spoiled pieces deducts them
+  from ready-to-sell stock and values the loss using the average cost at the
+  time of the waste. Monthly profit reports use that actual waste value.
+- **No silent overselling** — a sale or waste record is rejected when the
+  finished-goods stock available on that date is insufficient. Future batches
+  cannot incorrectly cover a past sale.
+- **Accurate customer repayments** — repayments are capped at the outstanding
+  debt, so the Cash Drawer cannot be inflated by an accidental overpayment.
+- **Safer CSV files** — exports quote fields correctly and neutralize values
+  that spreadsheet apps could otherwise interpret as formulas.
+- **Working “Copy Yesterday”** — the production form now copies the most
+  recent modern production batch from yesterday, rather than the retired
+  pre-v1.6 daily-entry format.
+
+### Important behavior
+
+- Finished-goods stock uses the **weighted-average cost** method.
+- Production, sales, and waste are replayed in date order. On a single date,
+  production is available first, then sales, then recorded waste.
+- A waste value is calculated from the stock cost available at that date. Old
+  waste records receive a value automatically the next time the ledger is
+  rebuilt and saved.
+- Supabase sync currently saves a whole user ledger as one JSON document. Do
+  not make unrelated edits on two devices at exactly the same time: the latest
+  save wins. A future normalized database upgrade will add conflict-safe,
+  record-level collaboration.
+
+## v1.9 — Dated ingredient inventory movements 📦
+
+Ingredient stock is now derived from an append-only movement history instead
+of being silently overwritten:
+
+- Existing on-hand stock migrates once into an **Opening balance** movement.
+- Supplier purchases add a dated **Purchase** movement.
+- Saving, editing, or deleting production records matching ingredient-use or
+  return movements.
+- Manual stock changes require a reason and are saved as **Manual adjustment**
+  movements.
+- The Inventory tab shows the latest movements, providing an explanation for
+  every on-hand quantity.
+
+When upgrading an existing ledger, open the app once while online and let it
+finish syncing so the opening-balance migration is saved to Supabase.
+
+## Current in-progress release — ingredient waste and customer sales
+
+- **Ingredient waste** is recorded from the Inventory tab with the ingredient,
+  quantity, date, and a required reason. It becomes a dated negative inventory
+  movement; stock remains derived from the movement history.
+- **Customer sales** can be linked to an optional customer and marked paid,
+  partial, or credit. Only the amount paid now enters the Cash Drawer; the
+  unpaid balance is added to that customer's debt.
+- **Receipts and statements**: each new sale gets a receipt number and can be
+  printed. Customer statements list customer-linked sales, repayments, running
+  balance, and the optional credit due date.
+
+The acceptance checks in `ROADMAP.md` remain the completion gate: run the
+listed manual workflows before treating this release as complete.
 
 > ⚠️ `daily-ledger-1.1.html` is a byte-for-byte backup of the ORIGINAL app and
 > does **not** contain these upgrades. Always open **index.html**. `_split.ps1`
@@ -295,6 +393,16 @@ so nothing breaks while you get it set up.
   to the server (breaks a self-perpetuating push loop that hammered the
   database and spammed "Synced from another device" notifications). Auto-sync
   now shows a single quiet status line instead of a pop-up toast.
+
+### v1.8 fixes
+- **Closed profile privilege escalation** — profile changes are admin-only;
+  clients cannot approve themselves or assign themselves the admin role.
+- **Protected unapproved data access** — ledger policies require an approved
+  account, including for direct API calls.
+- **Fixed first-save Realtime delivery** — subscriptions listen for both
+  inserts and updates, so another open device receives the first ledger save.
+- **Preserved existing Realtime configuration** — setup no longer drops and
+  recreates Supabase's shared publication.
 
 After deploying these JS changes, **hard-refresh** the browser (Ctrl+Shift+R)
 so Netlify's cache doesn't serve stale files.

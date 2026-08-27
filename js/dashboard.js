@@ -66,10 +66,11 @@ function renderMonthlyReport() {
   const label = new Date(y, mo - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
   const monthExpenses = (state.expenses || []).filter(function (e) { return (e.date || '').slice(0, 7) === m; })
     .reduce(function (s, e) { return s + (e.amount || 0); }, 0);
-  const monthWastePcs = (state.waste || []).filter(function (w) { return (w.date || '').slice(0, 7) === m; })
-    .reduce(function (s, w) { return s + (w.qty || 0); }, 0);
+  const monthWaste = (state.waste || []).filter(function (w) { return (w.date || '').slice(0, 7) === m; });
   const costPerPiece = pcs > 0 ? cap / pcs : 0;
-  const wasteValue = monthWastePcs * costPerPiece;
+  const wasteValue = monthWaste.reduce(function (sum, w) {
+    return sum + (typeof w.cost === 'number' ? w.cost : ((w.qty || 0) * costPerPiece));
+  }, 0);
   const recurringTotal = (state.recurringExpenses || []).reduce(function (s, r) { return s + (r.amount || 0); }, 0);
   const surplusPcs = pcs - soldPcs;
   const surplusValue = surplusPcs * costPerPiece;

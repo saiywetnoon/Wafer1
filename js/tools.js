@@ -78,18 +78,25 @@ function renderWaste() {
   const waste = state.waste || [];
   if (!waste.length) { list.textContent = 'No waste logged yet.'; return; }
   list.innerHTML = waste.slice().reverse().map(function (w) {
-    return '<div class="flex justify-between py-1 border-b border-gray-700 last:border-0"><span>' + esc(w.date) + '</span><span class="text-red-400 font-semibold">' + fmt(w.qty) + ' pcs</span></div>';
+    return '<div class="flex justify-between py-1 border-b border-gray-700 last:border-0"><span>' + esc(w.date) + '</span><span class="text-red-400 font-semibold">' + fmt(w.qty) + ' pcs · ' + fmtKs(w.cost || 0) + '</span></div>';
   }).join('');
 }
 
 $('addWasteBtn').addEventListener('click', function () {
   const date = $('wasteDate').value || today();
   const qty = parseFloat($('wasteQty').value);
-  if (isNaN(qty) || qty < 0) { showToast('Enter a valid quantity.', 'error'); return; }
+  if (isNaN(qty) || qty <= 0) { showToast('Enter a valid quantity.', 'error'); return; }
+  const record = { id: uid(), date: date, qty: Math.round(qty) };
+  const shortage = canRecordWaste(record);
+  if (shortage) {
+    showToast('Not enough finished stock on ' + shortage.date + '. Available: ' + fmt(shortage.available) + ' pieces; waste is ' + fmt(shortage.requested) + '.', 'error');
+    return;
+  }
   if (!state.waste) state.waste = [];
-  state.waste.push({ date: date, qty: qty });
+  state.waste.push(record);
+  rebuildStockAndCogs();
   saveState();
-  renderWaste();
+  renderAll();
   $('wasteQty').value = '';
   showToast('Waste logged for ' + date + '.');
 });
@@ -207,9 +214,9 @@ $('exportMonthlyCsvBtn').addEventListener('click', function () {
   const entries = entriesProdSales();
   if (!entries.length) { showToast('No data to export.', 'info'); return; }
   const header = ['Date', 'Capital (Ks)', 'Bags Rolled', 'Pieces Rolled', 'Bags Sold', 'Revenue (Ks)', 'Labor Hrs', 'Net (Ks)'];
-  const lines = [header.join(',')];
+  const lines = [csvRow(header)];
   entries.forEach(function (e) {
-    lines.push([e.date, e.capital, e.prodBags, e.prodPieces, e.soldBags, e.revenue, ((e.laborMin || 0) / 60).toFixed(2), e.net].join(','));
+    lines.push(csvRow([e.date, e.capital, e.prodBags, e.prodPieces, e.soldBags, e.revenue, ((e.laborMin || 0) / 60).toFixed(2), e.net]));
   });
   const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');

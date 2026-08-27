@@ -103,10 +103,12 @@ function stateDataCount(s) {
   if (Array.isArray(s.expenses)) n += s.expenses.length;
   if (Array.isArray(s.recurringExpenses)) n += s.recurringExpenses.length;
   if (Array.isArray(s.waste)) n += s.waste.length;
+  if (Array.isArray(s.recipes)) n += s.recipes.length;
   if (Array.isArray(s.customers)) n += s.customers.length;
   if (Array.isArray(s.suppliers)) n += s.suppliers.length;
   if (s.cash && Array.isArray(s.cash.adjustments)) n += s.cash.adjustments.length;
   if (s.inventory && typeof s.inventory === 'object') n += Object.keys(s.inventory).length;
+  if (Array.isArray(s.inventoryMovements)) n += s.inventoryMovements.length;
   return n;
 }
 
@@ -191,6 +193,8 @@ function applyCloudRemote(remote, remoteTs) {
   if (r.stock && typeof r.stock === 'object') state.stock = { pieces: parseFloat(r.stock.pieces) || 0, cost: parseFloat(r.stock.cost) || 0 };
   if (r.settings) state.settings = Object.assign({ hourlyWage: 1500 }, r.settings);
   if (r.inventory) state.inventory = r.inventory;
+  if (Array.isArray(r.inventoryMovements)) state.inventoryMovements = r.inventoryMovements;
+  if (r.inventoryMovementVersion) state.inventoryMovementVersion = r.inventoryMovementVersion;
   if (r.customers) state.customers = r.customers;
   if (r.suppliers) state.suppliers = r.suppliers;
   if (r.purchases) state.purchases = r.purchases;
@@ -200,7 +204,9 @@ function applyCloudRemote(remote, remoteTs) {
   if (r.recurringExpenses) state.recurringExpenses = r.recurringExpenses;
   if (r.waste) state.waste = r.waste;
   if (r.priceHistory) state.priceHistory = r.priceHistory;
+  if (r.recipes) state.recipes = Array.isArray(r.recipes) ? r.recipes : [];
   if (r.cash) state.cash = Object.assign({ opening: 0, adjustments: [] }, r.cash);
+  if (typeof migrateInventoryMovements === 'function') migrateInventoryMovements();
   state.version = 2;
   /* Keep the workspace's "modified" stamp in sync with the remote copy so a
      duplicate/echo event for the same write is recognised as already applied. */

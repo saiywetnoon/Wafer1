@@ -68,6 +68,7 @@ function rebuildStockAndCogs() {
   var events = [];
   (state.production || []).forEach(function (p) { events.push({ date: p.date, type: 0, p: p }); });
   (state.sales || []).forEach(function (s) { events.push({ date: s.date, type: 1, s: s }); });
+  (state.waste || []).forEach(function (w) { events.push({ date: w.date, type: 2, w: w }); });
   events.sort(function (a, b) {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
     return a.type - b.type; // production before sales on the same day
@@ -78,19 +79,56 @@ function rebuildStockAndCogs() {
       stock.pieces += (ev.p.pieces || 0);
       stock.cost += (ev.p.capital || 0);
     } else {
-      var s = ev.s;
+      var item = ev.type === 1 ? ev.s : ev.w;
+      var qty = item.pieces !== undefined ? item.pieces : item.qty;
       var avg = stock.pieces > 0 ? (stock.cost / stock.pieces) : 0;
-      var cogs = Math.round((s.pieces || 0) * avg);
-      s.cogs = cogs;
-      s.avgCost = Math.round(avg * 100) / 100;
-      s.net = Math.round((s.amount || 0) - cogs);
-      stock.pieces = Math.max(0, stock.pieces - (s.pieces || 0));
-      stock.cost = Math.max(0, stock.cost - cogs);
+      var cost = Math.round((qty || 0) * avg);
+      if (ev.type === 1) {
+        item.cogs = cost;
+        item.avgCost = Math.round(avg * 100) / 100;
+        item.net = Math.round((item.amount || 0) - cost);
+      } else {
+        item.cost = cost;
+        item.avgCost = Math.round(avg * 100) / 100;
+      }
+      stock.pieces = Math.max(0, stock.pieces - (qty || 0));
+      stock.cost = Math.max(0, stock.cost - cost);
     }
   });
   if (!state.stock) state.stock = { pieces: 0, cost: 0 };
   state.stock.pieces = Math.round(stock.pieces);
   state.stock.cost = Math.round(stock.cost);
+}
+
+/* Validate a proposed sale/waste record against stock at its actual date.
+   This prevents a future production batch from incorrectly covering an earlier
+   sale and keeps stock from silently going negative. */
+function finishedGoodsShortage(production, sales, waste) {
+  var events = [];
+  (production || []).forEach(function (p) { events.push({ date: p.date, type: 0, qty: p.pieces || 0 }); });
+  (sales || []).forEach(function (s) { events.push({ date: s.date, type: 1, qty: s.pieces || 0 }); });
+  (waste || []).forEach(function (w) { events.push({ date: w.date, type: 2, qty: w.qty || 0 }); });
+  events.sort(function (a, b) { return a.date === b.date ? a.type - b.type : (a.date < b.date ? -1 : 1); });
+  var stock = 0;
+  for (var i = 0; i < events.length; i++) {
+    var event = events[i];
+    if (event.type === 0) stock += event.qty;
+    else if (event.qty > stock) return { date: event.date, available: stock, requested: event.qty, type: event.type === 1 ? 'sale' : 'waste' };
+    else stock -= event.qty;
+  }
+  return null;
+}
+
+function canSaveSale(record) {
+  var sales = (state.sales || []).slice();
+  var index = sales.findIndex(function (s) { return s.id === record.id; });
+  if (index >= 0) sales[index] = record;
+  else sales.push(record);
+  return finishedGoodsShortage(state.production, sales, state.waste);
+}
+
+function canRecordWaste(record) {
+  return finishedGoodsShortage(state.production, state.sales, (state.waste || []).concat([record]));
 }
 
 /* Number of ready-to-sell bags (using the most recent sale's pieces-per-bag
@@ -147,8 +185,7 @@ function storageUsedKB() {
 
 function inventoryValue() {
   return (state.prices || []).reduce(function (sum, ing) {
-    const item = (state.inventory || {})[ing.name];
-    const stock = item ? (parseFloat(item.stock) || 0) : 0;
+    const stock = inventoryStockFor(ing.name);
     if (stock <= 0) return sum;
     const price = parseFloat(ing.price) || 0;
     if (ing.unit === 'g') return sum + (stock / 1000) * price;   // price is per kg
@@ -175,6 +212,99 @@ function totalMixWeightFor(usage) {
     return sum + qty * (parseFloat(ing.weightPerUnit) || 0);
   }, 0);
 }
+
+/* ---------- Ingredient inventory movement ledger ---------- */
+function ensureInventoryItem(name) {
+  if (!state.inventory) state.inventory = {};
+  if (!state.inventory[name]) state.inventory[name] = { stock: 0, lowAlert: 0 };
+  return state.inventory[name];
+}
+function inventoryStockFor(name) {
+  return (state.inventoryMovements || []).reduce(function (total, movement) {
+    return movement.ingredientName === name ? total + (parseFloat(movement.qty) || 0) : total;
+  }, 0);
+}
+function syncInventorySnapshot(name) {
+  const item = ensureInventoryItem(name);
+  item.stock = Math.max(0, Math.round(inventoryStockFor(name) * 100) / 100);
+  return item.stock;
+}
+function recordInventoryMovement(movement) {
+  const qty = parseFloat(movement && movement.qty);
+  const name = String((movement && movement.ingredientName) || '').trim();
+  if (!name || !isFinite(qty) || qty === 0) return null;
+  if (!state.inventoryMovements) state.inventoryMovements = [];
+  state.inventoryMovementVersion = 1;
+  const record = {
+    id: movement.id || uid(),
+    date: movement.date || today(),
+    ingredientName: name,
+    qty: Math.round(qty * 100) / 100,
+    type: movement.type || 'adjustment',
+    reason: movement.reason || '',
+    referenceId: movement.referenceId || '',
+    createdAt: movement.createdAt || new Date().toISOString()
+  };
+  state.inventoryMovements.push(record);
+  syncInventorySnapshot(name);
+  return record;
+}
+function migrateInventoryMovements() {
+  if (state.inventoryMovementVersion >= 1) return false;
+  Object.keys(state.inventory || {}).forEach(function (name) {
+    const qty = parseFloat(state.inventory[name].stock) || 0;
+    if (qty > 0) recordInventoryMovement({
+      date: today(), ingredientName: name, qty: qty, type: 'opening',
+      reason: 'Opening balance migrated from previous inventory'
+    });
+  });
+  state.inventoryMovementVersion = 1;
+  return true;
+}
+function inventoryUsageShortage(oldUsage, newUsage) {
+  const names = new Set(Object.keys(oldUsage || {}).concat(Object.keys(newUsage || {})));
+  let shortage = null;
+  names.forEach(function (name) {
+    if (shortage) return;
+    const oldQty = parseFloat((oldUsage || {})[name]) || 0;
+    const newQty = parseFloat((newUsage || {})[name]) || 0;
+    const additional = newQty - oldQty;
+    const available = inventoryStockFor(name);
+    if (additional > available) shortage = { name: name, available: available, requested: additional };
+  });
+  return shortage;
+}
+function reconcileProductionInventory(oldUsage, newUsage, date, referenceId) {
+  const names = new Set(Object.keys(oldUsage || {}).concat(Object.keys(newUsage || {})));
+  names.forEach(function (name) {
+    const oldQty = parseFloat((oldUsage || {})[name]) || 0;
+    const newQty = parseFloat((newUsage || {})[name]) || 0;
+    const difference = newQty - oldQty;
+    if (difference) recordInventoryMovement({
+      date: date, ingredientName: name, qty: -difference,
+      type: difference > 0 ? 'production' : 'production_reversal',
+      reason: difference > 0 ? 'Used in production batch' : 'Returned from edited production batch',
+      referenceId: referenceId
+    });
+  });
+}
+
+function replaceProductionInventory(oldRecord, newUsage, newDate, referenceId) {
+  if (oldRecord && oldRecord.date !== newDate) {
+    reconcileProductionInventory(oldRecord.usage, {}, oldRecord.date, referenceId);
+    reconcileProductionInventory({}, newUsage, newDate, referenceId);
+  } else {
+    reconcileProductionInventory(oldRecord ? oldRecord.usage : {}, newUsage, newDate, referenceId);
+  }
+}
+
+/* RFC-style CSV escaping plus formula-injection protection for Excel/Sheets. */
+function csvCell(value) {
+  var text = String(value == null ? '' : value);
+  if (/^[=+\-@]/.test(text)) text = "'" + text;
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+function csvRow(values) { return values.map(csvCell).join(','); }
 
 /* ---------- Toast ---------- */
 function showToast(message, type) {

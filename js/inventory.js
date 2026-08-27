@@ -1,66 +1,119 @@
 /* ============================================================
-   INVENTORY
+   INVENTORY — movement-ledger based
    ============================================================ */
+function inventoryMovementLabel(type) {
+  return {
+    opening: 'Opening balance', purchase: 'Purchase', production: 'Production used',
+    production_reversal: 'Production returned', adjustment: 'Manual adjustment',
+    ingredient_waste: 'Ingredient waste'
+  }[type] || 'Adjustment';
+}
+
+function renderIngredientWasteOptions() {
+  const select = $('ingredientWasteItem');
+  if (!select) return;
+  const selected = select.value;
+  select.innerHTML = '<option value="">Choose ingredient…</option>' + state.prices.map(function (ing) {
+    return '<option value="' + esc(ing.name) + '">' + esc(ing.name) + ' (' + (ing.unit === 'g' ? 'g' : 'units') + ')</option>';
+  }).join('');
+  select.value = selected || '';
+  if ($('ingredientWasteDate') && !$('ingredientWasteDate').value) $('ingredientWasteDate').value = today();
+}
+
+function renderInventoryMovements() {
+  const list = $('inventoryMovementList');
+  if (!list) return;
+  const movements = (state.inventoryMovements || []).slice().sort(function (a, b) {
+    const byDate = String(b.date || '').localeCompare(String(a.date || ''));
+    return byDate || String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+  }).slice(0, 12);
+  if (!movements.length) {
+    list.textContent = 'No movements yet. Purchases, production use, and manual adjustments will appear here.';
+    return;
+  }
+  list.innerHTML = movements.map(function (m) {
+    const plus = (m.qty || 0) >= 0;
+    const ingredient = priceItemByName(m.ingredientName);
+    const unit = ingredient && ingredient.unit === 'g' ? 'g' : 'units';
+    return '<div class="flex items-center justify-between gap-3 py-2 border-b border-gray-800 last:border-0">' +
+      '<div class="min-w-0"><div class="text-xs font-semibold text-gray-200">' + esc(m.ingredientName) +
+      ' <span class="text-gray-500 font-normal">· ' + esc(inventoryMovementLabel(m.type)) + '</span></div>' +
+      '<div class="text-[10px] text-gray-500">' + esc(m.date || '') + (m.reason ? ' · ' + esc(m.reason) : '') + '</div></div>' +
+      '<div class="shrink-0 text-xs font-bold ' + (plus ? 'text-emerald-400' : 'text-red-400') + '">' +
+      (plus ? '+' : '') + fmt(m.qty) + ' ' + unit + '</div></div>';
+  }).join('');
+}
+
 function renderInventory() {
   const tbody = $('inventoryBody');
-  const inv = state.inventory || {};
   const lowItems = [];
   tbody.innerHTML = state.prices.map(function (ing) {
-    const item = inv[ing.name] || { stock: 0, lowAlert: 0 };
+    const item = ensureInventoryItem(ing.name);
+    const stock = syncInventorySnapshot(ing.name);
     const unit = ing.unit === 'g' ? 'g' : 'units';
-    const status = item.stock <= 0 ? '<span class="text-red-400 font-bold">OUT</span>'
-      : item.stock <= item.lowAlert ? '<span class="text-amber-400 font-bold">LOW</span>'
+    const status = stock <= 0 ? '<span class="text-red-400 font-bold">OUT</span>'
+      : stock <= item.lowAlert ? '<span class="text-amber-400 font-bold">LOW</span>'
       : '<span class="text-emerald-400">OK</span>';
-    if (item.stock <= item.lowAlert) lowItems.push(ing.name + ' (' + fmt(item.stock) + ' ' + unit + ')');
+    if (stock <= item.lowAlert) lowItems.push(ing.name + ' (' + fmt(stock) + ' ' + unit + ')');
     return '<tr class="border-b border-gray-800">' +
       '<td class="py-2 pr-2 font-medium">' + esc(ing.name) + '</td>' +
       '<td class="py-2 pr-2 text-gray-500">' + unit + '</td>' +
-      '<td class="py-2 pr-2"><input type="number" min="0" step="1" value="' + esc(item.stock) + '" data-name="' + esc(ing.name) + '" class="stock-input w-24 px-1.5 py-1 rounded border border-gray-700 bg-gray-800 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-500"></td>' +
-      '<td class="py-2 pr-2"><input type="number" min="0" step="1" value="' + esc(item.lowAlert) + '" data-name="' + esc(ing.name) + '" class="low-input w-20 px-1.5 py-1 rounded border border-gray-700 bg-gray-800 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-500"></td>' +
+      '<td class="py-2 pr-2"><input type="number" min="0" step="0.01" value="' + esc(stock) + '" data-name="' + esc(ing.name) + '" class="stock-input w-24 px-1.5 py-1 rounded border border-gray-700 bg-gray-800 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-500"></td>' +
+      '<td class="py-2 pr-2"><input type="number" min="0" step="0.01" value="' + esc(item.lowAlert) + '" data-name="' + esc(ing.name) + '" class="low-input w-20 px-1.5 py-1 rounded border border-gray-700 bg-gray-800 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-500"></td>' +
       '<td class="py-2 pr-2">' + status + '</td>' +
-      '<td class="py-2"><button onclick="addStockFor(\'' + esc(ing.name).replace(/'/g, "\\'") + '\')" class="text-emerald-500 hover:text-emerald-400" title="Add stock"><i data-lucide="plus" class="w-3.5 h-3.5"></i></button></td>' +
+      '<td class="py-2"><button data-add-stock="' + esc(ing.name) + '" class="add-stock-btn text-emerald-500 hover:text-emerald-400" title="Add stock"><i data-lucide="plus" class="w-3.5 h-3.5"></i></button></td>' +
       '</tr>';
   }).join('');
   document.querySelectorAll('.stock-input').forEach(function (inp) {
     inp.addEventListener('change', function () {
       const name = inp.dataset.name;
-      if (!state.inventory[name]) state.inventory[name] = { stock: 0, lowAlert: 0 };
-      state.inventory[name].stock = parseFloat(inp.value) || 0;
+      const target = parseFloat(inp.value);
+      if (isNaN(target) || target < 0) { renderInventory(); return; }
+      const current = inventoryStockFor(name);
+      const difference = target - current;
+      if (!difference) return;
+      const reason = prompt('Reason for changing ' + name + ' stock:', 'Stock count correction');
+      if (reason === null || !reason.trim()) { renderInventory(); return; }
+      recordInventoryMovement({ ingredientName: name, qty: difference, type: 'adjustment', reason: reason.trim() });
       saveState();
       renderInventory();
     });
   });
   document.querySelectorAll('.low-input').forEach(function (inp) {
     inp.addEventListener('change', function () {
-      const name = inp.dataset.name;
-      if (!state.inventory[name]) state.inventory[name] = { stock: 0, lowAlert: 0 };
-      state.inventory[name].lowAlert = parseFloat(inp.value) || 0;
+      const item = ensureInventoryItem(inp.dataset.name);
+      item.lowAlert = Math.max(0, parseFloat(inp.value) || 0);
       saveState();
       renderInventory();
     });
+  });
+  document.querySelectorAll('.add-stock-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () { addStockFor(btn.dataset.addStock); });
   });
   const alertEl = $('lowStockAlert');
   if (lowItems.length) {
     alertEl.classList.remove('hidden');
     alertEl.textContent = '⚠ Low / Out of stock: ' + lowItems.join(', ') + '. Consider restocking before next production.';
-  } else {
-    alertEl.classList.add('hidden');
-  }
+  } else alertEl.classList.add('hidden');
   const ivEl = $('inventoryValue');
   if (ivEl) ivEl.textContent = fmtKs(Math.round(inventoryValue()));
+  renderIngredientWasteOptions();
+  renderInventoryMovements();
   lucide.createIcons();
 }
 
 function addStockFor(name) {
+  if (!priceItemByName(name)) { showToast('Choose an ingredient from the Price List first.', 'error'); return; }
   const qty = prompt('Add stock for "' + name + '":', '');
   if (qty === null || qty === '') return;
-  const v = parseFloat(qty);
-  if (isNaN(v) || v < 0) { showToast('Enter a valid positive number.', 'error'); return; }
-  if (!state.inventory[name]) state.inventory[name] = { stock: 0, lowAlert: 0 };
-  state.inventory[name].stock = (state.inventory[name].stock || 0) + v;
+  const value = parseFloat(qty);
+  if (isNaN(value) || value <= 0) { showToast('Enter a valid positive number.', 'error'); return; }
+  const reason = prompt('Reason for this stock addition:', 'Manual stock addition');
+  if (reason === null || !reason.trim()) return;
+  recordInventoryMovement({ ingredientName: name, qty: value, type: 'adjustment', reason: reason.trim() });
   saveState();
   renderInventory();
-  showToast('Added ' + fmt(v) + ' to ' + name + ' stock.');
+  showToast('Added ' + fmt(value) + ' to ' + name + ' stock.');
 }
 
 $('addStockBtn').addEventListener('click', function () {
@@ -69,3 +122,24 @@ $('addStockBtn').addEventListener('click', function () {
   addStockFor(name.trim());
 });
 
+$('addIngredientWasteBtn').addEventListener('click', function () {
+  const name = $('ingredientWasteItem').value;
+  const qty = parseFloat($('ingredientWasteQty').value);
+  const date = $('ingredientWasteDate').value || today();
+  const reason = $('ingredientWasteReason').value.trim();
+  if (!name) { showToast('Choose the wasted ingredient.', 'error'); return; }
+  if (isNaN(qty) || qty <= 0) { showToast('Enter a valid waste quantity.', 'error'); return; }
+  if (!reason) { showToast('Enter the reason for this ingredient waste.', 'error'); return; }
+  const available = inventoryStockFor(name);
+  if (qty > available) {
+    showToast('Not enough ' + name + ' in stock. Available: ' + fmt(available) + '.', 'error');
+    return;
+  }
+  recordInventoryMovement({ date: date, ingredientName: name, qty: -qty,
+    type: 'ingredient_waste', reason: reason });
+  saveState();
+  $('ingredientWasteQty').value = '';
+  $('ingredientWasteReason').value = '';
+  renderInventory();
+  showToast('Ingredient waste recorded.');
+});

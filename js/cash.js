@@ -38,7 +38,11 @@ function removeCashAdjustment(id) {
 }
 
 function financeTotals() {
-  var sales = (state.sales || []).reduce(function (s, x) { return s + (x.amount || 0); }, 0);
+  // Revenue can be on credit. Only money actually received at the sale belongs
+  // in the cash drawer; customer repayments are counted separately below.
+  var sales = (state.sales || []).reduce(function (s, x) {
+    return s + (x.paidAmount === undefined ? (x.amount || 0) : (x.paidAmount || 0));
+  }, 0);
   var customerPay = (state.customerPayments || []).reduce(function (s, p) { return s + (p.amount || 0); }, 0);
   var adjustIn = cashAdjustments().reduce(function (s, a) { return s + (a.amount > 0 ? a.amount : 0); }, 0);
   var cashIn = sales + customerPay + adjustIn;
@@ -74,7 +78,7 @@ function renderCash() {
   var inList = $('cashInList');
   if (inList) {
     inList.innerHTML =
-      '<div class="flex justify-between py-1 border-b border-gray-700"><span>Sales (all entries)</span><span class="text-emerald-400 font-semibold">' + fmtKs(t.sales) + '</span></div>' +
+      '<div class="flex justify-between py-1 border-b border-gray-700"><span>Sales paid now</span><span class="text-emerald-400 font-semibold">' + fmtKs(t.sales) + '</span></div>' +
       '<div class="flex justify-between py-1 border-b border-gray-700"><span>Customer payments received</span><span class="text-emerald-400 font-semibold">' + fmtKs(t.customerPay) + '</span></div>' +
       '<div class="flex justify-between py-1 border-b border-gray-700"><span>Cash-in adjustments</span><span class="text-emerald-400 font-semibold">' + fmtKs(t.adjustIn) + '</span></div>' +
       '<div class="flex justify-between py-1 font-bold"><span>Total cash in</span><span class="text-emerald-400">' + fmtKs(t.cashIn) + '</span></div>';

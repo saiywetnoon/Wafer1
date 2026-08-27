@@ -179,8 +179,13 @@ async function pullFromGoogle(opts) {
     }
     if (remote.prices && Array.isArray(remote.prices) && remote.prices.length) state.prices = remote.prices;
     if (remote.entries) state.entries = remote.entries;
+    if (Array.isArray(remote.production)) state.production = remote.production;
+    if (Array.isArray(remote.sales)) state.sales = remote.sales;
+    if (remote.stock) state.stock = remote.stock;
     if (remote.settings) state.settings = Object.assign({ hourlyWage: 1500 }, remote.settings);
     if (remote.inventory) state.inventory = remote.inventory;
+    if (Array.isArray(remote.inventoryMovements)) state.inventoryMovements = remote.inventoryMovements;
+    if (remote.inventoryMovementVersion) state.inventoryMovementVersion = remote.inventoryMovementVersion;
     if (remote.customers) state.customers = remote.customers;
     if (remote.suppliers) state.suppliers = remote.suppliers;
     if (remote.purchases) state.purchases = remote.purchases;
@@ -190,7 +195,9 @@ async function pullFromGoogle(opts) {
     if (remote.recurringExpenses) state.recurringExpenses = remote.recurringExpenses;
     if (remote.waste) state.waste = remote.waste;
     if (remote.priceHistory) state.priceHistory = remote.priceHistory;
+    if (Array.isArray(remote.recipes)) state.recipes = remote.recipes;
     if (remote.cash) state.cash = Object.assign({ opening: 0, adjustments: [] }, remote.cash);
+    if (typeof migrateInventoryMovements === 'function') migrateInventoryMovements();
     state.version = 2;
     state.updatedAt = new Date().toISOString();
     saveState();

@@ -191,8 +191,13 @@ async function loadFromSheetsApi() {
     }
     if (remoteState.prices && Array.isArray(remoteState.prices)) state.prices = remoteState.prices;
     if (remoteState.entries) state.entries = remoteState.entries;
+    if (Array.isArray(remoteState.production)) state.production = remoteState.production;
+    if (Array.isArray(remoteState.sales)) state.sales = remoteState.sales;
+    if (remoteState.stock) state.stock = remoteState.stock;
     if (remoteState.settings) state.settings = Object.assign({ hourlyWage: 1500 }, remoteState.settings);
     if (remoteState.inventory) state.inventory = remoteState.inventory;
+    if (Array.isArray(remoteState.inventoryMovements)) state.inventoryMovements = remoteState.inventoryMovements;
+    if (remoteState.inventoryMovementVersion) state.inventoryMovementVersion = remoteState.inventoryMovementVersion;
     if (remoteState.customers) state.customers = remoteState.customers;
     if (remoteState.suppliers) state.suppliers = remoteState.suppliers;
     if (remoteState.purchases) state.purchases = remoteState.purchases;
@@ -202,7 +207,9 @@ async function loadFromSheetsApi() {
     if (remoteState.recurringExpenses) state.recurringExpenses = remoteState.recurringExpenses;
     if (remoteState.waste) state.waste = remoteState.waste;
     if (remoteState.priceHistory) state.priceHistory = remoteState.priceHistory;
+    if (Array.isArray(remoteState.recipes)) state.recipes = remoteState.recipes;
     if (remoteState.cash) state.cash = Object.assign({ opening: 0, adjustments: [] }, remoteState.cash);
+    if (typeof migrateInventoryMovements === 'function') migrateInventoryMovements();
     state.version = 2;
     state.updatedAt = new Date().toISOString();
     saveState();

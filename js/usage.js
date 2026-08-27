@@ -60,7 +60,7 @@ $('copyYesterdayBtn').addEventListener('click', function () {
   d.setDate(d.getDate() - 1);
   const off = d.getTimezoneOffset();
   const yDate = new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
-  const yEntry = state.entries[yDate];
+  const yEntry = prodList().filter(function (p) { return p.date === yDate; }).pop();
   if (!yEntry || !yEntry.usage) {
     showToast('No entry found for yesterday (' + yDate + ').', 'info');
     return;

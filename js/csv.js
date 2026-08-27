@@ -25,13 +25,16 @@ $('exportCsvBtn').addEventListener('click', function () {
   lines.push('Date,Pieces,Bags,Weight/Roll (g),Mix Weight (g),Expected Rolls,vs Actual,Ingredient Cost (Ks),Additional (Ks),Capital (Ks),Labor Min,Labor Cost (Ks),Cost/Piece (Ks),Notes');
   prodList().forEach(function (p) {
     const ing = (p.capital || 0) - (p.additionalCost || 0);
-    lines.push([p.date, p.pieces, p.bags, p.weightPerRoll || 0, p.mixWeight || 0, p.expectedRolls || '', (p.expectedRolls ? (p.pieces - p.expectedRolls) : ''), Math.round(ing), p.additionalCost || 0, p.capital || 0, p.laborMinutes || 0, p.laborCost || 0, p.costPerPiece || 0, (p.notes || '').replace(/,/g, ';')].join(','));
+    lines.push(csvRow([p.date, p.pieces, p.bags, p.weightPerRoll || 0, p.mixWeight || 0, p.expectedRolls || '', (p.expectedRolls ? (p.pieces - p.expectedRolls) : ''), Math.round(ing), p.additionalCost || 0, p.capital || 0, p.laborMinutes || 0, p.laborCost || 0, p.costPerPiece || 0, p.notes || '']));
   });
   lines.push('');
   lines.push('=== SALES (SOLD) ===');
-  lines.push('Date,Bags,Pieces,Pieces/Bag,Price/Bag (Ks),Amount (Ks),COGS (Ks),Net (Ks)');
+  lines.push('Date,Receipt,Customer,Due Date,Bags,Pieces,Pieces/Bag,Price/Bag (Ks),Amount (Ks),Paid (Ks),Credit (Ks),COGS (Ks),Net (Ks)');
   salesList().forEach(function (s) {
-    lines.push([s.date, s.bags, s.pieces, s.bags ? (s.pieces / s.bags).toFixed(1) : '', s.price, s.amount || 0, s.cogs || 0, s.net || 0].join(','));
+    const customer = typeof saleCustomer === 'function' ? saleCustomer(s.customerId) : null;
+    const paid = s.paidAmount === undefined ? (s.amount || 0) : (s.paidAmount || 0);
+    const credit = Math.max(0, (s.amount || 0) - paid);
+    lines.push(csvRow([s.date, s.receiptNo || s.id, customer ? customer.name : 'Walk-in', s.dueDate || '', s.bags, s.pieces, s.bags ? (s.pieces / s.bags).toFixed(1) : '', s.price, s.amount || 0, paid, credit, s.cogs || 0, s.net || 0]));
   });
   const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');

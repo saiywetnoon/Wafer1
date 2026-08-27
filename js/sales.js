@@ -7,6 +7,31 @@
    ============================================================ */
 $('addSaleBtn').addEventListener('click', saveSale);
 
+function saleCustomer(id) {
+  return (state.customers || []).find(function (customer) { return customer.id === id; }) || null;
+}
+function saleCreditAmount(sale) {
+  return Math.max(0, (sale.amount || 0) - (sale.paidAmount === undefined ? (sale.amount || 0) : sale.paidAmount));
+}
+function applySaleCreditChange(oldSale, newSale) {
+  const changes = {};
+  if (oldSale && oldSale.customerId) changes[oldSale.customerId] = (changes[oldSale.customerId] || 0) - saleCreditAmount(oldSale);
+  if (newSale && newSale.customerId) changes[newSale.customerId] = (changes[newSale.customerId] || 0) + saleCreditAmount(newSale);
+  Object.keys(changes).forEach(function (customerId) {
+    const customer = saleCustomer(customerId);
+    if (customer && changes[customerId]) customer.debt = Math.max(0, (customer.debt || 0) + changes[customerId]);
+  });
+}
+function renderSaleCustomerOptions(selected) {
+  const select = $('saleCustomer');
+  if (!select) return;
+  const current = selected === undefined ? select.value : selected;
+  select.innerHTML = '<option value="">Walk-in / no customer</option>' + (state.customers || []).map(function (customer) {
+    return '<option value="' + esc(customer.id) + '">' + esc(customer.name) + '</option>';
+  }).join('');
+  select.value = current || '';
+}
+
 function saveSale() {
   const date = validateText($('saleDate'));
   const bags = validateNum($('saleBags'));
@@ -19,16 +44,44 @@ function saveSale() {
   const editId = document.getElementById('editSaleId').value;
   const isUpdate = !!editId;
   const amount = bags * price;
+  const customerId = $('saleCustomer').value || '';
+  const paymentStatus = $('salePaymentStatus').value || 'paid';
+  const dueDate = $('saleDueDate').value || '';
+  let paidAmount = parseFloat($('salePaidNow').value);
+  if (paymentStatus === 'paid' || isNaN(paidAmount)) paidAmount = paymentStatus === 'credit' ? 0 : amount;
+  paidAmount = Math.max(0, Math.min(amount, paidAmount));
+  if (paymentStatus !== 'paid' && !customerId) {
+    showToast('Choose a customer for a partial or credit sale.', 'error');
+    return;
+  }
+  if (paymentStatus !== 'paid' && paidAmount >= amount) {
+    showToast('Choose Paid in full when the entire sale is paid now.', 'error');
+    return;
+  }
   const record = {
     id: isUpdate ? editId : uid(),
     date: date, bags: Math.round(bags), pieces: Math.round(pieces),
-    price: price, amount: Math.round(amount), cogs: 0, avgCost: 0, net: 0
+    price: price, amount: Math.round(amount), paidAmount: Math.round(paidAmount),
+    customerId: customerId, paymentStatus: paymentStatus, dueDate: dueDate,
+    receiptNo: isUpdate ? '' : 'CR-' + Date.now().toString(36).toUpperCase(),
+    cogs: 0, avgCost: 0, net: 0
   };
+
+  const shortage = canSaveSale(record);
+  if (shortage) {
+    showToast('Not enough finished stock on ' + shortage.date + '. Available: ' + fmt(shortage.available) + ' pieces; sale needs ' + fmt(shortage.requested) + '.', 'error');
+    return;
+  }
 
   if (isUpdate) {
     const idx = state.sales.findIndex(function (s) { return s.id === record.id; });
-    if (idx >= 0) state.sales[idx] = record;
+    if (idx >= 0) {
+      record.receiptNo = state.sales[idx].receiptNo || ('CR-' + record.id.toUpperCase());
+      applySaleCreditChange(state.sales[idx], record);
+      state.sales[idx] = record;
+    }
   } else {
+    applySaleCreditChange(null, record);
     state.sales.push(record);
   }
   rebuildStockAndCogs();
@@ -44,6 +97,10 @@ function saveSale() {
   $('saleBags').value = '';
   $('salePieces').value = '';
   $('salePrice').value = '';
+  $('saleCustomer').value = '';
+  $('salePaymentStatus').value = 'paid';
+  $('salePaidNow').value = '';
+  $('saleDueDate').value = '';
   updateSaleLive();
 }
 
@@ -53,12 +110,17 @@ function updateSaleLive() {
   const price = parseFloat($('salePrice').value) || 0;
   const pieces = parseFloat($('salePieces').value) || 0;
   const amount = bags * price;
+  const status = $('salePaymentStatus') ? $('salePaymentStatus').value : 'paid';
+  let paid = parseFloat($('salePaidNow') ? $('salePaidNow').value : '');
+  if (status === 'paid' || isNaN(paid)) paid = status === 'credit' ? 0 : amount;
+  paid = Math.max(0, Math.min(amount, paid));
   const onHand = (state.stock && state.stock.pieces) || 0;
   if ($('saleAmountLive')) $('saleAmountLive').textContent = fmtKs(amount);
   if ($('saleStockLive')) $('saleStockLive').textContent = fmt(onHand) + ' pieces ready';
   if ($('salePiecesBag')) $('salePiecesBag').textContent = bags > 0 ? (pieces / bags).toFixed(1) : '—';
+  if ($('saleCreditLive')) $('saleCreditLive').textContent = 'Credit: ' + fmtKs(Math.max(0, amount - paid));
 }
-['saleBags', 'salePieces', 'salePrice'].forEach(function (id) {
+['saleBags', 'salePieces', 'salePrice', 'salePaidNow', 'salePaymentStatus'].forEach(function (id) {
   $(id).addEventListener('input', updateSaleLive);
 });
 
@@ -70,6 +132,10 @@ function selectSaleToEdit(id) {
   $('saleBags').value = s.bags;
   $('salePieces').value = s.pieces;
   $('salePrice').value = s.price;
+  renderSaleCustomerOptions(s.customerId || '');
+  $('salePaymentStatus').value = s.paymentStatus || (saleCreditAmount(s) > 0 ? 'credit' : 'paid');
+  $('salePaidNow').value = s.paidAmount === undefined ? s.amount : s.paidAmount;
+  $('saleDueDate').value = s.dueDate || '';
   $('addSaleBtn').innerHTML = '<i data-lucide="save" class="w-4 h-4"></i> Update Sale';
   lucide.createIcons();
   updateSaleLive();
@@ -79,6 +145,8 @@ function selectSaleToEdit(id) {
 
 function removeSale(id) {
   if (!confirm('Delete this sale?')) return;
+  const sale = state.sales.find(function (item) { return item.id === id; });
+  if (sale) applySaleCreditChange(sale, null);
   state.sales = state.sales.filter(function (s) { return s.id !== id; });
   rebuildStockAndCogs();
   saveState();
@@ -92,6 +160,7 @@ function removeSale(id) {
    RENDER SALES TAB + READY-TO-SELL STOCK CARD
    ============================================================ */
 function renderSalesTab() {
+  renderSaleCustomerOptions();
   // Stock card
   const onHand = (state.stock && state.stock.pieces) || 0;
   const avgCost = stockAvgCostPerPiece();
@@ -111,18 +180,24 @@ function renderSalesTab() {
   if (!tbody) return;
   const list = salesList().slice().reverse();
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-gray-500">No sales logged yet. Record a bag sale here — it deducts from ready-to-sell stock.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-gray-500">No sales logged yet. Record a bag sale here — it deducts from ready-to-sell stock.</td></tr>';
     return;
   }
   tbody.innerHTML = list.map(function (s) {
+    const customer = saleCustomer(s.customerId);
+    const credit = saleCreditAmount(s);
+    const paid = s.paidAmount === undefined ? s.amount : s.paidAmount;
     return '<tr class="border-b border-gray-800">' +
       '<td class="py-2 pr-2 whitespace-nowrap">' + esc(s.date) + '</td>' +
+      '<td class="py-2 pr-2 text-xs">' + esc(customer ? customer.name : 'Walk-in') + '</td>' +
       '<td class="py-2 pr-2">' + fmt(s.bags) + '</td>' +
       '<td class="py-2 pr-2">' + fmt(s.pieces) + '</td>' +
       '<td class="py-2 pr-2">' + (s.bags > 0 ? (s.pieces / s.bags).toFixed(1) : '—') + '</td>' +
       '<td class="py-2 pr-2 text-emerald-400 font-semibold">' + fmtKs(s.amount) + '</td>' +
+      '<td class="py-2 pr-2 text-xs"><span class="text-emerald-400">' + fmtKs(paid) + '</span>' + (credit ? ' <span class="text-red-400">/ ' + fmtKs(credit) + '</span>' : '') + '</td>' +
       '<td class="py-2 pr-2 ' + (s.net >= 0 ? 'text-emerald-400' : 'text-red-400') + ' font-bold">' + fmtKs(s.net) + '</td>' +
       '<td class="py-2"><div class="flex gap-2">' +
+      '<button onclick="printSaleReceipt(\'' + s.id + '\')" class="text-emerald-400 hover:text-emerald-300 transition" title="Print receipt"><i data-lucide="receipt" class="w-4 h-4"></i></button>' +
       '<button onclick="selectSaleToEdit(\'' + s.id + '\')" class="text-amber-400 hover:text-amber-300 transition" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>' +
       '<button onclick="removeSale(\'' + s.id + '\')" class="text-red-400 hover:text-red-300 transition" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
       '</div></td></tr>';
@@ -130,13 +205,32 @@ function renderSalesTab() {
   lucide.createIcons();
 }
 
+function printSaleReceipt(id) {
+  const sale = state.sales.find(function (item) { return item.id === id; });
+  if (!sale) return;
+  const customer = saleCustomer(sale.customerId);
+  const paid = sale.paidAmount === undefined ? sale.amount : sale.paidAmount;
+  const credit = saleCreditAmount(sale);
+  const win = window.open('', '_blank', 'width=480,height=700');
+  if (!win) { showToast('Allow pop-ups to print this receipt.', 'error'); return; }
+  win.document.write('<!doctype html><html><head><title>Receipt ' + esc(sale.receiptNo || sale.id) + '</title><style>body{font-family:Arial,sans-serif;max-width:360px;margin:24px auto;color:#111}h1{font-size:20px;margin-bottom:4px}.muted{color:#555;font-size:12px}.line{display:flex;justify-content:space-between;border-bottom:1px solid #ddd;padding:8px 0}.total{font-weight:bold;font-size:17px}@media print{body{margin:0}}</style></head><body>' +
+    '<h1>Daily Crispy Roll Ledger</h1><div class="muted">Receipt ' + esc(sale.receiptNo || sale.id) + ' · ' + esc(sale.date) + '</div><div class="muted">Customer: ' + esc(customer ? customer.name : 'Walk-in') + '</div>' +
+    '<div class="line"><span>' + fmt(sale.bags) + ' bag(s) · ' + fmt(sale.pieces) + ' pcs</span><span>' + fmtKs(sale.amount) + '</span></div>' +
+    '<div class="line"><span>Paid now</span><span>' + fmtKs(paid) + '</span></div>' +
+    '<div class="line total"><span>Balance due</span><span>' + fmtKs(credit) + '</span></div>' +
+    (credit && sale.dueDate ? '<div class="line"><span>Due date</span><span>' + esc(sale.dueDate) + '</span></div>' : '') +
+    '<p class="muted">Thank you.</p><script>window.onload=function(){window.print();}</script></body></html>');
+  win.document.close();
+}
+
 /* Export sales to CSV */
 $('exportSalesCsvBtn').addEventListener('click', function () {
   const list = salesList();
   if (!list.length) { showToast('No sales to export.', 'info'); return; }
-  const lines = ['Date,Bags,Pieces,Pieces/Bag,Price/Bag (Ks),Amount (Ks),COGS (Ks),Net (Ks)'];
+  const lines = ['Date,Receipt,Customer,Due Date,Bags,Pieces,Pieces/Bag,Price/Bag (Ks),Amount (Ks),Paid (Ks),Credit (Ks),COGS (Ks),Net (Ks)'];
   list.forEach(function (s) {
-    lines.push([s.date, s.bags, s.pieces, s.bags ? (s.pieces / s.bags).toFixed(1) : '', s.price, s.amount || 0, s.cogs || 0, s.net || 0].join(','));
+    const customer = saleCustomer(s.customerId);
+    lines.push(csvRow([s.date, s.receiptNo || s.id, customer ? customer.name : 'Walk-in', s.dueDate || '', s.bags, s.pieces, s.bags ? (s.pieces / s.bags).toFixed(1) : '', s.price, s.amount || 0, s.paidAmount === undefined ? s.amount : s.paidAmount, saleCreditAmount(s), s.cogs || 0, s.net || 0]));
   });
   const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');

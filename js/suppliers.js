@@ -195,14 +195,15 @@ $('savePurchaseBtn').addEventListener('click', function () {
   if (!items.length) { showToast('Add at least one item with a valid qty and price.', 'error'); return; }
   var paidNow = parseFloat($('purchasePaidNow').value) || 0;
   if (paidNow > itemTotal) paidNow = itemTotal;
-  // Increase inventory for each purchased item
+  const purchaseId = uid();
+  // Purchases are immutable dated inventory movements, not direct stock edits.
   items.forEach(function (it) {
-    if (!state.inventory[it.name]) state.inventory[it.name] = { stock: 0, lowAlert: 0 };
-    state.inventory[it.name].stock = (state.inventory[it.name].stock || 0) + it.qty;
+    recordInventoryMovement({ date: date, ingredientName: it.name, qty: it.qty,
+      type: 'purchase', reason: 'Supplier purchase', referenceId: purchaseId });
   });
   if (!state.purchases) state.purchases = [];
   state.purchases.push({
-    id: uid(),
+    id: purchaseId,
     supplierId: supplierId,
     date: date,
     items: items,

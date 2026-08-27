@@ -7,7 +7,9 @@ let state = {
   sales: [],            // what you SOLD: { id, date, bags, pieces, price, amount, cogs, avgCost, net }
   stock: { pieces: 0, cost: 0 }, // finished goods ready to sell (cost basis for cogs)
   settings: { hourlyWage: 1500 },
-  inventory: {},   // { ingredientName: { stock, lowAlert } }
+  inventory: {},   // { ingredientName: { stock (derived snapshot), lowAlert } }
+  inventoryMovements: [], // [{ id, date, ingredientName, qty (+/-), type, reason, referenceId }]
+  inventoryMovementVersion: 0,
   customers: [],   // [{ id, name, phone, standingOrder, price, debt }]
   suppliers: [],   // [{ id, name, phone }]
   purchases: [],   // [{ id, supplierId, date, items: [{name, qty, unit, price, amount}], itemTotal, paidNow, note }]
@@ -17,6 +19,7 @@ let state = {
   recurringExpenses: [], // [{ id, name, amount }] monthly fixed costs (rent, net etc.)
   waste: [],       // [{ date, qty }] pieces scrapped
   priceHistory: [],// [{ date, name, old, new }]
+  recipes: [],     // [{ name, usage }] reusable production formulas
   cash: { opening: 0, adjustments: [] }, // [{ id, date, amount, label }]
   updatedAt: null
 };
@@ -63,6 +66,9 @@ function loadState() {
       if (parsed && parsed.entries) state.entries = parsed.entries;
       if (parsed && Array.isArray(parsed.prices) && parsed.prices.length) state.prices = parsed.prices;
       if (parsed && parsed.settings) state.settings = Object.assign({ hourlyWage: 1500 }, parsed.settings);
+      if (parsed && parsed.inventory && typeof parsed.inventory === 'object') state.inventory = parsed.inventory;
+      if (parsed && Array.isArray(parsed.inventoryMovements)) state.inventoryMovements = parsed.inventoryMovements;
+      if (parsed && parsed.inventoryMovementVersion) state.inventoryMovementVersion = parsed.inventoryMovementVersion;
       if (parsed && parsed.customers) state.customers = parsed.customers;
       if (parsed && parsed.suppliers) state.suppliers = parsed.suppliers;
       if (parsed && parsed.purchases) state.purchases = parsed.purchases;
@@ -73,6 +79,7 @@ function loadState() {
       if (parsed && Array.isArray(parsed.recurringExpenses)) state.recurringExpenses = parsed.recurringExpenses;
       if (parsed && Array.isArray(parsed.waste)) state.waste = parsed.waste;
       if (parsed && Array.isArray(parsed.priceHistory)) state.priceHistory = parsed.priceHistory;
+      if (parsed && Array.isArray(parsed.recipes)) state.recipes = parsed.recipes;
       if (parsed && parsed.cash && typeof parsed.cash === 'object') {
         state.cash = Object.assign({ opening: 0, adjustments: [] }, parsed.cash);
         if (!Array.isArray(state.cash.adjustments)) state.cash.adjustments = [];
@@ -85,6 +92,7 @@ function loadState() {
         state.stock = { pieces: parseFloat(parsed.stock.pieces) || 0, cost: parseFloat(parsed.stock.cost) || 0 };
       }
       state.version = 2;
+      if (typeof migrateInventoryMovements === 'function' && migrateInventoryMovements()) saveState();
     }
   } catch (e) { console.warn('Failed to load state', e); }
 }

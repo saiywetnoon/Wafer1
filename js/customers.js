@@ -21,6 +21,16 @@ function renderCustomers() {
   }).join('');
   if (current) paySel.value = current;
 
+  const statementSel = $('statementCustomer');
+  if (statementSel) {
+    const statementCurrent = statementSel.value;
+    statementSel.innerHTML = '<option value="">Choose customer…</option>' + customers.map(function (c) {
+      return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>';
+    }).join('');
+    statementSel.value = statementCurrent || '';
+    renderCustomerStatement();
+  }
+
   // Totals
   const standingBags = customers.reduce(function (s, c) { return s + (c.standingOrder || 0); }, 0);
   const standingRev = customers.reduce(function (s, c) { return s + ((c.standingOrder || 0) * (c.price || 0)); }, 0);
@@ -32,12 +42,51 @@ function renderCustomers() {
 }
 
 function deleteCustomer(id) {
+  const customer = (state.customers || []).find(function (c) { return c.id === id; });
+  const hasSales = (state.sales || []).some(function (sale) { return sale.customerId === id; });
+  if ((customer && customer.debt > 0) || hasSales) {
+    showToast('Keep this customer because they have a sale or an outstanding balance.', 'error');
+    return;
+  }
   if (!confirm('Remove this customer?')) return;
   state.customers = (state.customers || []).filter(function (c) { return c.id !== id; });
   saveState();
   renderCustomers();
   showToast('Customer removed.');
 }
+
+function renderCustomerStatement() {
+  const output = $('customerStatement');
+  const select = $('statementCustomer');
+  if (!output || !select) return;
+  const customerId = select.value;
+  if (!customerId) { output.textContent = 'Choose a customer to view sales and payments.'; return; }
+  const customer = (state.customers || []).find(function (c) { return c.id === customerId; });
+  if (!customer) { output.textContent = 'Customer not found.'; return; }
+  const rows = [];
+  (state.sales || []).filter(function (sale) { return sale.customerId === customerId; }).forEach(function (sale) {
+    const credit = saleCreditAmount(sale);
+    rows.push({ date: sale.date, order: 0, label: 'Sale ' + (sale.receiptNo || sale.id),
+      amount: credit, dueDate: sale.dueDate || '' });
+  });
+  (state.customerPayments || []).filter(function (payment) { return payment.customerId === customerId; }).forEach(function (payment) {
+    rows.push({ date: payment.date, order: 1, label: 'Payment received', amount: -Math.abs(payment.amount || 0), dueDate: '' });
+  });
+  rows.sort(function (a, b) { return a.date === b.date ? a.order - b.order : String(a.date).localeCompare(String(b.date)); });
+  if (!rows.length) { output.textContent = 'No customer-linked sales or payments yet.'; return; }
+  let running = 0;
+  output.innerHTML = rows.map(function (row) {
+    running += row.amount;
+    const isPayment = row.amount < 0;
+    return '<div class="flex justify-between gap-2 py-1.5 border-b border-gray-800 last:border-0">' +
+      '<div><span>' + esc(row.date) + ' · ' + esc(row.label) + '</span>' +
+      (row.dueDate ? '<span class="block text-[10px] text-amber-400">Due ' + esc(row.dueDate) + '</span>' : '') + '</div>' +
+      '<div class="text-right shrink-0"><span class="' + (isPayment ? 'text-emerald-400' : 'text-red-400') + ' font-semibold">' +
+      (isPayment ? '−' : '+') + fmtKs(Math.abs(row.amount)) + '</span><span class="block text-[10px] text-gray-500">Balance ' + fmtKs(Math.max(0, running)) + '</span></div></div>';
+  }).join('') + '<div class="flex justify-between pt-2 font-bold"><span>Current balance</span><span class="text-red-400">' + fmtKs(customer.debt || 0) + '</span></div>';
+}
+
+if ($('statementCustomer')) $('statementCustomer').addEventListener('change', renderCustomerStatement);
 
 $('addCustomerBtn').addEventListener('click', function () {
   const name = validateText($('custName'));
@@ -70,15 +119,20 @@ function adjustCustomerDebt(direction) {
   if (isNaN(amount) || amount <= 0) { showToast('Enter a valid amount.', 'error'); return; }
   const cust = (state.customers || []).find(function (c) { return c.id === id; });
   if (!cust) return;
-  cust.debt = Math.max(0, (cust.debt || 0) + (direction * amount));
+  const outstanding = Math.max(0, cust.debt || 0);
+  const appliedAmount = direction < 0 ? Math.min(amount, outstanding) : amount;
+  if (direction < 0 && appliedAmount === 0) { showToast('This customer has no outstanding debt.', 'info'); return; }
+  cust.debt = direction < 0 ? outstanding - appliedAmount : outstanding + appliedAmount;
   // Record cash actually received when a customer repays debt (feeds the Cash Drawer)
-  if (direction < 0 && amount > 0) {
+  if (direction < 0) {
     if (!state.customerPayments) state.customerPayments = [];
-    state.customerPayments.push({ id: uid(), customerId: id, date: today(), amount: Math.round(amount) });
+    state.customerPayments.push({ id: uid(), customerId: id, date: today(), amount: Math.round(appliedAmount) });
   }
   saveState();
   renderCustomers();
   $('paymentAmount').value = '';
-  showToast(direction < 0 ? 'Payment recorded — debt reduced.' : 'Debt added to customer.');
+  showToast(direction < 0
+    ? 'Payment recorded — debt reduced.' + (appliedAmount < amount ? ' Applied ' + fmtKs(appliedAmount) + ' (the outstanding balance).' : '')
+    : 'Debt added to customer.');
 }
 
