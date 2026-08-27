@@ -228,10 +228,39 @@ function triggerGoogleSync() {
   }, 700);
 }
 
+/* ---------- Backend-mode diagnostic (visible + console) ----------
+   Makes it obvious which backend this build is really wired to and whether the
+   sync engine (Supabase) actually loaded. A stale build or blocked CDN is then
+   trivially diagnosable instead of a baffling "script URL" prompt. */
+function reportBackendMode() {
+  const keys = !!(SUPABASE_URL_wafer && SUPABASE_ANON_KEY_wafer);
+  const lib = !!window.supabase;
+  const mode = SUPA.configured()
+    ? 'SUPABASE (URL-free, auto-sync)'
+    : (keys ? 'SUPABASE-CONFIGURED BUT LIB MISSING' : 'LEGACY APPS-SCRIPT');
+  console.log('%c[Daily Crispy Roll] Backend mode: ' + mode +
+    (keys && lib ? ' — ' + (window.__supaSrc || 'jsdelivr') + (window.__supaFallback ? ' (fallback CDN)' : '') : ''),
+    'background:#10b981;color:#fff;padding:2px 6px;border-radius:4px;');
+
+  const st = $('googleSyncStatus');
+  if (!st) return;
+  if (!keys && !lib) {
+    st.textContent = 'Backend: legacy Apps-Script mode. Configure a server URL, or add Supabase keys to enable one-click sync.';
+    st.className = 'text-xs text-amber-400 mt-2';
+  } else if (keys && !lib) {
+    st.textContent = 'Sync engine failed to load (network/CDN blocked). You are being shown the old mode — check your internet or blocker, then reload.';
+    st.className = 'text-xs text-red-400 mt-2';
+  }
+}
+
 /* ============================================================
    BOOT — the account gate comes first, then the ledger starts.
    ============================================================ */
 async function appStart() {
+  // 0) Diagnostic: show which backend this build is actually using so a stale
+  //    build / failed CDN is obvious instead of a confusing "script URL" prompt.
+  reportBackendMode();
+
   // 1) Account gate: without a valid session nobody reaches the app.
   const authed = await authBootstrap();
   if (!authed) return; // login / sign-up screen is showing

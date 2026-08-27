@@ -20,7 +20,8 @@ const SUPA = {
 
   /* True only when the dev has pasted URL + anon key in config.js. */
   configured() {
-    return !!(SUPABASE_URL_wafer && SUPABASE_ANON_KEY_wafer && window.supabase);
+    const ready = !!(SUPABASE_URL_wafer && SUPABASE_ANON_KEY_wafer && window.supabase);
+    return ready;
   },
 
   /* Lazy-initialise the Supabase client + reflect auth state. */
