@@ -52,6 +52,16 @@ function cloudIsAvailable() {
   if (SUPA.configured()) return true;
   return !!cloudEndpoint() && !!cloudAccountToken();
 }
+/* Can sync / upload / download run RIGHT NOW?
+   Supabase mode needs NO deployment URL — the logged-in session IS the
+   connection. Legacy mode still requires the Apps Script URL + a token. */
+function cloudReady() {
+  if (SUPA.configured()) return !!(SUPA.user && SUPA.user.id);
+  return !!cloudEndpoint() && !!cloudAccountToken();
+}
+function cloudNeedsUrl() {
+  return !SUPA.configured();
+}
 /* Supabase-native push/get (primary path). */
 async function supabasePush() {
   const uid = SUPA.user && SUPA.user.id;
@@ -184,8 +194,10 @@ async function cloudAfterSignIn() {
   const email = cloudSignedInEmail();
   if (!email || !cloudAccountToken()) return false;
   renderCloudStatus();
-  if (!cloudEndpoint()) {
-    updateGoogleSyncStatus('Signed in. Add your Apps Script URL in the Online/Cloud card to go online.', 'info');
+  if (!cloudReady()) {
+    updateGoogleSyncStatus(cloudNeedsUrl()
+      ? 'Signed in. Add your Apps Script URL in the Online/Cloud card to go online.'
+      : 'Signed in. Syncing your account…', 'info');
     return false;
   }
   // Legacy Google-account binding only (not used in account mode).
