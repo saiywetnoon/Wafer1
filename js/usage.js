@@ -4,9 +4,22 @@
 function currentUsage() {
   const usage = {};
   state.prices.forEach(function (ing) {
-    usage[ing.name] = draftUsage[ing.name] !== undefined ? draftUsage[ing.name] : (DEFAULT_USAGE[ing.name] || 0);
+    usage[ing.name] = draftUsage[ing.name] !== undefined ? draftUsage[ing.name] : defaultUsageFor(ing.name);
   });
   return usage;
+}
+
+function defaultUsageFor(name) {
+  if (DEFAULT_USAGE[name] !== undefined) return DEFAULT_USAGE[name];
+  return 0;
+}
+
+function previousProductionUsage(date) {
+  return (state.production || []).filter(function (production) {
+    return production.date < date && production.usage;
+  }).sort(function (a, b) {
+    return String(b.date).localeCompare(String(a.date));
+  })[0];
 }
 
 function renderUsageTable() {

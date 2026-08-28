@@ -4,22 +4,27 @@
 function renderAll() {
   migrateLegacyEntries();
   rebuildStockAndCogs();
-  $('logDate').value = today();
+  const formDate = $('logDate').value || today();
+  const todayProduction = (state.production || []).find(function (production) { return production.date === formDate; });
+  const priorProduction = previousProductionUsage(formDate);
+  if (!Object.keys(draftUsage).length) {
+    draftUsage = Object.assign({}, todayProduction && todayProduction.usage
+      ? todayProduction.usage
+      : (priorProduction && priorProduction.usage ? priorProduction.usage : {}));
+  }
+  $('logDate').value = formDate;
   $('saleDate').value = today();
   $('hourlyWage').value = state.settings.hourlyWage || 1500;
   renderPriceTable();
   renderUsageTable();
-  draftUsage = {};
-  state.prices.forEach(function (ing) {
-    const input = document.querySelector('.usage-input[data-name="' + ing.name + '"]');
-    if (input) input.value = draftUsage[ing.name] || 0;
-  });
-  $('additionalCost').value = 0;
-  $('logBagsProduced').value = 0;
-  $('logPieces').value = 0;
-  $('logLabor').value = 0;
-  $('logWeightPerRoll').value = 0;
-  $('logNotes').value = '';
+  if (todayProduction) {
+    $('additionalCost').value = todayProduction.additionalCost || 0;
+    $('logBagsProduced').value = todayProduction.bags || 0;
+    $('logPieces').value = todayProduction.pieces || 0;
+    $('logLabor').value = todayProduction.laborMinutes || 0;
+    $('logWeightPerRoll').value = todayProduction.weightPerRoll || 0;
+    $('logNotes').value = todayProduction.notes || '';
+  }
   renderProduction();
   renderSalesTab();
   renderDashboard();
@@ -281,6 +286,7 @@ async function appStart() {
 
   // 4) Load, render, then reconcile with the account's cloud copy.
   loadState();
+  loadDraftIfNewer();
   renderAll();
   initGoogleSignIn();
   // Supabase: subscribe to live updates so other devices appear automatically.

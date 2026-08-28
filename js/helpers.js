@@ -250,7 +250,10 @@ function recordInventoryMovement(movement) {
   return record;
 }
 function migrateInventoryMovements() {
-  if (state.inventoryMovementVersion >= 1) return false;
+  const hasLegacyStock = Object.keys(state.inventory || {}).some(function (name) {
+    return (parseFloat(state.inventory[name].stock) || 0) > 0;
+  });
+  if (state.inventoryMovementVersion >= 1 && (!hasLegacyStock || (state.inventoryMovements || []).length)) return false;
   Object.keys(state.inventory || {}).forEach(function (name) {
     const qty = parseFloat(state.inventory[name].stock) || 0;
     if (qty > 0) recordInventoryMovement({
@@ -260,6 +263,25 @@ function migrateInventoryMovements() {
   });
   state.inventoryMovementVersion = 1;
   return true;
+}
+
+function normalizeCustomerBalances() {
+  const balances = {};
+  (state.customers || []).forEach(function (customer) { balances[customer.id] = 0; });
+  (state.sales || []).forEach(function (sale) {
+    if (sale.customerId && balances[sale.customerId] !== undefined) balances[sale.customerId] += saleCreditAmount(sale);
+  });
+  (state.customerPayments || []).forEach(function (payment) {
+    if (payment.customerId && balances[payment.customerId] !== undefined) balances[payment.customerId] -= Math.abs(parseFloat(payment.amount) || 0);
+  });
+  (state.customers || []).forEach(function (customer) {
+    customer.debt = customer.debt === undefined || customer.debt === null
+      ? Math.max(0, Math.round((balances[customer.id] || 0) * 100) / 100)
+      : Math.max(0, parseFloat(customer.debt) || 0);
+    customer.standingOrder = Math.max(0, parseFloat(customer.standingOrder) || 0);
+    customer.price = Math.max(0, parseFloat(customer.price) || 1300);
+    customer.phone = customer.phone || '';
+  });
 }
 function inventoryUsageShortage(oldUsage, newUsage) {
   const names = new Set(Object.keys(oldUsage || {}).concat(Object.keys(newUsage || {})));

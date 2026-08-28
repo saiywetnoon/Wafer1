@@ -93,6 +93,10 @@ function loadState() {
       }
       state.version = 2;
       if (typeof migrateInventoryMovements === 'function' && migrateInventoryMovements()) saveState();
+      if (typeof normalizeCustomerBalances === 'function') {
+        normalizeCustomerBalances();
+        saveState();
+      }
     }
   } catch (e) { console.warn('Failed to load state', e); }
 }
