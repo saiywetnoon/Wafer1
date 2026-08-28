@@ -183,6 +183,15 @@ async function cloudList() { return SUPA.configured() ? { ok: true, backups: [] 
 async function cloudRestore() { return SUPA.configured() ? { ok: false, message: 'Use Download backup instead (Supabase).' } : cloudPost('restore', { fileName: '' }); }
 async function cloudClear() { return SUPA.configured() ? { ok: true, message: 'Cleared.' } : cloudPost('clear'); }
 /* ---------- Merge a remote cloud state into the current workspace ---------- */
+/* Copy every listed array field from a remote payload onto state, but only when
+   the remote actually carries that array (so a partial copy can never null or
+   downgrade a populated local collection). */
+function copyArrayFields(remote, fieldNames) {
+  fieldNames.forEach(function (field) {
+    if (Array.isArray(remote[field])) state[field] = remote[field];
+  });
+}
+
 function applyCloudRemote(remote, remoteTs) {
   if (!remote || !remote.state) return false;
   const r = remote.state;
@@ -190,34 +199,31 @@ function applyCloudRemote(remote, remoteTs) {
   // especially important for inventory, where the movement ledger is the
   // source of truth rather than the cached stock snapshot.
   if (stateDataCount(r) < stateDataCount(state)) return false;
+
+  // Scalar / object fields (guarded against empty/partial values).
   if (r.prices && Array.isArray(r.prices) && r.prices.length) state.prices = r.prices;
   if (r.entries) state.entries = r.entries;
-  if (Array.isArray(r.production)) state.production = r.production;
-  if (Array.isArray(r.sales)) state.sales = r.sales;
   if (r.stock && typeof r.stock === 'object') state.stock = { pieces: parseFloat(r.stock.pieces) || 0, cost: parseFloat(r.stock.cost) || 0 };
   if (r.settings) state.settings = Object.assign({ hourlyWage: 1500 }, r.settings);
   if (r.inventory && typeof r.inventory === 'object') state.inventory = r.inventory;
   if (Array.isArray(r.inventoryMovements) && r.inventoryMovements.length) {
-    // The movement ledger is the source of truth — never let a remote/older copy
-    // drop local movements. Merge by record id instead of blind-replacing.
+    // Movement ledger is the source of truth: merge, never blind-replace, so a
+    // remote/older copy cannot drop local movements.
     state.inventoryMovements = mergeMovements(state.inventoryMovements || [], r.inventoryMovements);
   }
   if (r.inventoryMovementVersion) state.inventoryMovementVersion = r.inventoryMovementVersion;
-  if (Array.isArray(r.customers)) state.customers = r.customers;
-  if (Array.isArray(r.suppliers)) state.suppliers = r.suppliers;
-  if (Array.isArray(r.purchases)) state.purchases = r.purchases;
-  if (Array.isArray(r.payments)) state.payments = r.payments;
-  if (Array.isArray(r.customerPayments)) state.customerPayments = r.customerPayments;
-  if (Array.isArray(r.expenses)) state.expenses = r.expenses;
-  if (Array.isArray(r.recurringExpenses)) state.recurringExpenses = r.recurringExpenses;
-  if (Array.isArray(r.waste)) state.waste = r.waste;
-  if (Array.isArray(r.priceHistory)) state.priceHistory = r.priceHistory;
-  if (Array.isArray(r.recipes)) state.recipes = r.recipes;
   if (r.cash) state.cash = Object.assign({ opening: 0, adjustments: [] }, r.cash);
+
+  // Plain array collections share identical copy semantics.
+  copyArrayFields(r, [
+    'production', 'sales', 'customers', 'suppliers', 'purchases', 'payments',
+    'customerPayments', 'expenses', 'recurringExpenses', 'waste', 'priceHistory', 'recipes'
+  ]);
+
   if (typeof normalizeCustomerBalances === 'function') normalizeCustomerBalances();
   if (typeof migrateInventoryMovements === 'function') migrateInventoryMovements();
-  // The first local render may have populated the form with local defaults.
-  // Let the cloud copy provide today's/previous production recipe instead.
+  // The first local render may have populated the form with local defaults; let
+  // the cloud copy provide today's / previous production recipe instead.
   draftUsage = {};
   state.version = 2;
   /* Keep the workspace's "modified" stamp in sync with the remote copy so a

@@ -177,36 +177,45 @@ function persistDraft() {
     try { localStorage.setItem(companyDraftKey(), JSON.stringify(captureDraft())); } catch (e) { console.warn('Could not save draft', e); }
   }, 400);
 }
+/* True when a saved draft represents real in-progress work. Blank / all-zero
+   drafts must NOT be restored — they would otherwise hide the previous day's
+   recipe that should prefill today's production form (setDefaultProductionUsage()
+   bails out as soon as draftUsage has any key). */
+function draftHasRealContent(d) {
+  if (!d) return false;
+  const usage = d.usage || {};
+  const anyUsage = Object.keys(usage).some(function (k) { return toFinite(usage[k]) > 0; });
+  return anyUsage
+    || toFinite(d.bagsProduced) > 0
+    || toFinite(d.pieces) > 0
+    || toFinite(d.laborMinutes) > 0
+    || toFinite(d.additionalCost) > 0
+    || String(d.notes || '').trim() !== '';
+}
 function loadDraftIfNewer() {
   if (draftRestored) return;
   try {
     const raw = localStorage.getItem(companyDraftKey());
     if (!raw) return;
     const d = JSON.parse(raw);
-    if (!d || !d.usage) return;
-    // Only restore draft if it's for today or is newer than a full entry on that date
-    if (d.date !== today()) return;
+    if (!d || !d.usage || d.date !== today()) return; // only restore a same-day draft
     const existing = (state.production || []).find(function (p) { return p.date === d.date; });
-    if (existing) return; // A saved production exists for that date → don't overwrite with draft
-    // Never let a blank / all-zero draft hide the previous day's recipe that should
-    // prefill today's usage. Only restore a draft that represents real in-progress work.
-    const dUsage = d.usage || {};
-    const hasRealContent = Object.keys(dUsage).some(function (k) { return parseFloat(dUsage[k]) > 0; })
-      || (parseFloat(d.bagsProduced) || 0) > 0
-      || (parseFloat(d.pieces) || 0) > 0
-      || (parseFloat(d.laborMinutes) || 0) > 0
-      || (parseFloat(d.additionalCost) || 0) > 0
-      || String(d.notes || '').trim() !== '';
-    if (!hasRealContent) return;
+    if (existing || !draftHasRealContent(d)) return; // never clobber a saved batch or an empty form
     draftUsage = Object.assign({}, d.usage);
-    $('logDate').value = d.date || today();
-    $('additionalCost').value = d.additionalCost || 0;
-    $('logBagsProduced').value = d.bagsProduced || 0;
-    $('logPieces').value = d.pieces || 0;
-    $('logWeightPerRoll').value = d.weightPerRoll || 0;
-    $('logNotes').value = d.notes || '';
-    $('logLabor').value = d.laborMinutes || 0;
-    $('hourlyWage').value = d.hourlyWage || state.settings.hourlyWage || 1500;
+    const fields = {
+      logDate: d.date || today(),
+      additionalCost: d.additionalCost || 0,
+      logBagsProduced: d.bagsProduced || 0,
+      logPieces: d.pieces || 0,
+      logWeightPerRoll: d.weightPerRoll || 0,
+      logNotes: d.notes || '',
+      logLabor: d.laborMinutes || 0,
+      hourlyWage: d.hourlyWage || state.settings.hourlyWage || 1500
+    };
+    Object.keys(fields).forEach(function (id) {
+      const el = $(id);
+      if (el) el.value = fields[id];
+    });
     draftRestored = true;
   } catch (e) { console.warn('Failed to restore draft', e); }
 }

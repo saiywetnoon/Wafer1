@@ -1,50 +1,54 @@
 /* ============================================================
    CUSTOMERS
    ============================================================ */
-function renderCustomers() {
-  const listBody = $('customerListBody');
-  const customers = state.customers || [];
-  listBody.innerHTML = customers.length ? customers.map(function (c) {
-    return '<tr class="border-b border-gray-800">' +
-      '<td class="py-1.5 pr-2 font-medium">' + esc(c.name) + (c.phone ? ' <span class="text-gray-500">(' + esc(c.phone) + ')</span>' : '') + '</td>' +
-      '<td class="py-1.5 pr-2">' + fmt(c.standingOrder || 0) + ' bags</td>' +
-      '<td class="py-1.5 pr-2 ' + ((c.debt || 0) > 0 ? 'text-red-400' : 'text-emerald-400') + ' font-semibold">' + fmtKs(c.debt || 0) + '</td>' +
-      '<td class="py-1.5"><button onclick="deleteCustomer(\'' + c.id + '\')" class="text-red-500 hover:text-red-400" title="Remove customer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></td>' +
-      '</tr>';
-  }).join('') : '<tr><td colspan="4" class="py-4 text-center text-gray-500">No customers yet. Add your first regular customer above.</td></tr>';
-
-  // Payment dropdown
-  const paySel = $('paymentCustomer');
-  const current = paySel.value;
-  paySel.innerHTML = '<option value="">Select customer...</option>' + customers.map(function (c) {
-    return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
+/* Rebuild the customer <option> markup for any dropdown. */
+function customerOptions(customers, placeholder) {
+  return '<option value="">' + esc(placeholder || 'Select customer...') + '</option>' + (customers || []).map(function (c) {
+    return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>';
   }).join('');
-  if (current) paySel.value = current;
+}
+/* Refill a <select> with customer options, preserving the current selection. */
+function refillCustomerSelect(select, customers, placeholder) {
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = customerOptions(customers, placeholder);
+  select.value = current || '';
+}
 
-  const statementSel = $('statementCustomer');
-  if (statementSel) {
-    const statementCurrent = statementSel.value;
-    statementSel.innerHTML = '<option value="">Choose customer…</option>' + customers.map(function (c) {
-      return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>';
-    }).join('');
-    statementSel.value = statementCurrent || '';
-    renderCustomerStatement();
+function renderCustomers() {
+  const customers = state.customers || [];
+  const listBody = $('customerListBody');
+  if (listBody) {
+    listBody.innerHTML = customers.length ? customers.map(function (c) {
+      const debt = toFinite(c.debt);
+      return '<tr class="border-b border-gray-800">' +
+        '<td class="py-1.5 pr-2 font-medium">' + esc(c.name) + (c.phone ? ' <span class="text-gray-500">(' + esc(c.phone) + ')</span>' : '') + '</td>' +
+        '<td class="py-1.5 pr-2">' + fmt(c.standingOrder || 0) + ' bags</td>' +
+        '<td class="py-1.5 pr-2 ' + (debt > 0 ? 'text-red-400' : 'text-emerald-400') + ' font-semibold">' + fmtKs(debt) + '</td>' +
+        '<td class="py-1.5"><button onclick="deleteCustomer(\'' + c.id + '\')" class="text-red-500 hover:text-red-400" title="Remove customer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></td>' +
+        '</tr>';
+    }).join('') : '<tr><td colspan="4" class="py-4 text-center text-gray-500">No customers yet. Add your first regular customer above.</td></tr>';
   }
 
-  // Totals
-  const standingBags = customers.reduce(function (s, c) { return s + (c.standingOrder || 0); }, 0);
-  const standingRev = customers.reduce(function (s, c) { return s + ((c.standingOrder || 0) * (c.price || 0)); }, 0);
-  const totalDebt = customers.reduce(function (s, c) { return s + (c.debt || 0); }, 0);
-  $('standingOrdersTotal').textContent = fmt(standingBags) + ' bags';
-  $('standingRevenueTotal').textContent = fmtKs(standingRev);
-  $('totalDebt').textContent = fmtKs(totalDebt);
+  refillCustomerSelect($('paymentCustomer'), customers, 'Select customer...');
+  refillCustomerSelect($('statementCustomer'), customers, 'Choose customer…');
+  renderCustomerStatement();
+
+  if ($('standingOrdersTotal') && $('standingRevenueTotal') && $('totalDebt')) {
+    const standingBags = customers.reduce(function (s, c) { return s + toFinite(c.standingOrder); }, 0);
+    const standingRev = customers.reduce(function (s, c) { return s + (toFinite(c.standingOrder) * toFinite(c.price, 1300)); }, 0);
+    const totalDebt = customers.reduce(function (s, c) { return s + toFinite(c.debt); }, 0);
+    $('standingOrdersTotal').textContent = fmt(standingBags) + ' bags';
+    $('standingRevenueTotal').textContent = fmtKs(standingRev);
+    $('totalDebt').textContent = fmtKs(totalDebt);
+  }
   lucide.createIcons();
 }
 
 function deleteCustomer(id) {
   const customer = (state.customers || []).find(function (c) { return c.id === id; });
   const hasSales = (state.sales || []).some(function (sale) { return sale.customerId === id; });
-  if ((customer && customer.debt > 0) || hasSales) {
+  if ((customer && toFinite(customer.debt) > 0) || hasSales) {
     showToast('Keep this customer because they have a sale or an outstanding balance.', 'error');
     return;
   }
@@ -85,14 +89,14 @@ function renderCustomerStatement() {
   if (!rows.length) { output.textContent = 'No customer-linked sales or payments yet.'; return; }
   let running = 0;
   output.innerHTML = rows.map(function (row) {
-    running += row.amount;
-    const isPayment = row.amount < 0;
+    running += toMoney(row.amount);
+    const isPayment = toFinite(row.amount) < 0;
     return '<div class="flex justify-between gap-2 py-1.5 border-b border-gray-800 last:border-0">' +
-      '<div><span>' + esc(row.date) + ' · ' + esc(row.label) + '</span>' +
+      '<div><span>' + esc(row.date || '—') + ' · ' + esc(row.label) + '</span>' +
       (row.dueDate ? '<span class="block text-[10px] text-amber-400">Due ' + esc(row.dueDate) + '</span>' : '') + '</div>' +
       '<div class="text-right shrink-0"><span class="' + (isPayment ? 'text-emerald-400' : 'text-red-400') + ' font-semibold">' +
-      (isPayment ? '−' : '+') + fmtKs(Math.abs(row.amount)) + '</span><span class="block text-[10px] text-gray-500">Balance ' + fmtKs(Math.max(0, running)) + '</span></div></div>';
-  }).join('') + '<div class="flex justify-between pt-2 font-bold"><span>Current balance</span><span class="text-red-400">' + fmtKs(customer.debt || 0) + '</span></div>';
+      (isPayment ? '−' : '+') + fmtKs(Math.abs(toFinite(row.amount))) + '</span><span class="block text-[10px] text-gray-500">Balance ' + fmtKs(Math.max(0, running)) + '</span></div></div>';
+  }).join('') + '<div class="flex justify-between pt-2 font-bold"><span>Current balance</span><span class="text-red-400">' + fmtKs(toFinite(customer.debt)) + '</span></div>';
 }
 
 if ($('statementCustomer')) $('statementCustomer').addEventListener('change', renderCustomerStatement);
@@ -128,7 +132,7 @@ function adjustCustomerDebt(direction) {
   if (isNaN(amount) || amount <= 0) { showToast('Enter a valid amount.', 'error'); return; }
   const cust = (state.customers || []).find(function (c) { return c.id === id; });
   if (!cust) return;
-  const outstanding = Math.max(0, cust.debt || 0);
+  const outstanding = Math.max(0, toFinite(cust.debt));
   const appliedAmount = direction < 0 ? Math.min(amount, outstanding) : amount;
   if (direction < 0 && appliedAmount === 0) { showToast('This customer has no outstanding debt.', 'info'); return; }
   if (direction < 0) {
@@ -140,7 +144,7 @@ function adjustCustomerDebt(direction) {
   } else {
     // Manual "debt added" charge — tracked on the baseline so it survives the
     // authoritative recompute in normalizeCustomerBalances().
-    cust.extraDebt = (parseFloat(cust.extraDebt) || 0) + appliedAmount;
+    cust.extraDebt = Math.max(0, toMoney(toFinite(cust.extraDebt) + appliedAmount));
   }
   normalizeCustomerBalances();
   saveState();

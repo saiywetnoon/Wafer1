@@ -265,40 +265,70 @@ function migrateInventoryMovements() {
   return true;
 }
 
+/* ---------- Number / data utilities ----------
+   Centralise the "coerce to a safe finite number" pattern that was repeated
+   inline all over the ledger, so every consumer gets consistent, guarded values. */
+function toFinite(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : (fallback === undefined ? 0 : fallback);
+}
+function toMoney(value) {
+  return Math.round(toFinite(value) * 100) / 100;
+}
+function clamp(value, min, max) {
+  const n = toFinite(value);
+  return Math.min(max === undefined ? n : max, Math.max(min === undefined ? n : min, n));
+}
+/* Merge two id-addressable collections by key, keeping the LAST duplicate.
+   Used to reconcile movement/collection copies without ever dropping records. */
+function uniqueByKey(listA, listB, keyOf) {
+  const map = new Map();
+  (listA || []).concat(listB || []).forEach(function (item) {
+    if (item == null) return;
+    map.set(keyOf(item), item);
+  });
+  return Array.from(map.values());
+}
+
 function normalizeCustomerBalances() {
-  const balances = {};
-  (state.customers || []).forEach(function (customer) { balances[customer.id] = 0; });
+  state.customers = state.customers || [];
+  // Authoritative balances derived ONLY from the movement ledger: sales credit
+  // (+ amount − paid) minus payments received. This is the single source of truth.
+  const ledger = {};
+  state.customers.forEach(function (customer) { ledger[customer.id] = 0; });
+
   (state.sales || []).forEach(function (sale) {
-    if (sale.customerId && balances[sale.customerId] !== undefined) balances[sale.customerId] += saleCreditAmount(sale);
+    if (!sale || !sale.customerId || !(sale.customerId in ledger)) return;
+    ledger[sale.customerId] += toMoney(saleCreditAmount(sale));
   });
   (state.customerPayments || []).forEach(function (payment) {
-    if (payment.customerId && balances[payment.customerId] !== undefined) balances[payment.customerId] -= Math.abs(parseFloat(payment.amount) || 0);
+    if (!payment || !payment.customerId || !(payment.customerId in ledger)) return;
+    ledger[payment.customerId] -= Math.abs(toMoney(payment.amount));
   });
-  (state.customers || []).forEach(function (customer) {
-    // One-time migration: capture any debt that isn't explained by the movement
-    // ledger (e.g. debt added manually from the Customers tab) as a baseline, so
+
+  state.customers.forEach(function (customer) {
+    const realLedger = toMoney(ledger[customer.id] || 0);
+    // One-time migration: capture any debt not explained by the ledger (e.g. debt
+    // entered manually before this reconcile model existed) as a stable baseline so
     // the authoritative recompute below never silently drops it.
     if (customer.extraDebt === undefined) {
-      customer.extraDebt = Math.max(0, Math.round(((parseFloat(customer.debt) || 0) - (balances[customer.id] || 0)) * 100) / 100);
+      customer.extraDebt = Math.max(0, toMoney((toMoney(customer.debt) - realLedger)));
     }
-    // Debt is always the authoritative sum: manual baseline + sales credit − repayments.
-    customer.debt = Math.max(0, Math.round(((parseFloat(customer.extraDebt) || 0) + (balances[customer.id] || 0)) * 100) / 100);
-    customer.standingOrder = Math.max(0, parseFloat(customer.standingOrder) || 0);
-    customer.price = Math.max(0, parseFloat(customer.price) || 1300);
+    // Debt is ALWAYS the authoritative sum: manual baseline + real ledger balance.
+    customer.debt = Math.max(0, toMoney((toMoney(customer.extraDebt) + realLedger)));
+    customer.standingOrder = Math.max(0, toFinite(customer.standingOrder));
+    customer.price = Math.max(0, toFinite(customer.price, 1300));
     customer.phone = customer.phone || '';
   });
 }
 
-/* Merge two inventory-movement lists without losing records (used when applying
-   a cloud/remote ledger: the movement ledger is the source of truth for stock, so
-   a remote copy must never wipe out local movements it doesn't know about). */
+/* Merge two inventory-movement lists without losing records. The movement ledger
+   is the source of truth for stock, so a remote/cloud copy must never wipe out
+   local movements it doesn't know about — dedupe by record id when available. */
 function mergeMovements(local, remote) {
-  const map = {};
-  (local || []).concat(remote || []).forEach(function (m) {
-    const key = m && m.id ? m.id : (m.ingredientName + '|' + m.date + '|' + (m.qty || 0) + '|' + (m.type || ''));
-    map[key] = m;
+  return uniqueByKey(local, remote, function (m) {
+    return m && m.id ? m.id : [m.ingredientName, m.date, m.qty, m.type].join('|');
   });
-  return Object.keys(map).map(function (k) { return map[k]; });
 }
 function inventoryUsageShortage(oldUsage, newUsage) {
   const names = new Set(Object.keys(oldUsage || {}).concat(Object.keys(newUsage || {})));
