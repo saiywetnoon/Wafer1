@@ -22,6 +22,12 @@ function previousProductionUsage(date) {
   })[0];
 }
 
+function setDefaultProductionUsage(date) {
+  if (Object.keys(draftUsage).length) return;
+  const batch = (state.production || []).find(function (production) { return production.date === date; }) || previousProductionUsage(date);
+  draftUsage = Object.assign({}, batch && batch.usage ? batch.usage : DEFAULT_USAGE);
+}
+
 function renderUsageTable() {
   const tbody = $('usageTable');
   const usage = currentUsage();

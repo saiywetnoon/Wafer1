@@ -6,12 +6,7 @@ function renderAll() {
   rebuildStockAndCogs();
   const formDate = $('logDate').value || today();
   const todayProduction = (state.production || []).find(function (production) { return production.date === formDate; });
-  const priorProduction = previousProductionUsage(formDate);
-  if (!Object.keys(draftUsage).length) {
-    draftUsage = Object.assign({}, todayProduction && todayProduction.usage
-      ? todayProduction.usage
-      : (priorProduction && priorProduction.usage ? priorProduction.usage : {}));
-  }
+  setDefaultProductionUsage(formDate);
   $('logDate').value = formDate;
   $('saleDate').value = today();
   $('hourlyWage').value = state.settings.hourlyWage || 1500;

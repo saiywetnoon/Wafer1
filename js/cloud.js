@@ -186,27 +186,35 @@ async function cloudClear() { return SUPA.configured() ? { ok: true, message: 'C
 function applyCloudRemote(remote, remoteTs) {
   if (!remote || !remote.state) return false;
   const r = remote.state;
+  // Older/partial cloud rows must not erase newer local history. This is
+  // especially important for inventory, where the movement ledger is the
+  // source of truth rather than the cached stock snapshot.
+  if (stateDataCount(r) < stateDataCount(state)) return false;
   if (r.prices && Array.isArray(r.prices) && r.prices.length) state.prices = r.prices;
   if (r.entries) state.entries = r.entries;
-  if (r.production) state.production = Array.isArray(r.production) ? r.production : [];
-  if (r.sales) state.sales = Array.isArray(r.sales) ? r.sales : [];
+  if (Array.isArray(r.production)) state.production = r.production;
+  if (Array.isArray(r.sales)) state.sales = r.sales;
   if (r.stock && typeof r.stock === 'object') state.stock = { pieces: parseFloat(r.stock.pieces) || 0, cost: parseFloat(r.stock.cost) || 0 };
   if (r.settings) state.settings = Object.assign({ hourlyWage: 1500 }, r.settings);
-  if (r.inventory) state.inventory = r.inventory;
+  if (r.inventory && typeof r.inventory === 'object') state.inventory = r.inventory;
   if (Array.isArray(r.inventoryMovements)) state.inventoryMovements = r.inventoryMovements;
   if (r.inventoryMovementVersion) state.inventoryMovementVersion = r.inventoryMovementVersion;
-  if (r.customers) state.customers = r.customers;
-  if (r.suppliers) state.suppliers = r.suppliers;
-  if (r.purchases) state.purchases = r.purchases;
-  if (r.payments) state.payments = r.payments;
-  if (r.customerPayments) state.customerPayments = r.customerPayments;
-  if (r.expenses) state.expenses = r.expenses;
-  if (r.recurringExpenses) state.recurringExpenses = r.recurringExpenses;
-  if (r.waste) state.waste = r.waste;
-  if (r.priceHistory) state.priceHistory = r.priceHistory;
-  if (r.recipes) state.recipes = Array.isArray(r.recipes) ? r.recipes : [];
+  if (Array.isArray(r.customers)) state.customers = r.customers;
+  if (Array.isArray(r.suppliers)) state.suppliers = r.suppliers;
+  if (Array.isArray(r.purchases)) state.purchases = r.purchases;
+  if (Array.isArray(r.payments)) state.payments = r.payments;
+  if (Array.isArray(r.customerPayments)) state.customerPayments = r.customerPayments;
+  if (Array.isArray(r.expenses)) state.expenses = r.expenses;
+  if (Array.isArray(r.recurringExpenses)) state.recurringExpenses = r.recurringExpenses;
+  if (Array.isArray(r.waste)) state.waste = r.waste;
+  if (Array.isArray(r.priceHistory)) state.priceHistory = r.priceHistory;
+  if (Array.isArray(r.recipes)) state.recipes = r.recipes;
   if (r.cash) state.cash = Object.assign({ opening: 0, adjustments: [] }, r.cash);
+  if (typeof normalizeCustomerBalances === 'function') normalizeCustomerBalances();
   if (typeof migrateInventoryMovements === 'function') migrateInventoryMovements();
+  // The first local render may have populated the form with local defaults.
+  // Let the cloud copy provide today's/previous production recipe instead.
+  draftUsage = {};
   state.version = 2;
   /* Keep the workspace's "modified" stamp in sync with the remote copy so a
      duplicate/echo event for the same write is recognised as already applied. */
