@@ -267,6 +267,11 @@ async function appStart() {
   // 0) Diagnostic: show which backend this build is actually using so a stale
   //    build / failed CDN is obvious instead of a confusing "script URL" prompt.
   reportBackendMode();
+  // Build marker so a stale cached bundle is instantly visible: open DevTools →
+  // console after a hard refresh. If you DO NOT see this line, your browser is
+  // running an old cached copy of the JS (do a hard refresh / clear site data).
+  console.log('%c[Daily Crispy Roll] BUILD 57f4505 (inventory+production fixes) loaded',
+    'background:#10b981;color:#fff;padding:2px 6px;border-radius:4px;');
 
   // 1) Account gate: without a valid session nobody reaches the app.
   const authed = await authBootstrap();
