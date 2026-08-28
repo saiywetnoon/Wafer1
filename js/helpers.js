@@ -275,13 +275,30 @@ function normalizeCustomerBalances() {
     if (payment.customerId && balances[payment.customerId] !== undefined) balances[payment.customerId] -= Math.abs(parseFloat(payment.amount) || 0);
   });
   (state.customers || []).forEach(function (customer) {
-    customer.debt = customer.debt === undefined || customer.debt === null
-      ? Math.max(0, Math.round((balances[customer.id] || 0) * 100) / 100)
-      : Math.max(0, parseFloat(customer.debt) || 0);
+    // One-time migration: capture any debt that isn't explained by the movement
+    // ledger (e.g. debt added manually from the Customers tab) as a baseline, so
+    // the authoritative recompute below never silently drops it.
+    if (customer.extraDebt === undefined) {
+      customer.extraDebt = Math.max(0, Math.round(((parseFloat(customer.debt) || 0) - (balances[customer.id] || 0)) * 100) / 100);
+    }
+    // Debt is always the authoritative sum: manual baseline + sales credit − repayments.
+    customer.debt = Math.max(0, Math.round(((parseFloat(customer.extraDebt) || 0) + (balances[customer.id] || 0)) * 100) / 100);
     customer.standingOrder = Math.max(0, parseFloat(customer.standingOrder) || 0);
     customer.price = Math.max(0, parseFloat(customer.price) || 1300);
     customer.phone = customer.phone || '';
   });
+}
+
+/* Merge two inventory-movement lists without losing records (used when applying
+   a cloud/remote ledger: the movement ledger is the source of truth for stock, so
+   a remote copy must never wipe out local movements it doesn't know about). */
+function mergeMovements(local, remote) {
+  const map = {};
+  (local || []).concat(remote || []).forEach(function (m) {
+    const key = m && m.id ? m.id : (m.ingredientName + '|' + m.date + '|' + (m.qty || 0) + '|' + (m.type || ''));
+    map[key] = m;
+  });
+  return Object.keys(map).map(function (k) { return map[k]; });
 }
 function inventoryUsageShortage(oldUsage, newUsage) {
   const names = new Set(Object.keys(oldUsage || {}).concat(Object.keys(newUsage || {})));

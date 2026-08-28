@@ -72,7 +72,16 @@ function renderCustomerStatement() {
   (state.customerPayments || []).filter(function (payment) { return payment.customerId === customerId; }).forEach(function (payment) {
     rows.push({ date: payment.date, order: 1, label: 'Payment received', amount: -Math.abs(payment.amount || 0), dueDate: '' });
   });
-  rows.sort(function (a, b) { return a.date === b.date ? a.order - b.order : String(a.date).localeCompare(String(b.date)); });
+  // Include the manual-baseline charge (extraDebt) that isn't backed by a sale,
+  // so the standing ledger's running balance matches the customer's real debt.
+  if ((parseFloat(customer.extraDebt) || 0) > 0) {
+    rows.push({ date: customer.createdAt ? String(customer.createdAt).slice(0, 10) : '', order: -1,
+      label: 'Manual / opening balance', amount: Math.round(parseFloat(customer.extraDebt) || 0), dueDate: '' });
+  }
+  rows.sort(function (a, b) {
+    const byDate = String(a.date || '').localeCompare(String(b.date || ''));
+    return byDate !== 0 ? byDate : (a.order - b.order);
+  });
   if (!rows.length) { output.textContent = 'No customer-linked sales or payments yet.'; return; }
   let running = 0;
   output.innerHTML = rows.map(function (row) {
@@ -122,12 +131,18 @@ function adjustCustomerDebt(direction) {
   const outstanding = Math.max(0, cust.debt || 0);
   const appliedAmount = direction < 0 ? Math.min(amount, outstanding) : amount;
   if (direction < 0 && appliedAmount === 0) { showToast('This customer has no outstanding debt.', 'info'); return; }
-  cust.debt = direction < 0 ? outstanding - appliedAmount : outstanding + appliedAmount;
-  // Record cash actually received when a customer repays debt (feeds the Cash Drawer)
   if (direction < 0) {
+    // A repayment is recorded as real cash received. Only the payment record
+    // lowers the ledger balance — extraDebt (the manual baseline) is left alone
+    // so the authoritative recompute in normalizeCustomerBalances() stays exact.
     if (!state.customerPayments) state.customerPayments = [];
     state.customerPayments.push({ id: uid(), customerId: id, date: today(), amount: Math.round(appliedAmount) });
+  } else {
+    // Manual "debt added" charge — tracked on the baseline so it survives the
+    // authoritative recompute in normalizeCustomerBalances().
+    cust.extraDebt = (parseFloat(cust.extraDebt) || 0) + appliedAmount;
   }
+  normalizeCustomerBalances();
   saveState();
   renderCustomers();
   $('paymentAmount').value = '';

@@ -197,7 +197,11 @@ function applyCloudRemote(remote, remoteTs) {
   if (r.stock && typeof r.stock === 'object') state.stock = { pieces: parseFloat(r.stock.pieces) || 0, cost: parseFloat(r.stock.cost) || 0 };
   if (r.settings) state.settings = Object.assign({ hourlyWage: 1500 }, r.settings);
   if (r.inventory && typeof r.inventory === 'object') state.inventory = r.inventory;
-  if (Array.isArray(r.inventoryMovements)) state.inventoryMovements = r.inventoryMovements;
+  if (Array.isArray(r.inventoryMovements) && r.inventoryMovements.length) {
+    // The movement ledger is the source of truth — never let a remote/older copy
+    // drop local movements. Merge by record id instead of blind-replacing.
+    state.inventoryMovements = mergeMovements(state.inventoryMovements || [], r.inventoryMovements);
+  }
   if (r.inventoryMovementVersion) state.inventoryMovementVersion = r.inventoryMovementVersion;
   if (Array.isArray(r.customers)) state.customers = r.customers;
   if (Array.isArray(r.suppliers)) state.suppliers = r.suppliers;

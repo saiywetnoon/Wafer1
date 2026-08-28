@@ -188,6 +188,16 @@ function loadDraftIfNewer() {
     if (d.date !== today()) return;
     const existing = (state.production || []).find(function (p) { return p.date === d.date; });
     if (existing) return; // A saved production exists for that date → don't overwrite with draft
+    // Never let a blank / all-zero draft hide the previous day's recipe that should
+    // prefill today's usage. Only restore a draft that represents real in-progress work.
+    const dUsage = d.usage || {};
+    const hasRealContent = Object.keys(dUsage).some(function (k) { return parseFloat(dUsage[k]) > 0; })
+      || (parseFloat(d.bagsProduced) || 0) > 0
+      || (parseFloat(d.pieces) || 0) > 0
+      || (parseFloat(d.laborMinutes) || 0) > 0
+      || (parseFloat(d.additionalCost) || 0) > 0
+      || String(d.notes || '').trim() !== '';
+    if (!hasRealContent) return;
     draftUsage = Object.assign({}, d.usage);
     $('logDate').value = d.date || today();
     $('additionalCost').value = d.additionalCost || 0;
