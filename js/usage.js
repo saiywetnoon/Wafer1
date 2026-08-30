@@ -113,6 +113,7 @@ function renderUsageTable(force) {
     });
   });
   updateUsageCosts();
+wireResponsiveTables();
 }
 
 function updateUsageCosts() {

@@ -150,6 +150,21 @@ button (🗑) that turns it into a daily-usage item and clears its stock history
   Fry Timers → Sales & Stock → Inventory → Dashboard → Calendar → Customers →
   Suppliers → Cash Drawer → Business Tools → Google Sync.
 
+## UI / appearance polish
+
+- **Warm brand** — a subtle amber glow behind the dark theme and warmer surfaces
+  lift the "generic admin" feel while staying dark.
+- **Mobile-first cards** — the price, usage, production, sales, and inventory
+  tables turn into labelled stacked cards on small screens (with the column
+  header as each cell's label); empty tables get friendly empty-row styling.
+- **Bigger tap targets** on phones for inputs/buttons/drop-downs.
+- **Micro-interactions** — Dashboard KPIs flash when they change; Save/Log
+  buttons pulse green on a successful save.
+- **Status pill** (bottom-left) shows `time · Local / Synced / Syncing… /
+  Offline — will sync`, updated on every save and on network changes.
+- **Reduced-motion support** — the pan-timer flashes/banners are disabled for
+  users who prefer less motion.
+
 ## Current production stack
 
 See [ROADMAP.md](ROADMAP.md) for completed feature checks, upcoming work, and

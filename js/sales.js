@@ -92,6 +92,7 @@ function saveSale() {
   btn.innerHTML = '<i data-lucide="badge-dollar-sign" class="w-4 h-4"></i> Log Sale';
   lucide.createIcons();
   showToast(isUpdate ? 'Sale updated for ' + date : 'Sale logged for ' + date + ' — ' + fmt(bags) + ' bags (' + fmtKs(amount) + ').');
+  pulseSuccess(btn);
   triggerGoogleSync();
   $('saleDate').value = today();
   $('saleBags').value = '';
@@ -203,6 +204,7 @@ function renderSalesTab() {
       '</div></td></tr>';
   }).join('');
   lucide.createIcons();
+wireResponsiveTables();
 }
 
 function printSaleReceipt(id) {

@@ -45,6 +45,13 @@ function renderDashboard() {
   $('kpiRatio').title = 'Profit (all sales revenue minus their goods cost) divided by all production cost';
   $('kpiPayable').textContent = fmtKs(totalPayable());
   $('kpiPayable').className = 'text-lg font-extrabold ' + (totalPayable() > 0 ? 'text-red-400' : 'text-emerald-400');
+  // Flash KPIs when their value changes (skips the very first render).
+  ['kpiRevenue', 'kpiCapital', 'kpiNet', 'kpiRatio', 'kpiPayable'].forEach(function (id) {
+    const el = $(id);
+    if (!el) return;
+    if (el.getAttribute('data-prev') !== null && el.getAttribute('data-prev') !== el.textContent) flashEl(el);
+    el.setAttribute('data-prev', el.textContent);
+  });
   renderCharts();
   renderSummary(entriesProdSales());
   renderMonthlyReport();

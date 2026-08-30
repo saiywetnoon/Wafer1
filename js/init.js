@@ -23,6 +23,8 @@ function renderAll() {
   updateGoogleSyncStatus();
   const stEl = $('storageUsed');
   if (stEl) stEl.textContent = storageUsedKB().toFixed(1) + ' KB';
+  wireResponsiveTables();
+  updateAppStatus();
   lucide.createIcons();
 }
 
@@ -290,6 +292,11 @@ async function appStart() {
   // Offline-first: retry anything saved while offline when the connection is back.
   initSyncFlushers();
   try { await flushPendingSync(); } catch (e) { console.warn('pending sync flush failed', e); }
+  // Keep the status pill honest when the network state changes.
+  try {
+    window.addEventListener('online', updateAppStatus);
+    window.addEventListener('offline', updateAppStatus);
+  } catch (e) { /* listeners are best-effort */ }
 }
 
 appStart();

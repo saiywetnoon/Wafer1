@@ -127,3 +127,76 @@
   0%, 100% { box-shadow: 0 0 0 2px #F59E0B, 0 0 18px -2px rgba(245, 158, 11, .8); }
   50%      { box-shadow: 0 0 0 4px #EF4444, 0 0 22px 0 rgba(239, 68, 68, .9); }
 }
+
+/* ============================================================
+   UI POLISH — warm brand, mobile-first cards, micro-interactions
+   ============================================================ */
+/* Warmer page backdrop + amber header glow (still dark theme). */
+body { background: radial-gradient(1100px 420px at 50% -120px, rgba(245,158,11,.09), transparent 62%), #0d0a07; }
+
+/* KPI value change flash */
+@keyframes kpiFlash { 0% { transform: scale(1); } 35% { transform: scale(1.14); } 100% { transform: scale(1); } }
+.kpi-flash { animation: kpiFlash .5s ease; display: inline-block; }
+
+/* Save button success pulse */
+@keyframes savePulse {
+  0% { box-shadow: 0 0 0 0 rgba(16,185,129,.55); }
+  70% { box-shadow: 0 0 0 12px rgba(16,185,129,0); }
+  100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+}
+.save-pulse { animation: savePulse .8s ease; }
+
+/* App status pill (saved / synced / offline) */
+#appStatusBar {
+  position: fixed; left: 12px; bottom: 12px; z-index: 80;
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(17, 24, 39, .93); border: 1px solid #374151;
+  color: #9CA3AF; font-size: 11px; font-weight: 600;
+  padding: 6px 12px; border-radius: 9999px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.45); backdrop-filter: blur(4px);
+}
+#appStatusBar .dot { width: 7px; height: 7px; border-radius: 9999px; background: #6B7280; }
+#appStatusBar.synced .dot { background: #10B981; box-shadow: 0 0 6px rgba(16,185,129,.8); }
+#appStatusBar.offline .dot { background: #EF4444; }
+#appStatusBar.pending .dot { background: #F59E0B; animation: panDotBlink 1s infinite; }
+
+/* Responsive tables → stacked cards on phones */
+@media (max-width: 640px) {
+  table.responsive-table, table.responsive-table tbody,
+  table.responsive-table tr, table.responsive-table td { display: block; width: 100%; }
+  table.responsive-table thead { display: none; }
+  table.responsive-table tr {
+    background: #14120e; border: 1px solid #2a271f; border-radius: 12px;
+    padding: 8px 12px; margin-bottom: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  table.responsive-table td {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 10px; padding: 5px 0; border: none; text-align: right; font-size: 12px;
+  }
+  table.responsive-table td::before {
+    content: attr(data-label); flex: 1; text-align: left; font-weight: 700;
+    color: #9CA3AF; font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  }
+  table.responsive-table td[data-label="Action"]::before { display: none; }
+  table.responsive-table td[data-label="Action"] { justify-content: flex-start; }
+  table.responsive-table tr.empty-row { border: none; box-shadow: none; padding: 4px; }
+  table.responsive-table tr.empty-row td { display: block; text-align: center; }
+  table.responsive-table tr.empty-row td::before { display: none; }
+  .empty-row td { text-align: center; color: #6B7280; padding: 18px 8px; font-size: 12px; }
+
+  /* Bigger tap targets on phones */
+  .usage-input, .price-input, .stock-input, .low-input,
+  input[type=number], input[type=text], input[type=date], select {
+    min-height: 40px;
+  }
+  .tab-btn { padding: 10px 14px; }
+  .pan-btn { min-height: 40px; }
+  .pan-dur { min-height: 40px; }
+}
+
+/* Respect users who prefer less motion */
+@media (prefers-reduced-motion: reduce) {
+  .pan-card.pan-stage-1, .pan-card.pan-stage-2, .pan-card.pan-stage-3,
+  #panAlertBanner.pan-banner-1, #panAlertBanner.pan-banner-2, #panAlertBanner.pan-banner-3,
+  .pan-nav-alert, .pan-running .pan-dot { animation: none !important; }
+}

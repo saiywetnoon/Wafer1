@@ -47,6 +47,7 @@ function renderPriceTable() {
       }
     });
   });
+wireResponsiveTables();
 }
 
 /* ---------- Add / Remove Ingredient ---------- */

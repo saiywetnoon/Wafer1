@@ -405,6 +405,59 @@ function showToast(message, type) {
   }, 3200);
 }
 
+/* ---------- UI polish helpers ---------- */
+/* Fill each responsive table's cells with data-label from its <th> so small
+   screens can render rows as labelled cards. Colspan rows (empty states) are
+   flagged and styled as friendly empty rows instead. */
+function wireResponsiveTables() {
+  document.querySelectorAll('table.responsive-table').forEach(function (tbl) {
+    var heads = Array.prototype.map.call(tbl.querySelectorAll('thead th'), function (th) {
+      return (th.textContent || '').trim();
+    });
+    if (!heads.length) return;
+    tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+      if (tr.querySelector('td[colspan]')) { tr.classList.add('empty-row'); return; }
+      Array.prototype.forEach.call(tr.querySelectorAll('td'), function (td, i) {
+        if (i < heads.length) td.setAttribute('data-label', heads[i]);
+      });
+    });
+  });
+}
+/* Brief emphasis when a number on screen changes. */
+function flashEl(el) {
+  if (!el || el.classList.contains('kpi-flash')) return;
+  el.classList.add('kpi-flash');
+  setTimeout(function () { el.classList.remove('kpi-flash'); }, 550);
+}
+/* Green pulse on a button after a successful save. */
+function pulseSuccess(el) {
+  if (!el) return;
+  el.classList.remove('save-pulse');
+  void el.offsetWidth;
+  el.classList.add('save-pulse');
+}
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+/* Live "saved · synced/offline" pill in the corner. */
+function updateAppStatus() {
+  var el = $('appStatusBar');
+  var txt = $('appStatusText');
+  if (!el || !txt) return;
+  var d = new Date();
+  var hm = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  var configured = (typeof cloudIsAvailable === 'function') ? cloudIsAvailable() : false;
+  var online = (typeof cloudIsOnline === 'function') ? cloudIsOnline() : true;
+  var dirty = (typeof syncQueueIsDirty === 'function') ? syncQueueIsDirty() : false;
+  var label, stateClass;
+  if (!configured) { label = 'Local'; stateClass = 'synced'; }
+  else if (online && !dirty) { label = 'Synced'; stateClass = 'synced'; }
+  else if (online && dirty) { label = 'Syncing…'; stateClass = 'pending'; }
+  else if (dirty) { label = 'Offline — will sync'; stateClass = 'pending'; }
+  else { label = 'Offline'; stateClass = 'offline'; }
+  txt.textContent = hm + ' · ' + label;
+  el.classList.remove('synced', 'offline', 'pending');
+  el.classList.add(stateClass);
+}
+
 /* ---------- Validation ---------- */
 function validateNum(input, opts) {
   opts = opts || {};

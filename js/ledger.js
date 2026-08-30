@@ -75,6 +75,7 @@ function saveProduction() {
   saveBtn.innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Save Production Work';
   lucide.createIcons();
   showToast(isUpdate ? 'Production updated for ' + date : 'Production saved for ' + date + ' — ' + fmt(pieces) + ' pieces ready to sell.');
+  pulseSuccess($('saveLogBtn'));
   triggerGoogleSync();
   clearDraft();
   draftUsage = Object.assign({}, usage);
@@ -128,6 +129,7 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
   $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Save Production Work';
   lucide.createIcons();
   showToast('Batch saved to production for ' + record.date + ' — ' + fmt(record.pieces) + ' pieces ready to sell.');
+  pulseSuccess($('saveLogBtn'));
   document.querySelector('[data-tab="log"]').click();
 }
 
@@ -162,6 +164,7 @@ function renderProduction() {
       '</div></td></tr>';
   }).join('');
   lucide.createIcons();
+wireResponsiveTables();
 }
 
 function editProduction(id) {

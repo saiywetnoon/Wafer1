@@ -57,6 +57,9 @@ function saveState() {
     console.error('Failed to save state:', e);
     showToast('Warning: Storage is full — export your data soon.', 'error');
   }
+  if (typeof updateAppStatus === 'function') {
+    try { updateAppStatus(); } catch (e) { /* status pill is best-effort */ }
+  }
 }
 function loadState() {
   try {

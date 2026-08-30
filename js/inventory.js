@@ -42,6 +42,7 @@ function renderInventoryMovements() {
       '<div class="shrink-0 text-xs font-bold ' + (plus ? 'text-emerald-400' : 'text-red-400') + '">' +
       (plus ? '+' : '') + fmt(m.qty) + ' ' + unit + '</div></div>';
   }).join('');
+wireResponsiveTables();
 }
 
 function renderInventory() {
