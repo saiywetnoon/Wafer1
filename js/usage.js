@@ -14,6 +14,23 @@ function defaultUsageFor(name) {
   return 0;
 }
 
+/* Weight (grams) of one ingredient in a batch. Gram-based items weigh their
+   qty directly; unit-based items (egg, electricity) weigh qty × weightPerUnit
+   (assumed grams per unit), so the "total weight of ingredients" is meaningful
+   even when some things are counted. */
+function ingredientWeightGrams(ing, qty) {
+  qty = parseFloat(qty) || 0;
+  if (ing.unit === 'g') return qty;
+  return qty * (parseFloat(ing.weightPerUnit) || 0);
+}
+/* Sum of all ingredient weights in grams, for a usage map. */
+function totalUsageWeightGrams(usage, prices) {
+  prices = prices || state.prices || [];
+  return prices.reduce(function (sum, ing) {
+    return sum + ingredientWeightGrams(ing, (usage && usage[ing.name]));
+  }, 0);
+}
+
 function previousProductionUsage(date) {
   return (state.production || []).filter(function (production) {
     return production.date < date && production.usage;
@@ -78,10 +95,12 @@ function renderUsageTable(force) {
   tbody.innerHTML = state.prices.map(function (ing) {
     const qty = usage[ing.name] !== undefined ? usage[ing.name] : (DEFAULT_USAGE[ing.name] || 0);
     const cost = ing.unit === 'g' ? (qty / 1000) * (parseFloat(ing.price) || 0) : qty * (parseFloat(ing.price) || 0);
+    const weight = Math.round(ingredientWeightGrams(ing, qty));
     return '<tr class="border-b border-gray-800">' +
       '<td class="py-1.5 pr-2 font-medium">' + esc(ing.name) + '</td>' +
       '<td class="py-1.5 pr-2"><input type="number" min="0" step="0.01" value="' + esc(qty) + '" data-name="' + esc(ing.name) + '" class="usage-input w-20 px-1.5 py-1 rounded border border-gray-700 bg-gray-800 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-500"></td>' +
       '<td class="py-1.5 pr-2 text-gray-500">' + (ing.unit === 'g' ? 'g' : 'units') + '</td>' +
+      '<td class="py-1.5 pr-2 text-gray-400 tabular-nums">' + fmt(weight) + ' g</td>' +
       '<td class="py-1.5 text-amber-400 font-semibold">' + fmtKs(cost) + '</td>' +
       '</tr>';
   }).join('');
@@ -103,13 +122,18 @@ function updateUsageCosts() {
   const total = ingCost + extra;
   $('ingredientCost').textContent = fmtKs(ingCost);
   $('totalCapital').textContent = fmtKs(total);
+  const totalWeightEl = $('usageTotalWeight');
+  if (totalWeightEl) totalWeightEl.textContent = fmt(Math.round(totalUsageWeightGrams(usage))) + ' g';
   state.prices.forEach(function (ing) {
     const qty = usage[ing.name] || 0;
     const cost = ing.unit === 'g' ? (qty / 1000) * (parseFloat(ing.price) || 0) : qty * (parseFloat(ing.price) || 0);
     const row = document.querySelector('.usage-input[data-name="' + ing.name + '"]');
     if (row) {
-      const costCell = row.closest('tr').querySelector('td:last-child');
-      if (costCell) costCell.textContent = fmtKs(cost);
+      const cells = row.closest('tr').querySelectorAll('td');
+      if (cells && cells.length >= 5) {
+        cells[cells.length - 2].textContent = fmt(Math.round(ingredientWeightGrams(ing, qty))) + ' g';  // weight cell
+        cells[cells.length - 1].textContent = fmtKs(cost);                                            // cost cell
+      }
     }
   });
   updateLive();

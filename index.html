@@ -187,6 +187,7 @@ tailwind.config = {
                 <th class="py-1.5 pr-2">Ingredient</th>
                 <th class="py-1.5 pr-2">Today's Qty</th>
                 <th class="py-1.5 pr-2">Unit</th>
+                <th class="py-1.5 pr-2">Weight (g)</th>
                 <th class="py-1.5">Cost (Ks)</th>
               </tr>
             </thead>
@@ -195,6 +196,7 @@ tailwind.config = {
         </div>
 
         <div class="p-3 rounded-lg bg-gray-800/60 text-sm mb-4 space-y-1.5">
+          <div class="flex justify-between"><span class="text-gray-400">Total Weight of Ingredients</span><span id="usageTotalWeight" class="font-bold text-emerald-400">0 g</span></div>
           <div class="flex justify-between"><span class="text-gray-400">Ingredient Cost (auto)</span><span id="ingredientCost" class="font-bold text-amber-400">0 Ks</span></div>
           <div class="flex justify-between items-center">
             <span class="text-gray-400">Additional Costs (Ks)</span>
