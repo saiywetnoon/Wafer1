@@ -9,6 +9,9 @@ function renderTools() {
   renderExpenses();
   renderRecurring();
   renderForecast();
+  renderTargetProfit();
+  renderPurchaseList();
+  renderPurchaseDays();
 }
 
 /* ---------- Recipes ---------- */
@@ -21,10 +24,13 @@ function renderRecipes() {
       '<span class="text-sm font-semibold">' + esc(r.name) + '</span>' +
       '<div class="flex gap-1">' +
       '<button onclick="applyRecipe(' + i + ')" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold">Apply</button>' +
+      '<button onclick="scaleRecipe(' + i + ')" class="px-2 py-1 rounded bg-amber-500 hover:bg-amber-400 text-gray-900 text-[10px] font-bold" title="Scale to a target batch size">Scale</button>' +
       '<button onclick="deleteRecipe(' + i + ')" class="px-2 py-1 rounded bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold">Del</button>' +
       '</div></div>';
   }).join('');
 }
+
+
 
 $('saveRecipeBtn').addEventListener('click', function () {
   const name = $('recipeName').value.trim();
@@ -36,6 +42,39 @@ $('saveRecipeBtn').addEventListener('click', function () {
   $('recipeName').value = '';
   showToast('Recipe "' + name + '" saved.');
 });
+
+/* ---------- Scale a recipe to a target batch ---------- */
+function recipeTotalPieces(usage) {
+  return (state.prices || []).reduce(function (sum, ing) {
+    const qty = parseFloat(usage[ing.name]) || 0;
+    return sum + (ing.unit === 'g' ? qty : qty * (parseFloat(ing.weightPerUnit) || 0));
+  }, 0);
+}
+function scaleRecipe(idx) {
+  const r = (state.recipes || [])[idx];
+  if (!r) return;
+  const baseMix = recipeTotalPieces(r.usage);
+  if (baseMix <= 0) { showToast('Recipe has no measurable ingredients.', 'error'); return; }
+  const target = prompt('Target finished pieces for "' + r.name + '"?', String(Math.round(baseMix / 6) * 6));
+  if (target === null) return;
+  const pieces = parseFloat(target);
+  if (isNaN(pieces) || pieces <= 0) { showToast('Enter a valid number of pieces.', 'error'); return; }
+  const factor = pieces / baseMix;
+  const scaled = {};
+  (state.prices || []).forEach(function (ing) {
+    scaled[ing.name] = Math.round((parseFloat(r.usage[ing.name]) || 0) * factor);
+  });
+  draftUsage = scaled;
+  state.prices.forEach(function (ing) {
+    const input = document.querySelector('.usage-input[data-name="' + ing.name + '"]');
+    if (input) input.value = scaled[ing.name] || 0;
+  });
+  $('logPieces').value = Math.round(pieces);
+  $('logBagsProduced').value = Math.round(pieces / 6) || '';
+  updateUsageCosts();
+  document.querySelector('[data-tab="log"]').click();
+  showToast('Scaled "' + r.name + '" to ' + fmt(pieces) + ' pcs → Production form updated.');
+}
 
 function applyRecipe(idx) {
   const r = (state.recipes || [])[idx];
@@ -190,6 +229,105 @@ function renderForecast() {
     '<div class="flex justify-between"><span class="text-gray-400">Forecast for ' + tStr + '</span><span class="font-bold text-emerald-400">~' + Math.round(avgSold) + ' bags sold</span></div>' +
     '<div class="flex justify-between mt-1"><span class="text-gray-400">Suggested production</span><span class="font-bold text-amber-400">~' + Math.round(avgProd) + ' bags</span></div>' +
     '<div class="flex justify-between mt-1"><span class="text-gray-400">7-day avg sold</span><span class="font-bold">' + fmt(Math.round(avgSold)) + ' bags</span></div>';
+}
+
+/* ---------- Target-Profit Calculator ----------
+   Answers: to make a desired profit, how many rolls / bags must I produce
+   (and sell) today? Works backwards from the live production cost:
+     bags = ceil((capital + labor + targetProfit) / pricePerBag)
+     pieces = bags × piecesPerBag (from actual production history, default 6)
+   Also factors standing orders so the number is realistic. */
+function targetProfitBags(target, capital, laborCost, priceBag, perBag) {
+  if (!(priceBag > 0)) return { bags: 0, pieces: 0 };
+  const bags = Math.ceil((capital + laborCost + target) / priceBag);
+  return { bags: bags, pieces: bags * perBag };
+}
+
+function renderTargetProfit() {
+  const usage = currentUsage();
+  const capital = ingredientCostFor(usage) + (parseFloat($('additionalCost').value) || 0);
+  const wage = parseFloat($('hourlyWage').value) || state.settings.hourlyWage || 0;
+  const laborMin = parseFloat($('logLabor').value) || 0;
+  const laborCost = (laborMin / 60) * wage;
+  const priceBag = lastSalePrice();
+  const perBag = stockAvgPiecesPerBag() || 6;
+
+  const target = parseFloat(($('targetProfitGoal') || {}).value) || 0;
+  const breakEven = capital + laborCost;
+  const goalTotal = breakEven + target;
+  const r = targetProfitBags(target, capital, laborCost, priceBag, perBag);
+  const bagsForProfit = r.bags, piecesForProfit = r.pieces;
+  const standing = totalStandingOrders();
+  const afterStanding = Math.max(0, bagsForProfit - standing);
+
+  const el = $('targetProfitResult');
+  if (!el) return;
+  el.innerHTML =
+    '<div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">' +
+      '<div><div class="text-[10px] text-gray-500">Cover costs (break-even)</div><div class="font-bold text-amber-400">' + fmtKs(breakEven) + '</div></div>' +
+      '<div><div class="text-[10px] text-gray-500">Bag price</div><div class="font-bold text-emerald-400">' + fmtKs(priceBag) + '</div></div>' +
+      '<div><div class="text-[10px] text-gray-500">Same-day labor</div><div class="font-bold">' + fmtKs(laborCost) + '</div></div>' +
+      '<div class="col-span-2 sm:col-span-3 border-t border-gray-800 pt-2"><div class="text-[10px] text-gray-500">To make <b>' + fmtKs(target) + '</b> profit today</div>' +
+        '<div class="font-extrabold text-emerald-400 text-lg">' + fmt(bagsForProfit) + ' bags · ' + fmt(piecesForProfit) + ' rolls</div></div>' +
+      (standing > 0
+        ? '<div class="col-span-2 sm:col-span-3"><div class="text-[10px] text-gray-500">Standing orders already cover ' + fmt(standing) + ' bags — you still need to sell</div><div class="font-bold text-amber-400">' + fmt(afterStanding) + ' bags</div></div>'
+        : '') +
+    '</div>';
+}
+function lastSalePrice() {
+  const sales = salesList();
+  return sales.length ? (sales[sales.length - 1].price || 0) : 0;
+}
+$('targetProfitGoal').addEventListener('input', renderTargetProfit);
+$('purchaseSafetyDays').addEventListener('change', renderPurchaseList);
+
+/* ============================================================
+   PURCHASE-LIST GENERATOR (Group B)
+   From today's production usage + current stock, produce a
+   shopping list: for each stock ingredient, how much to buy so
+   the stock ends at a target (default: today's usage + a safety
+   buffer, rounded up, minus what is already on hand).
+   ============================================================ */
+function purchaseList() {
+  const safetyDays = parseFloat(($('purchaseSafetyDays') || {}).value) || 1;
+  const usage = currentUsage();
+  const rows = (state.prices || []).filter(isStockItem).map(function (ing) {
+    const used = parseFloat(usage[ing.name]) || 0;
+    const onHand = inventoryStockFor(ing.name);
+    const buffer = used * Math.max(0, safetyDays - 1);
+    const want = Math.max(0, Math.ceil(used + buffer - onHand));
+    return { name: ing.name, unit: ing.unit, used: used, onHand: onHand, want: want, price: parseFloat(ing.price) || 0 };
+  }).filter(function (r) { return r.want > 0; });
+  return rows;
+}
+
+function renderPurchaseList() {
+  const box = $('purchaseListBox');
+  if (!box) return;
+  const rows = purchaseList();
+  if (!rows.length) { box.innerHTML = '<span class="text-gray-500">Nothing to buy right now — on-hand stock covers the next batch.</span>'; return; }
+  const total = rows.reduce(function (s, r) {
+    return s + (r.unit === 'g' ? (r.want / 1000) * r.price : r.want * r.price);
+  }, 0);
+  box.innerHTML =
+    '<div class="space-y-1 max-h-72 overflow-y-auto scrollbar-thin">' +
+    rows.map(function (r) {
+      return '<div class="flex justify-between items-center gap-2 py-1 border-b border-gray-800 last:border-0">' +
+        '<div class="min-w-0"><span class="font-semibold text-xs">' + esc(r.name) + '</span>' +
+        '<div class="text-[10px] text-gray-500">use ' + fmt(r.used) + ' · on hand ' + fmt(r.onHand) + ' ' + esc(r.unit) + '</div></div>' +
+        '<span class="font-bold text-amber-400">buy ' + fmt(r.want) + '</span></div>';
+    }).join('') +
+    '</div>' +
+    '<div class="flex justify-between items-center mt-2 pt-2 border-t border-gray-700"><span class="text-xs text-gray-400">Estimated cost</span><span class="font-bold text-emerald-400">' + fmtKs(total) + '</span></div>';
+}
+function renderPurchaseDays() {
+  const sel = $('purchaseSafetyDays');
+  if (!sel) return;
+  ['1', '2', '3', '7'].forEach(function (d) {
+    const o = document.createElement('option');
+    o.value = d; o.textContent = d + (d === '1' ? ' day' : ' days');
+    sel.appendChild(o);
+  });
 }
 
 /* ---------- Printable Report ---------- */

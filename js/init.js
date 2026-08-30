@@ -5,21 +5,12 @@ function renderAll() {
   migrateLegacyEntries();
   rebuildStockAndCogs();
   const formDate = $('logDate').value || today();
-  const todayProduction = (state.production || []).find(function (production) { return production.date === formDate; });
-  setDefaultProductionUsage(formDate);
+  populateProductionForm(formDate);
   $('logDate').value = formDate;
   $('saleDate').value = today();
   $('hourlyWage').value = state.settings.hourlyWage || 1500;
   renderPriceTable();
   renderUsageTable();
-  if (todayProduction) {
-    $('additionalCost').value = todayProduction.additionalCost || 0;
-    $('logBagsProduced').value = todayProduction.bags || 0;
-    $('logPieces').value = todayProduction.pieces || 0;
-    $('logLabor').value = todayProduction.laborMinutes || 0;
-    $('logWeightPerRoll').value = todayProduction.weightPerRoll || 0;
-    $('logNotes').value = todayProduction.notes || '';
-  }
   renderProduction();
   renderSalesTab();
   renderDashboard();
@@ -270,7 +261,7 @@ async function appStart() {
   // Build marker so a stale cached bundle is instantly visible: open DevTools →
   // console after a hard refresh. If you DO NOT see this line, your browser is
   // running an old cached copy of the JS (do a hard refresh / clear site data).
-  console.log('%c[Daily Crispy Roll] BUILD 57f4505 (inventory+production fixes) loaded',
+  console.log('%c[Daily Crispy Roll] BUILD 9c4e2a (form-guard + dynamic pans + offline queue) loaded',
     'background:#10b981;color:#fff;padding:2px 6px;border-radius:4px;');
 
   // 1) Account gate: without a valid session nobody reaches the app.
@@ -296,6 +287,9 @@ async function appStart() {
   try { await cloudAfterSignIn(); } catch (e) { console.warn('cloud reconcile failed', e); }
   // From here on, EVERY save auto-pushes to the cloud (price, stock, anything).
   setCloudAutoSync(true);
+  // Offline-first: retry anything saved while offline when the connection is back.
+  initSyncFlushers();
+  try { await flushPendingSync(); } catch (e) { console.warn('pending sync flush failed', e); }
 }
 
 appStart();

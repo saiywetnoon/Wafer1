@@ -139,9 +139,51 @@ function supabaseUpdate(uid) {
 }
 function supabaseWatch(uid) { supabaseUpdate(uid); }
 /* ---------- Low-level: dispatch to Supabase or legacy Apps Script ---------- */
+/* Offline-first: every push that cannot reach the cloud marks a persistent
+   "pending sync" flag. The next successful online moment (reconnect, page
+   load, manual sync) replays the CURRENT state — which contains every change
+   made while offline — and clears the flag. Last-write-wins by timestamp is
+   applied during the boot reconcile (cloudAfterSignIn). */
+var SYNC_QUEUE_KEY = 'dailyCrispyRollLedger_syncQueue';
+function syncQueueMark() { try { localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify({ at: new Date().toISOString() })); } catch (e) {} }
+function syncQueueClear() { try { localStorage.removeItem(SYNC_QUEUE_KEY); } catch (e) {} }
+function syncQueueIsDirty() { try { return !!localStorage.getItem(SYNC_QUEUE_KEY); } catch (e) { return false; } }
+
 async function cloudPush() {
-  if (SUPA.configured()) return supabasePush();
-  return cloudPost('save', { payload: toGooglePayload() });
+  const res = SUPA.configured() ? await supabasePush() : await cloudPost('save', { payload: toGooglePayload() });
+  if (res && res.ok) {
+    syncQueueClear();
+    if (window.__syncQueueWasDirty) { window.__syncQueueWasDirty = false; }
+  } else {
+    // Offline / endpoint error → queue the change and tell the user quietly.
+    syncQueueMark();
+    if (typeof updateGoogleSyncStatus === 'function') {
+      updateGoogleSyncStatus('Offline — changes are saved on this device and will sync automatically when you are back online.', 'info');
+    }
+  }
+  return res;
+}
+/* Try to send any queued changes now that we are (back) online. */
+async function flushPendingSync() {
+  if (!cloudReady()) return false;
+  if (!syncQueueIsDirty()) return true;      // nothing pending
+  window.__syncQueueWasDirty = true;
+  const res = await cloudPush();
+  if (res && res.ok) {
+    if (typeof updateGoogleSyncStatus === 'function') updateGoogleSyncStatus('Reconnected — syncing changes made while offline.', 'success');
+    return true;
+  }
+  return false;
+}
+function initSyncFlushers() {
+  try {
+    window.addEventListener('online', function () { flushPendingSync(); });
+    window.addEventListener('beforeunload', function () {
+      if (syncQueueIsDirty() && cloudReady()) { // best-effort last push on close
+        try { cloudPush(); } catch (e) {}
+      }
+    });
+  } catch (e) { /* listeners are best-effort */ }
 }
 async function cloudGet() {
   if (SUPA.configured()) return supabaseGet();
@@ -224,7 +266,9 @@ function applyCloudRemote(remote, remoteTs) {
   if (typeof migrateInventoryMovements === 'function') migrateInventoryMovements();
   // The first local render may have populated the form with local defaults; let
   // the cloud copy provide today's / previous production recipe instead.
-  draftUsage = {};
+  // NOTE: we deliberately do NOT wipe draftUsage here — the Production form is
+  // only re-populated when the user actually changes the selected date, so a
+  // remote pull can never erase quantities that are being typed (see usage.js).
   state.version = 2;
   /* Keep the workspace's "modified" stamp in sync with the remote copy so a
      duplicate/echo event for the same write is recognised as already applied. */
@@ -282,8 +326,9 @@ async function cloudAfterSignIn() {
   const remoteTs = remote.exportedAt ? Date.parse(remote.exportedAt) : 0;
   const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
   if (remoteTs && localTs && remoteTs < localTs) {
-    await cloudPush();
-    updateGoogleSyncStatus('Online as ' + email + '. Local copy is newer — pushed to cloud.', 'success');
+    const up = await cloudPush();
+    if (up && up.ok) updateGoogleSyncStatus('Online as ' + email + '. Local copy is newer — pushed to cloud.', 'success');
+    else updateGoogleSyncStatus('Could not push local copy to cloud yet — it is queued and will retry.', 'info');
     renderCloudStatus();
     return true;
   }

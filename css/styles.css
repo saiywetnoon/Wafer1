@@ -21,3 +21,109 @@
   .cal-day.selected { outline: 2px solid #10B981; }
   input[type=number]::-webkit-inner-spin-button { opacity: 1; }
   .price-input, .usage-input { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   FRYING PAN TIMERS — 3 independent pan timers
+   Each .pan-card reads its own --pan-accent (set inline from the
+   module), which gives every pan a distinct, recognizable theme.
+   Warning states flash with high-contrast amber (50 s checkpoint)
+   and red (20 s checkpoint / done) animations.
+   ============================================================ */
+.pan-card {
+  position: relative;
+  border-radius: 1rem;
+  border: 1px solid #374151;
+  background: #111827;
+  padding: 1rem;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color .2s ease, box-shadow .2s ease, transform .15s ease;
+}
+.pan-card:hover { transform: translateY(-2px); }
+.pan-card.pan-running { border-color: var(--pan-accent); box-shadow: 0 0 0 1px var(--pan-accent), 0 0 26px -6px var(--pan-accent); }
+.pan-card.pan-paused { border-color: #6B7280; }
+
+.pan-dot { width: 10px; height: 10px; border-radius: 9999px; background: #374151; display: inline-block; }
+.pan-preset-label { font-size: 10px; font-weight: 800; color: #A78BFA; background: rgba(167,139,250,.14); padding: 1px 6px; border-radius: 9999px; letter-spacing: .04em; }
+.pan-running .pan-dot { background: var(--pan-accent); box-shadow: 0 0 8px var(--pan-accent); animation: panDotBlink 1s infinite; }
+@keyframes panDotBlink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.pan-name { font-weight: 800; letter-spacing: .02em; }
+.pan-badge { font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 2px 8px; border-radius: 9999px; background: #1F2937; color: #9CA3AF; }
+.pan-running .pan-badge { background: rgba(31, 41, 55, .9); color: var(--pan-accent); }
+.pan-stage-1 .pan-badge { background: #F59E0B; color: #111827; }
+.pan-stage-2 .pan-badge { background: #EA580C; color: #FFFFFF; }
+.pan-stage-3 .pan-badge { background: #EF4444; color: #FFFFFF; }
+
+.pan-time { font-size: 3rem; font-weight: 800; line-height: 1; margin: .6rem 0 .5rem; font-variant-numeric: tabular-nums; color: #F9FAFB; }
+.pan-running .pan-time { color: var(--pan-accent); text-shadow: 0 0 14px rgba(56, 189, 248, .35); }
+.pan-theme-amber.pan-running .pan-time { text-shadow: 0 0 14px rgba(245, 158, 11, .35); }
+.pan-theme-violet.pan-running .pan-time { text-shadow: 0 0 14px rgba(167, 139, 250, .35); }
+.pan-stage-1 .pan-time { color: #FBBF24; text-shadow: 0 0 14px rgba(251, 191, 36, .7); }
+.pan-stage-2 .pan-time { color: #FDBA74; text-shadow: 0 0 16px rgba(249, 115, 22, .7); }
+.pan-stage-3 .pan-time { color: #F87171; text-shadow: 0 0 16px rgba(239, 68, 68, .8); }
+
+.pan-bar { height: 8px; background: #1F2937; border: 1px solid #374151; border-radius: 9999px; overflow: hidden; }
+.pan-bar-fill { height: 100%; border-radius: 9999px; background: var(--pan-accent); transition: width .2s linear; }
+.pan-stage-1 .pan-bar-fill { background: #F59E0B; }
+.pan-stage-2 .pan-bar-fill { background: #F97316; }
+.pan-stage-3 .pan-bar-fill { background: #EF4444; }
+
+.pan-msg { margin-top: .55rem; font-size: 12px; line-height: 1.35; color: #9CA3AF; font-weight: 600; min-height: 2.1em; }
+.pan-running .pan-msg { color: var(--pan-accent); }
+.pan-stage-1 .pan-msg { color: #FDE68A; }
+.pan-stage-2 .pan-msg { color: #FED7AA; font-weight: 800; }
+.pan-stage-3 .pan-msg { color: #FECACA; font-weight: 800; }
+
+.pan-btn { padding: 6px 14px; border-radius: 8px; background: #1F2937; border: 1px solid #374151; color: #E5E7EB; font-size: 12px; font-weight: 700; cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+.pan-btn:hover { background: #374151; }
+.pan-btn-primary { background: #065F46; border-color: #059669; color: #FFFFFF; }
+.pan-btn-primary:hover { background: #047857; }
+.pan-running .pan-btn-primary { background: #B45309; border-color: #F59E0B; }
+.pan-dur { padding: 6px 8px; border-radius: 8px; background: #1F2937; border: 1px solid #374151; color: #E5E7EB; font-size: 12px; margin-left: auto; }
+.pan-hint { margin-top: .6rem; font-size: 10px; color: #6B7280; }
+.pan-card kbd { background: #1F2937; border: 1px solid #374151; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-family: inherit; font-size: 10px; font-weight: 700; color: #D1D5DB; }
+#panAlertBanner kbd, .pan-hint kbd { background: rgba(31, 41, 55, .8); }
+
+/* Flashing warning card states (steps() = abrupt full-contrast flicker)
+   stage 1 = fold (amber) · stage 2 = fold+close/prep (orange) · stage 3 = done (red) */
+@keyframes panFlash1 {
+  0%, 100% { border-color: #F59E0B; box-shadow: 0 0 0 2px #F59E0B, 0 0 30px -4px rgba(245, 158, 11, .75); background: #1F2937; }
+  50%      { border-color: #FCD34D; box-shadow: 0 0 0 5px #F59E0B, 0 0 46px 0 rgba(245, 158, 11, .95); background: #374151; }
+}
+.pan-card.pan-stage-1 { animation: panFlash1 .55s steps(2, end) infinite; }
+@keyframes panFlashOrange {
+  0%, 100% { border-color: #F97316; box-shadow: 0 0 0 2px #F97316, 0 0 30px -4px rgba(249, 115, 22, .8); background: #431407; }
+  50%      { border-color: #FB923C; box-shadow: 0 0 0 6px #F97316, 0 0 48px 0 rgba(249, 115, 22, 1); background: #7C2D12; }
+}
+.pan-card.pan-stage-2 { animation: panFlashOrange .48s steps(2, end) infinite; }
+@keyframes panFlash2 {
+  0%, 100% { border-color: #EF4444; box-shadow: 0 0 0 2px #EF4444, 0 0 34px -4px rgba(239, 68, 68, .85); background: #450A0A; }
+  50%      { border-color: #F87171; box-shadow: 0 0 0 6px #EF4444, 0 0 52px 0 rgba(239, 68, 68, 1); background: #7F1D1D; }
+}
+.pan-card.pan-stage-3 { animation: panFlash2 .4s steps(2, end) infinite; }
+
+/* Global alert strip (top of the Fry Timers panel) */
+#panAlertBanner { border: 2px solid transparent; letter-spacing: .02em; }
+.pan-banner-1 { animation: panBanner1 .6s steps(2, end) infinite; }
+@keyframes panBanner1 {
+  0%, 100% { background: #451A03; border-color: #F59E0B; color: #FDE68A; }
+  50%      { background: #F59E0B; border-color: #FFF7ED; color: #451A03; }
+}
+.pan-banner-2 { animation: panBannerOrange .5s steps(2, end) infinite; }
+@keyframes panBannerOrange {
+  0%, 100% { background: #431407; border-color: #F97316; color: #FED7AA; }
+  50%      { background: #F97316; border-color: #FFF7ED; color: #431407; }
+}
+.pan-banner-3 { animation: panBanner2 .45s steps(2, end) infinite; }
+@keyframes panBanner2 {
+  0%, 100% { background: #7F1D1D; border-color: #EF4444; color: #FECACA; }
+  50%      { background: #DC2626; border-color: #FECACA; color: #FFFFFF; }
+}
+
+/* Nav button pulse while any pan needs attention */
+.pan-nav-alert { animation: panNavPulse .5s steps(2, end) infinite; }
+@keyframes panNavPulse {
+  0%, 100% { box-shadow: 0 0 0 2px #F59E0B, 0 0 18px -2px rgba(245, 158, 11, .8); }
+  50%      { box-shadow: 0 0 0 4px #EF4444, 0 0 22px 0 rgba(239, 68, 68, .9); }
+}

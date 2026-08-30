@@ -13,7 +13,7 @@ function renderIngredientWasteOptions() {
   const select = $('ingredientWasteItem');
   if (!select) return;
   const selected = select.value;
-  select.innerHTML = '<option value="">Choose ingredient…</option>' + state.prices.map(function (ing) {
+  select.innerHTML = '<option value="">Choose ingredient…</option>' + state.prices.filter(isStockItem).map(function (ing) {
     return '<option value="' + esc(ing.name) + '">' + esc(ing.name) + ' (' + (ing.unit === 'g' ? 'g' : 'units') + ')</option>';
   }).join('');
   select.value = selected || '';
@@ -47,7 +47,7 @@ function renderInventoryMovements() {
 function renderInventory() {
   const tbody = $('inventoryBody');
   const lowItems = [];
-  tbody.innerHTML = state.prices.map(function (ing) {
+  tbody.innerHTML = state.prices.filter(isStockItem).map(function (ing) {
     const item = ensureInventoryItem(ing.name);
     const stock = syncInventorySnapshot(ing.name);
     const unit = ing.unit === 'g' ? 'g' : 'units';
@@ -61,7 +61,10 @@ function renderInventory() {
       '<td class="py-2 pr-2"><input type="number" min="0" step="0.01" value="' + esc(stock) + '" data-name="' + esc(ing.name) + '" class="stock-input w-24 px-1.5 py-1 rounded border border-gray-700 bg-gray-800 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-500"></td>' +
       '<td class="py-2 pr-2"><input type="number" min="0" step="0.01" value="' + esc(item.lowAlert) + '" data-name="' + esc(ing.name) + '" class="low-input w-20 px-1.5 py-1 rounded border border-gray-700 bg-gray-800 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-500"></td>' +
       '<td class="py-2 pr-2">' + status + '</td>' +
-      '<td class="py-2"><button data-add-stock="' + esc(ing.name) + '" class="add-stock-btn text-emerald-500 hover:text-emerald-400" title="Add stock"><i data-lucide="plus" class="w-3.5 h-3.5"></i></button></td>' +
+      '<td class="py-2"><div class="flex gap-2">' +
+      '<button data-add-stock="' + esc(ing.name) + '" class="add-stock-btn text-emerald-500 hover:text-emerald-400" title="Add stock"><i data-lucide="plus" class="w-3.5 h-3.5"></i></button>' +
+      '<button data-remove-stock="' + esc(ing.name) + '" class="remove-stock-btn text-red-500 hover:text-red-400" title="Remove from stock"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>' +
+      '</div></td>' +
       '</tr>';
   }).join('');
   document.querySelectorAll('.stock-input').forEach(function (inp) {
@@ -90,6 +93,9 @@ function renderInventory() {
   document.querySelectorAll('.add-stock-btn').forEach(function (btn) {
     btn.addEventListener('click', function () { addStockFor(btn.dataset.addStock); });
   });
+  document.querySelectorAll('.remove-stock-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () { removeStockItem(btn.dataset.removeStock); });
+  });
   const alertEl = $('lowStockAlert');
   if (lowItems.length) {
     alertEl.classList.remove('hidden');
@@ -104,6 +110,9 @@ function renderInventory() {
 
 function addStockFor(name) {
   if (!priceItemByName(name)) { showToast('Choose an ingredient from the Price List first.', 'error'); return; }
+  // Re-adding stock brings an item (previously removed) back into stock tracking.
+  const ing = priceItemByName(name);
+  if (ing && ing.stock === false) ing.stock = true;
   const qty = prompt('Add stock for "' + name + '":', '');
   if (qty === null || qty === '') return;
   const value = parseFloat(qty);
@@ -114,6 +123,18 @@ function addStockFor(name) {
   saveState();
   renderInventory();
   showToast('Added ' + fmt(value) + ' to ' + name + ' stock.');
+}
+
+function removeStockItem(name) {
+  const ing = priceItemByName(name);
+  const label = ing ? ing.name : name;
+  if (!confirm('Remove "' + label + '" from stock?\n\nIts stock history (movements) will be cleared and it will be treated as a daily-usage item (like water / electricity). It stays in your Price List and Usage table, and you can bring it back later with "Add Stock".')) return;
+  if (state.inventory) delete state.inventory[name];
+  state.inventoryMovements = (state.inventoryMovements || []).filter(function (m) { return m.ingredientName !== name; });
+  if (ing) ing.stock = false;
+  saveState();
+  renderInventory();
+  showToast('"' + label + '" removed from stock (kept as daily usage). Use Add Stock to restore it.');
 }
 
 $('addStockBtn').addEventListener('click', function () {

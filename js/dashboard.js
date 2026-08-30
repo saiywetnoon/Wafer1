@@ -4,6 +4,30 @@
 let gainChart = null;
 let volumeChart = null;
 
+/* ---------- Dashboard Alerts (feature 4) ---------- */
+function renderDashboardAlerts() {
+  const el = $('dashboardAlerts');
+  if (!el) return;
+  const lowItems = (state.prices || []).filter(isStockItem).map(function (ing) {
+    const item = ensureInventoryItem(ing.name);
+    const stock = syncInventorySnapshot(ing.name);
+    return { name: ing.name, stock: stock, lowAlert: item.lowAlert };
+  }).filter(function (x) { return x.lowAlert > 0 && x.stock <= x.lowAlert; });
+  const expiring = getExpiringBatches();
+  if (!lowItems.length && !expiring.length) { el.innerHTML = ''; return; }
+  const html = [];
+  if (lowItems.length) html.push('<div class="p-3 rounded-lg bg-red-900/30 border border-red-700/60 text-xs text-red-300"><b>Low / out of stock:</b> ' +
+    lowItems.map(function (x) { return esc(x.name) + ' (' + fmt(x.stock) + ')'; }).join(', ') + '</div>');
+  if (expiring.length) html.push('<div class="p-3 rounded-lg bg-orange-900/30 border border-orange-700/60 text-xs text-orange-300"><b>Expiring finished stock:</b> ' +
+    expiring.map(function (p) { return esc(p.date) + ' · ' + fmt(p.pieces) + ' pcs · exp ' + esc(p.useBy); }).join(' | ') + '</div>');
+  el.innerHTML = html.join('<div class="h-2"></div>');
+}
+function getExpiringBatches(days) {
+  days = days || 3;
+  const soonStr = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  return (state.production || []).filter(function (p) { return p.useBy && p.useBy <= soonStr; });
+}
+
 function renderDashboard() {
   const todayStr = today();
   const t = financeTotalsAll();
@@ -24,6 +48,7 @@ function renderDashboard() {
   renderCharts();
   renderSummary(entriesProdSales());
   renderMonthlyReport();
+  renderDashboardAlerts();
 }
 // @@DASH2@@
 

@@ -105,6 +105,33 @@ function renderCash() {
     }).join('') : '<div class="text-gray-500">No manual adjustments yet.</div>';
     lucide.createIcons();
   }
+  renderCashCount();
+}
+
+/* ---------- Daily Cash Count / Close (automated) ----------
+   Expected cash today = today's PAID sales + today's customer payments, both of
+   which are already tracked automatically when you log sales / repayments. This
+   removes the need for a manual "post sales to drawer" step and gives a live
+   expected-vs-counted variance for the daily close. */
+function cashExpectedToday() {
+  var d = today();
+  var sales = (state.sales || []).reduce(function (s, x) {
+    return x.date === d ? s + (x.paidAmount === undefined ? (x.amount || 0) : (x.paidAmount || 0)) : s;
+  }, 0);
+  var pay = (state.customerPayments || []).reduce(function (s, p) { return p.date === d ? s + (p.amount || 0) : s; }, 0);
+  return sales + pay;
+}
+function renderCashCount() {
+  var exp = cashExpectedToday();
+  var expEl = $('cashExpectedToday');
+  if (expEl) expEl.textContent = fmtKs(exp);
+  var counted = parseFloat(($('cashCounted') || {}).value) || 0;
+  var varEl = $('cashVariance');
+  if (varEl) {
+    var variance = counted - exp;
+    varEl.textContent = (variance >= 0 ? '+' : '') + fmtKs(variance);
+    varEl.className = 'font-extrabold text-lg ' + (Math.abs(variance) < 1 ? 'text-gray-400' : variance > 0 ? 'text-emerald-400' : 'text-red-400');
+  }
 }
 
 $('cashOpening').addEventListener('change', function () {
@@ -126,3 +153,39 @@ $('cashAdjustOutBtn').addEventListener('click', function () {
   $('cashAdjustAmount').value = '';
   $('cashAdjustLabel').value = '';
 });
+
+$('cashCounted').addEventListener('input', renderCashCount);
+$('cashPostVarianceBtn').addEventListener('click', function () {
+  var exp = cashExpectedToday();
+  var counted = parseFloat($('cashCounted').value) || 0;
+  var variance = Math.round(counted - exp);
+  if (Math.abs(variance) < 1) { showToast('Counting matches expected — no adjustment needed.', 'info'); return; }
+  addCashAdjustment(variance, 'Daily count variance (' + fmt(counted) + ' counted vs ' + fmt(exp) + ' expected)');
+  $('cashCounted').value = '';
+  renderCashCount();
+  showToast('Variance ' + (variance > 0 ? '+' : '') + fmtKs(variance) + ' posted to the cash drawer.');
+});
+
+/* ---------- CashHooks API (hardware / external integration) ----------
+   A tiny, stable interface so a barcode scanner, POS hardware hook, or a future
+   hardware drawer plugin can record cash events without touching app internals:
+     CashHooks.recordSale(amount, label)
+     CashHooks.recordAdjustment(amount, label)
+     CashHooks.expectedToday()
+     CashHooks.close(counted)   → posts the variance as an adjustment
+   */
+window.CashHooks = {
+  recordSale: function (amount, label) {
+    addCashAdjustment(Math.round(amount) || 0, label || 'Sale (external POS)');
+  },
+  recordAdjustment: function (amount, label) {
+    addCashAdjustment(Math.round(amount) || 0, label || 'Adjustment (external)');
+  },
+  expectedToday: function () { return cashExpectedToday(); },
+  postVariance: function (counted) {
+    var exp = cashExpectedToday();
+    var variance = Math.round((parseFloat(counted) || 0) - exp);
+    if (Math.abs(variance) >= 1) addCashAdjustment(variance, 'Daily count variance (external close)');
+    return variance;
+  }
+};

@@ -28,6 +28,7 @@ function saveProduction() {
   const mixWeight = totalMixWeightFor(usage);
   const expectedRolls = wPerRoll > 0 ? Math.floor(mixWeight / wPerRoll) : 0;
   const notes = ($('logNotes').value || '').trim();
+  const useBy = ($('logUseBy') ? ($('logUseBy').value || '').trim() : '');
 
   const record = {
     id: isUpdate ? editId : uid(),
@@ -45,6 +46,7 @@ function saveProduction() {
     laborCost: Math.round(laborCost),
     costPerPiece: costPerPiece
   };
+  if (useBy) record.useBy = useBy;
 
   const previous = isUpdate ? state.production.find(function (p) { return p.id === record.id; }) : null;
   const ingredientShortage = inventoryUsageShortage(previous ? previous.usage : {}, usage);
@@ -86,10 +88,48 @@ function saveProduction() {
   $('logLabor').value = laborMin || 0;
   $('logWeightPerRoll').value = wPerRoll || 0;
   $('logNotes').value = '';
+  if ($('logUseBy')) $('logUseBy').value = '';
   updateUsageCosts();
 }
 
 $('saveLogBtn').addEventListener('click', saveProduction);
+
+/* One-click save of a pan batch's production (used by the run tracker and pan
+   presets). Writes the same Production entry as the main form, then navigates
+   to the Production tab so the totals are visible. */
+function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
+  if (!date || !(pieces > 0)) { showToast('No finished batch to save.', 'error'); return; }
+  const record = {
+    id: uid(),
+    date: date,
+    pieces: Math.round(pieces),
+    bags: Math.round(bags || Math.ceil(pieces / 6)),
+    weightPerRoll: 0, mixWeight: 0, expectedRolls: 0,
+    notes: notes || '',
+    usage: Object.assign({}, usage || currentUsage()),
+    additionalCost: 0,
+    capital: 0, laborMinutes: 0, laborCost: 0, costPerPiece: 0
+  };
+  if (record.capital === 0) record.capital = Math.round(ingredientCostFor(record.usage));
+  if (useBy) record.useBy = useBy;
+  const shortage = inventoryUsageShortage({}, record.usage);
+  if (shortage) {
+    showToast('Not enough ' + shortage.name + '. Available: ' + fmt(shortage.available) + '; batch needs ' + fmt(shortage.requested) + ' more.', 'error');
+    return;
+  }
+  state.production.push(record);
+  reconcileProductionInventory({}, record.usage, record.date, record.id);
+  rebuildStockAndCogs();
+  saveState();
+  renderAll();
+  triggerGoogleSync();
+  clearDraft();
+  $('editProdId').value = '';
+  $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Save Production Work';
+  lucide.createIcons();
+  showToast('Batch saved to production for ' + record.date + ' — ' + fmt(record.pieces) + ' pieces ready to sell.');
+  document.querySelector('[data-tab="log"]').click();
+}
 
 /* ============================================================
    RECENT PRODUCTION
@@ -106,6 +146,7 @@ function renderProduction() {
     const exp = p.expectedRolls > 0 ? fmt(p.expectedRolls) : '—';
     const diff = (p.expectedRolls > 0) ? ((p.pieces - p.expectedRolls >= 0 ? '+' : '') + fmt(p.pieces - p.expectedRolls)) : '—';
     const note = p.notes ? '<span class="text-[10px] text-gray-400" title="' + esc(p.notes).replace(/"/g, '&quot;') + '">' + esc(p.notes).slice(0, 30) + (p.notes.length > 30 ? '…' : '') + '</span>' : '<span class="text-gray-600">—</span>';
+    const useBy = p.useBy ? '<span class="text-[10px] font-bold text-orange-400 ml-1" title="Sell / use by">exp ' + esc(p.useBy) + '</span>' : '';
     const wpr = p.weightPerRoll ? fmt(p.weightPerRoll) + 'g' : '—';
     return '<tr class="border-b border-gray-800">' +
       '<td class="py-2 pr-2 whitespace-nowrap">' + esc(p.date) + '</td>' +
@@ -114,7 +155,7 @@ function renderProduction() {
       '<td class="py-2 pr-2">' + fmt(p.pieces) + '</td>' +
       '<td class="py-2 pr-2">' + exp + ' / <span class="text-gray-500">' + (p.weightPerRoll ? fmt(p.weightPerRoll) + 'g' : '—') + '</span></td>' +
       '<td class="py-2 pr-2">' + diff + '</td>' +
-      '<td class="py-2 pr-2">' + note + '</td>' +
+      '<td class="py-2 pr-2">' + note + useBy + '</td>' +
       '<td class="py-2"><div class="flex gap-2">' +
       '<button onclick="editProduction(\'' + p.id + '\')" class="text-amber-400 hover:text-amber-300 transition" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>' +
       '<button onclick="deleteProduction(\'' + p.id + '\')" class="text-red-400 hover:text-red-300 transition" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
@@ -139,6 +180,7 @@ function editProduction(id) {
   $('logLabor').value = p.laborMinutes || 0;
   $('logWeightPerRoll').value = p.weightPerRoll || 0;
   $('logNotes').value = p.notes || '';
+  if ($('logUseBy')) $('logUseBy').value = p.useBy || '';
   $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Update Production';
   lucide.createIcons();
   updateUsageCosts();

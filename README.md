@@ -37,6 +37,7 @@ dail-ledger v1.1/
 │   ├── customers.js        Customers (what customers owe you)
 │   ├── suppliers.js        Suppliers (shops), stock purchases, payables/debt you owe
 │   ├── tools.js            Business Tools
+│   ├── pan-timers.js       Frying Pan Timers (3 isolated pans, 50s/20s alerts)
 │   ├── cash.js             Cash Drawer / cash-flow + manual adjustments
 │   ├── companies.js        Multi-company workspaces, login/switch screen + boot gating
 │   ├── cloud.js            Online / cloud abstraction layer (provider-agnostic)
@@ -57,6 +58,97 @@ dail-ledger v1.1/
   original content.
 
 To regenerate the split from the original, run `_split.ps1` (PowerShell).
+
+### Frying Pan Timers
+
+The **Fry Timers** tab (`js/pan-timers.js`, cards rendered into
+`#panTimersGrid`) runs three fully independent frying-pan countdowns that never
+interfere with each other. For each pan:
+
+- **Input triggers** — mouse **and** a unique keyboard shortcut: press
+  `1` / `2` / `3` to run/pause that pan, `Shift+1..3` to reset it. Clicking the
+  card or its Start/Pause and Reset buttons works too, and right-click /
+  middle-click reset the pan. (Shortcuts are ignored while typing in an input.)
+- **Multi-step checkpoints** — the workflow is heat **0:00–0:50** with the lid
+  closed (no alerts), then at **0:50 elapsed** a flashing amber state fires
+  **"Open lid & fold margins (3/4 temp)"** (fold the margins and close the lid
+  back, shown with **"Close back / prep next roll"**), then it heats the final
+  **20 s** and at 0:00 a red flashing state fires **"Rolls ready — lift lid &
+  roll!"**. Each alert flashes the pan card, a global alert strip, the
+  browser-tab title, the Fry Timers nav button, plays a beep (Web Audio,
+  toggleable), and toasts app-wide. On batches longer than 70 s the
+  "Close back / prep next roll" reminder fires separately at 20 s remaining.
+- **Visual distinction** — each pan keeps its own accent theme (sky / orange /
+  violet) plus amber and red flashing warning states.
+- **Refresh-safe** — runs are stored as a wall-clock `endAt` in
+  `localStorage.panTimers_v1`, so a background tab or page refresh never drifts.
+- **Scaleable pan count** — ⚙ Settings now has "Number of frying pans (1–9)".
+  Add/remove pans as your production line grows; each pan keeps its own theme
+  and a dedicated shortcut key (1–9).
+- **Settings** — the ⚙ button opens a panel that customises the batch timing
+  (fold checkpoint seconds and final-heat seconds, which set the per-pan total),
+  the beep volume, and which alerts fire: beeps, toast messages, browser-tab
+  title flash, Fry Timers menu-button flash, and mobile vibration. Changes
+  apply immediately to ready pans; running batches keep their duration but use
+  the new checkpoint timings. Settings are persisted with the timers.
+
+Only `index.html` (new tab + `<script>` tag), `css/styles.css`, and the new
+`js/pan-timers.js` are involved. The generic `.tab-btn` handler in
+`js/helpers.js` auto-wires the tab; the module adds its own tab-click, keyboard
+and mouse listeners. Core logic is pinned by `_verify_pan_timers.js`.
+
+## Production-form behaviour (important)
+
+The **Production** form never silently overwrites what you are typing. It is
+only re-populated when the selected production **date** changes (changing the
+date loads that day's saved batch, or restores the default/previous usage).
+Re-renders from cloud sync or switching tabs do **not** reset your
+bags / pieces / labor / notes while you are editing them.
+
+## Stock vs. daily-usage items
+
+Ingredients marked `stock: false` (defaults: **Water**, **Electricity**) are
+**not** stock — they stay in the Usage table and cost calculation, but are
+excluded from inventory, movement recording, shortage checks, and the purchase
+list. In the **Inventory** tab each stock item now has a **remove from stock**
+button (🗑) that turns it into a daily-usage item and clears its stock history;
+**Add Stock** brings it back.
+
+## Group A — Kitchen features
+
+- **Recipe Scale** — in Business Tools → Recipes, "Scale" turns a saved recipe
+  into any target number of pieces and fills the Production form.
+- **Target-Profit Calculator** — enter the profit you want for the day and it
+  tells you how many bags / rolls to produce (and sell) to hit it, factoring in
+  standing orders.
+- **Pan batch log** — on the Fry Timers tab, each finished pan's pieces are
+  remembered in "Today's Batch Log"; "Log finished batch → Production" records
+  them straight into Production.
+
+## Group B — Inventory & purchasing
+
+- **Purchase-list builder** — in Business Tools, builds today's shopping list
+  from current usage + stock, with a safety-buffer selector and estimated cost.
+- **Low-stock & expiring alerts** — the Dashboard shows red "low / out of
+  stock" cards (from each item's low-alert threshold) and orange "expiring"
+  cards for batches whose Sell/Use-By date is within 3 days.
+
+## Offline-first sync & cash automation
+
+- **Pending-sync queue** — if a push cannot reach the cloud (offline or
+  endpoint error), a persistent flag is set and the status line says so. When
+  the connection returns (or on next page load / manual sync) the current state
+  — which includes every change made offline — is pushed automatically and the
+  flag clears. Conflict resolution on boot is last-write-wins by `updatedAt`.
+- **Daily Cash Count / Close** — the Cash tab now computes today's **expected
+  cash** automatically (paid sales + customer payments). Enter what you counted
+  and the variance is shown live; one click posts it as a drawer adjustment.
+- **`CashHooks` API** — a tiny global interface (`recordSale`, `recordAdjustment`,
+  `expectedToday`, `postVariance`) so a barcode scanner, POS hardware hook, or
+  future hardware drawer can log cash events without touching app internals.
+- **Tabs re-arranged** — the navigation now follows the work flow: Production →
+  Fry Timers → Sales & Stock → Inventory → Dashboard → Calendar → Customers →
+  Suppliers → Cash Drawer → Business Tools → Google Sync.
 
 ## Current production stack
 

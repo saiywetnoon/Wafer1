@@ -22,13 +22,57 @@ function previousProductionUsage(date) {
   })[0];
 }
 
+/* ---------- Production form population (never fights the user) ----------
+   Repeated renderAll() calls (cloud sync, other tabs redrawing) must never
+   silently overwrite quantities the user is currently typing. So the form is
+   only (re)populated when the selected production DATE actually changes:
+      • New/other date with a saved batch → load that batch (usage + totals).
+      • No saved batch for that date  → keep whatever the user has typed.
+   Changing the date input forces a repopulate for the newly selected date. */
+let populatedProductionDate = null;
+function populateProductionForm(date) {
+  if (populatedProductionDate === date) return false;
+  populatedProductionDate = date;
+  const batch = (state.production || []).find(function (production) { return production.date === date; }) || null;
+  if (batch) {
+    draftUsage = Object.assign({}, batch.usage || {});
+    $('additionalCost').value = batch.additionalCost || 0;
+    $('logBagsProduced').value = batch.bags || 0;
+    $('logPieces').value = batch.pieces || 0;
+    $('logLabor').value = batch.laborMinutes || 0;
+    $('logWeightPerRoll').value = batch.weightPerRoll || 0;
+    $('logNotes').value = batch.notes || '';
+    if ($('logUseBy')) $('logUseBy').value = batch.useBy || '';
+  } else {
+    // No saved batch: use the default/previous usage but NEVER touch the
+    // quantities/labor/notes the user is editing.
+    setDefaultProductionUsage(date);
+  }
+  renderUsageTable(true);   // rebuild usage rows (this IS the date change)
+  updateUsageCosts();
+  return true;
+}
+$('logDate').addEventListener('change', function () {
+  populateProductionForm($('logDate').value || today());
+  persistDraft();
+});
+
 function setDefaultProductionUsage(date) {
   if (Object.keys(draftUsage).length) return;
   const batch = (state.production || []).find(function (production) { return production.date === date; }) || previousProductionUsage(date);
   draftUsage = Object.assign({}, batch && batch.usage ? batch.usage : DEFAULT_USAGE);
 }
 
-function renderUsageTable() {
+function renderUsageTable(force) {
+  // NEVER rebuild the usage <input> elements while the user is editing the
+  // current production date — re-renders from cloud sync, inventory changes,
+  // purchases, waste, etc. must not wipe quantities being typed. A forced
+  // rebuild happens only on an actual date change (populateProductionForm).
+  const curDate = $('logDate') ? $('logDate').value : today();
+  if (!force && populatedProductionDate === curDate) {
+    updateUsageCosts();
+    return;
+  }
   const tbody = $('usageTable');
   const usage = currentUsage();
   tbody.innerHTML = state.prices.map(function (ing) {

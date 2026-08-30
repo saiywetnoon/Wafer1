@@ -185,6 +185,7 @@ function storageUsedKB() {
 
 function inventoryValue() {
   return (state.prices || []).reduce(function (sum, ing) {
+    if (!isStockItem(ing.name)) return sum;
     const stock = inventoryStockFor(ing.name);
     if (stock <= 0) return sum;
     const price = parseFloat(ing.price) || 0;
@@ -229,10 +230,20 @@ function syncInventorySnapshot(name) {
   item.stock = Math.max(0, Math.round(inventoryStockFor(name) * 100) / 100);
   return item.stock;
 }
+/* An ingredient counts as STOCK only when it can be bought and stored (flour,
+   eggs, bags…). Daily-usage items like water and electricity are NOT stock:
+   they are excluded from inventory, movement recording, shortage checks and
+   purchase planning. Opt out per item with the `stock: false` flag on the
+   price-list entry. */
+function isStockItem(name) {
+  const ing = (state.prices || []).find(function (i) { return i.name === name; });
+  return !ing || ing.stock !== false;
+}
 function recordInventoryMovement(movement) {
   const qty = parseFloat(movement && movement.qty);
   const name = String((movement && movement.ingredientName) || '').trim();
   if (!name || !isFinite(qty) || qty === 0) return null;
+  if (!isStockItem(name)) return null;   // water/electricity etc. are usage, not stock
   if (!state.inventoryMovements) state.inventoryMovements = [];
   state.inventoryMovementVersion = 1;
   const record = {
@@ -255,6 +266,7 @@ function migrateInventoryMovements() {
   });
   if (state.inventoryMovementVersion >= 1 && (!hasLegacyStock || (state.inventoryMovements || []).length)) return false;
   Object.keys(state.inventory || {}).forEach(function (name) {
+    if (!isStockItem(name)) return;
     const qty = parseFloat(state.inventory[name].stock) || 0;
     if (qty > 0) recordInventoryMovement({
       date: today(), ingredientName: name, qty: qty, type: 'opening',
@@ -335,6 +347,7 @@ function inventoryUsageShortage(oldUsage, newUsage) {
   let shortage = null;
   names.forEach(function (name) {
     if (shortage) return;
+    if (!isStockItem(name)) return;   // usage-only items (water, electricity) never block production
     const oldQty = parseFloat((oldUsage || {})[name]) || 0;
     const newQty = parseFloat((newUsage || {})[name]) || 0;
     const additional = newQty - oldQty;
@@ -346,6 +359,7 @@ function inventoryUsageShortage(oldUsage, newUsage) {
 function reconcileProductionInventory(oldUsage, newUsage, date, referenceId) {
   const names = new Set(Object.keys(oldUsage || {}).concat(Object.keys(newUsage || {})));
   names.forEach(function (name) {
+    if (!isStockItem(name)) return;
     const oldQty = parseFloat((oldUsage || {})[name]) || 0;
     const newQty = parseFloat((newUsage || {})[name]) || 0;
     const difference = newQty - oldQty;

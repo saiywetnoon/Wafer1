@@ -73,10 +73,10 @@ const DEFAULT_PRICES = [
   { name: 'Palm Sugar', unit: 'g', price: 6000, weightPerUnit: null, remark: '' },
   { name: 'Egg', unit: 'unit', price: 300, weightPerUnit: 50, remark: '1 egg ≈ 50g' },
   { name: 'Coconut Milk', unit: 'g', price: 5000, weightPerUnit: null, remark: '' },
-  { name: 'Water', unit: 'g', price: 0, weightPerUnit: null, remark: '' },
+  { name: 'Water', unit: 'g', price: 0, weightPerUnit: null, remark: '', stock: false },
   { name: 'Black Sesame', unit: 'g', price: 12000, weightPerUnit: null, remark: '' },
   { name: 'Additive Blend', unit: 'g', price: 4000, weightPerUnit: null, remark: '' },
-  { name: 'Electricity', unit: 'unit', price: 250, weightPerUnit: null, remark: 'per unit' },
+  { name: 'Electricity', unit: 'unit', price: 250, weightPerUnit: null, remark: 'per unit', stock: false },
   { name: 'Packaging', unit: 'unit', price: 4, weightPerUnit: 17.14, remark: 'per bag' }
 ];
 
