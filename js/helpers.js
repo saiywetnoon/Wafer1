@@ -455,7 +455,11 @@ function pulseSuccess(el) {
   el.classList.add('save-pulse');
 }
 function pad2(n) { return (n < 10 ? '0' : '') + n; }
-/* Live "saved · synced/offline" pill in the corner. */
+/* Live "saved · synced/offline" pill in the corner.
+   The ⇄ HH:MM part is the time the cloud last CONFIRMED a write (persisted),
+   not the current clock — so a frozen "13:00" is obviously the last sync, and
+   a failed push is shown as a loud "Sync failed — retrying" instead of the app
+   pretending everything is fine for hours. */
 function updateAppStatus() {
   var el = $('appStatusBar');
   var txt = $('appStatusText');
@@ -464,12 +468,19 @@ function updateAppStatus() {
   var hm = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
   var configured = (typeof cloudIsAvailable === 'function') ? cloudIsAvailable() : false;
   var online = (typeof cloudIsOnline === 'function') ? cloudIsOnline() : true;
+  var failed = (typeof cloudSyncFailed === 'boolean') ? cloudSyncFailed : false;
   var dirty = (typeof syncQueueIsDirty === 'function' ? syncQueueIsDirty() : false)
     || (typeof pendingCloudPushQueued === 'boolean' ? pendingCloudPushQueued : false);
+  var lastSync = (typeof cloudLastSyncAt === 'function') ? cloudLastSyncAt() : '';
+  var lastHM = '';
+  if (lastSync) {
+    try { var ld = new Date(lastSync); lastHM = ' ⇄ ' + pad2(ld.getHours()) + ':' + pad2(ld.getMinutes()); } catch (e) { lastHM = ''; }
+  }
   var label, stateClass;
   if (!configured) { label = 'Local'; stateClass = 'synced'; }
-  else if (online && !dirty) { label = 'Synced'; stateClass = 'synced'; }
-  else if (online && dirty) { label = 'Syncing…'; stateClass = 'pending'; }
+  else if (failed && online) { label = 'Sync failed — retrying' + lastHM; stateClass = 'pending'; }
+  else if (online && !dirty) { label = 'Synced' + lastHM; stateClass = 'synced'; }
+  else if (online && dirty) { label = 'Syncing…' + lastHM; stateClass = 'pending'; }
   else if (dirty) { label = 'Offline — will sync'; stateClass = 'pending'; }
   else { label = 'Offline'; stateClass = 'offline'; }
   txt.textContent = hm + ' · ' + label;
@@ -504,9 +515,11 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     document.querySelectorAll('.tab-btn').forEach(function (b) {
       b.classList.remove('active', 'bg-amber-500', 'text-gray-900');
       b.classList.add('bg-gray-800', 'text-gray-200');
+      if (b.getAttribute) b.setAttribute('aria-selected', 'false');
     });
     btn.classList.add('active', 'bg-amber-500', 'text-gray-900');
     btn.classList.remove('bg-gray-800', 'text-gray-200');
+    if (btn.setAttribute) btn.setAttribute('aria-selected', 'true');
     document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.add('hidden'); });
     $('tab-' + btn.dataset.tab).classList.remove('hidden');
     if (btn.dataset.tab === 'dashboard') renderDashboard();
@@ -520,4 +533,52 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     if (btn.dataset.tab === 'sales') { updateSaleLive(); renderSalesTab(); }
   });
 });
+
+/* ---------- Header live badges ----------
+   Small count badges on tabs surface what needs attention without opening the
+   tab: low/out-of-stock inventory, customers with an outstanding balance, and
+   a pending-sync indicator. Lightweight — runs after each render. */
+function refreshTabBadges() {
+  var set = function (id, n, cls) {
+    var el = $('badge-' + id);
+    if (!el) return;
+    if (n > 0) {
+      el.textContent = n > 99 ? '99+' : String(n);
+      el.className = 'tab-badge' + (cls ? ' ' + cls : '');
+    } else {
+      el.textContent = '';
+      el.className = 'tab-badge hidden';
+    }
+  };
+  // Inventory: count of stock items at/below their low alert (or out).
+  try {
+    var low = 0;
+    (state.prices || []).forEach(function (ing) {
+      if (!isStockItem(ing.name)) return;
+      var item = ensureInventoryItem(ing.name);
+      if ((state.inventoryMovements || []).filter(function (m) { return m.ingredientName === ing.name; })
+        .reduce(function (s, m) { return s + (parseFloat(m.qty) || 0); }, 0) <= (item.lowAlert || 0)) low++;
+    });
+    set('inventory', low, low > 0 ? 'amber' : '');
+  } catch (e) { /* best-effort */ }
+  // Customers: count with an outstanding balance.
+  try {
+    var owe = (state.customers || []).filter(function (c) {
+      return (c && (parseFloat(c.debt) || 0) > 0);
+    }).length;
+    set('customers', owe, '');
+  } catch (e) { /* best-effort */ }
+  // Cash: today's counted drawer variance as a neutral indicator.
+  try {
+    var ce = $('cashExpectedToday') ? parseFloat(($('cashExpectedToday').textContent || '0').replace(/[^\d.-]/g, '')) || 0 : 0;
+    var cc = $('cashCounted') ? parseFloat($('cashCounted').value) || 0 : 0;
+    set('cash', cc >= 0 && cc !== ce ? 1 : 0, 'amber');
+  } catch (e) { /* best-effort */ }
+  // Sync: show a red dot when a change has not reached the cloud yet.
+  try {
+    var dirtySync = (typeof syncQueueIsDirty === 'function' && syncQueueIsDirty())
+      || (typeof cloudSyncFailed === 'boolean' && cloudSyncFailed);
+    set('sync', dirtySync ? 1 : 0, '');
+  } catch (e) { /* best-effort */ }
+}
 

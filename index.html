@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" class="dark" data-build="v1.9.1">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Daily Crispy Roll Ledger — Google Synced Daily Record-Keeping</title>
+<title>Daily Crispy Roll Ledger — Cloud-Synced Daily Record-Keeping</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://unpkg.com/lucide@1.34.0"></script>
@@ -52,7 +52,7 @@ tailwind.config = {
       </div>
       <div>
         <h1 class="text-lg sm:text-xl font-extrabold tracking-tight text-amber-400 leading-none">Daily Crispy Roll Ledger</h1>
-        <p class="text-[11px] sm:text-xs text-gray-400 mt-0.5">High-Frequency Daily Record-Keeping · Google Sheets Sync · Drive Backup</p>
+        <p class="text-[11px] sm:text-xs text-gray-400 mt-0.5">High-Frequency Daily Record-Keeping · Cloud-Synced Across Devices</p>
       </div>
     </div>
     <div class="flex items-center gap-2">
@@ -69,48 +69,61 @@ tailwind.config = {
       <button id="authLogoutBtn" class="hidden px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1.5 text-red-400" title="Sign out of your account">
         <i data-lucide="log-out" class="w-4 h-4"></i> <span id="authUserLabel">Sign out</span>
       </button>
-      <button id="demoBtn" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1.5">
-        <i data-lucide="flask-conical" class="w-4 h-4"></i> Sample Data
-      </button>
-      <button id="clearBtn" class="px-3 py-2 rounded-lg bg-red-900/40 hover:bg-red-900/60 transition text-xs font-semibold flex items-center gap-1.5 text-red-400">
-        <i data-lucide="trash-2" class="w-4 h-4"></i> Clear All
-      </button>
     </div>
   </div>
-  <nav class="max-w-7xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto scrollbar-thin">
-    <button data-tab="log" class="tab-btn active flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 text-gray-900 whitespace-nowrap transition">
-      <i data-lucide="clipboard-list" class="w-4 h-4"></i> Production
-    </button>
-    <button data-tab="timers" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-      <i data-lucide="timer" class="w-4 h-4"></i> Fry Timers
-    </button>
-    <button data-tab="sales" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-      <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i> Sales & Stock
-    </button>
-    <button data-tab="inventory" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-      <i data-lucide="package" class="w-4 h-4"></i> Inventory
-    </button>
-    <button data-tab="dashboard" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-      <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
-    </button>
-    <button data-tab="calendar" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-      <i data-lucide="calendar" class="w-4 h-4"></i> Calendar & Audit
-    </button>
-    <button data-tab="customers" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-      <i data-lucide="users" class="w-4 h-4"></i> Customers
-    </button>
-    <button data-tab="suppliers" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-      <i data-lucide="store" class="w-4 h-4"></i> Suppliers
-    </button>
-    <button data-tab="cash" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-      <i data-lucide="banknote" class="w-4 h-4"></i> Cash Drawer
-    </button>
-    <button data-tab="tools" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-      <i data-lucide="wrench" class="w-4 h-4"></i> Business Tools
-    </button>
-    <button data-tab="sync" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-      <i data-lucide="cloud" class="w-4 h-4"></i> Google Sync & Backup
-    </button>
+  <nav role="tablist" aria-label="Ledger sections" class="max-w-7xl mx-auto px-4 pb-2 flex items-center gap-x-4 gap-y-1 overflow-x-auto scrollbar-thin">
+    <div class="nav-group">
+      <span class="nav-group-label">Operations</span>
+      <button data-tab="log" role="tab" aria-selected="true" class="tab-btn active flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 text-gray-900 whitespace-nowrap transition">
+        <i data-lucide="clipboard-list" class="w-4 h-4"></i> Production
+      </button>
+      <button data-tab="timers" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+        <i data-lucide="timer" class="w-4 h-4"></i> Fry Timers
+      </button>
+      <button data-tab="sales" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+        <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i> Sales & Stock
+      </button>
+    </div>
+    <div class="nav-group">
+      <span class="nav-group-label">Insight</span>
+      <button data-tab="dashboard" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
+      </button>
+      <button data-tab="calendar" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+        <i data-lucide="calendar" class="w-4 h-4"></i> Calendar & Audit
+      </button>
+    </div>
+    <div class="nav-group">
+      <span class="nav-group-label">Manage</span>
+      <button data-tab="inventory" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+        <i data-lucide="package" class="w-4 h-4"></i> Inventory
+        <span id="badge-inventory" class="tab-badge hidden"></span>
+      </button>
+      <button data-tab="customers" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+        <i data-lucide="users" class="w-4 h-4"></i> Customers
+        <span id="badge-customers" class="tab-badge hidden"></span>
+      </button>
+      <button data-tab="suppliers" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+        <i data-lucide="store" class="w-4 h-4"></i> Suppliers
+      </button>
+    </div>
+    <div class="nav-group">
+      <span class="nav-group-label">Finance</span>
+      <button data-tab="cash" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+        <i data-lucide="banknote" class="w-4 h-4"></i> Cash Drawer
+        <span id="badge-cash" class="tab-badge hidden"></span>
+      </button>
+    </div>
+    <div class="nav-group">
+      <span class="nav-group-label">System</span>
+      <button data-tab="tools" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+        <i data-lucide="wrench" class="w-4 h-4"></i> Business Tools
+      </button>
+      <button data-tab="sync" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+        <i data-lucide="cloud" class="w-4 h-4"></i> Sync & Backup
+        <span id="badge-sync" class="tab-badge hidden"></span>
+      </button>
+    </div>
   </nav>
 </header>
 
@@ -119,8 +132,8 @@ tailwind.config = {
   <!-- ===================== DAILY LOG ===================== -->
   <section id="tab-log" class="tab-panel">
     <div class="grid lg:grid-cols-2 gap-4">
-      <!-- Price List (persistent) -->
-      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+      <!-- Price List (persistent) — secondary/settings, rendered after the daily form -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 order-last">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
           <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="tags" class="w-5 h-5 text-amber-400"></i> Ingredient Price List</h3>
           <div class="flex gap-2">
@@ -159,8 +172,8 @@ tailwind.config = {
         </div>
       </div>
 
-      <!-- Today's Usage & Production -->
-      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+      <!-- Today's Usage & Production (PRIMARY daily task — shown first) -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 order-first">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
           <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="scale" class="w-5 h-5 text-amber-400"></i> Today's Usage & Production</h3>
           <div class="flex flex-wrap gap-2">
@@ -931,6 +944,20 @@ tailwind.config = {
         <div class="flex flex-wrap gap-2">
           <button id="printReportBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">🖨 Print Report</button>
           <button id="exportMonthlyCsvBtn" class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold">Export Monthly CSV</button>
+        </div>
+      </div>
+
+      <!-- Utility / Danger zone — kept out of the header so everyday actions stay clean -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-red-900/50">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="alert-triangle" class="w-5 h-5 text-red-400"></i> Utilities & Danger Zone</h3>
+        <p class="text-xs text-gray-400 mb-3">Sample data is for test drives only. <b>Clear All</b> permanently erases every record on this device and account — use it rarely, and download a backup first (Google Sync tab).</p>
+        <div class="flex flex-wrap gap-2">
+          <button id="demoBtn" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-bold transition flex items-center gap-1.5">
+            <i data-lucide="flask-conical" class="w-4 h-4"></i> Load Sample Data
+          </button>
+          <button id="clearBtn" class="px-3 py-2 rounded-lg bg-red-900/40 hover:bg-red-900/60 text-red-400 text-xs font-bold transition flex items-center gap-1.5">
+            <i data-lucide="trash-2" class="w-4 h-4"></i> Clear All Data
+          </button>
         </div>
       </div>
     </div>

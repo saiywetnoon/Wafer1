@@ -15,6 +15,12 @@ global.localStorage = {
   setItem: (k, v) => { localStorageData[k] = String(v); },
   removeItem: (k) => { delete localStorageData[k]; }
 };
+global.cloudIsAvailable = () => true;
+global.cloudIsOnline = () => true;
+global.syncQueueIsDirty = () => false;
+global.cloudLastSyncAt = () => '2026-08-31T06:58:00.000Z';
+global.cloudSyncFailed = false;
+global.pendingCloudPushQueued = false;
 const els = {};
 function $makeEl() { return { value: '', textContent: '', className: '', classList: { add() {}, remove() {} }, addEventListener() {}, style: {}, appendChild() {}, remove() {}, setAttribute() {} }; }
 global.document = { getElementById: (id) => { if (!els[id]) els[id] = $makeEl(); return els[id]; }, querySelectorAll: () => [], createElement: () => $makeEl() };
@@ -98,6 +104,21 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
   // 9) Push bookkeeping flags exist (used by the status pill + beforeunload).
   ok(typeof pendingCloudPushQueued === 'boolean', 'pendingCloudPushQueued flag defined');
   pendingCloudPushQueued = true; ok(pendingCloudPushQueued === true, 'pendingCloudPushQueued flips true');
+
+  // 10) Honest status pill: shows last-cloud-sync time; shows failure state.
+  const statusBar = $makeEl(); const statusText = $makeEl();
+  els.appStatusBar = statusBar; els.appStatusText = statusText;
+  pendingCloudPushQueued = false;
+  cloudSyncFailed = false;
+  const lastHM = pad2(new Date('2026-08-31T06:58:00.000Z').getHours()) + ':' + pad2(new Date('2026-08-31T06:58:00.000Z').getMinutes());
+  updateAppStatus();
+  ok(statusText.textContent.indexOf('Synced') >= 0 && statusText.textContent.indexOf('⇄ ' + lastHM) >= 0,
+    'pill shows "Synced ⇄ ' + lastHM + '" (last sync time, not current clock) when healthy');
+  cloudSyncFailed = true;
+  updateAppStatus();
+  ok(statusText.textContent.indexOf('Sync failed — retrying') >= 0,
+    'pill shows "Sync failed — retrying" when a push failed');
+  cloudSyncFailed = false; pendingCloudPushQueued = false;
 
   console.log(fail === 0 ? 'ALL DRAFT CHECKS PASSED' : (fail + ' FAILED'));
 })();

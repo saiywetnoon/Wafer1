@@ -143,6 +143,35 @@ function supabaseUpdate(uid) {
   });
 }
 function supabaseWatch(uid) { supabaseUpdate(uid); }
+/* Background freshness poll (60s). Realtime is the fast path for other open
+   devices, but a silently-failed channel / browser quirk must not leave a tab
+   showing stale numbers for hours. Every minute we pull the cloud copy and
+   apply it when it is genuinely newer — same guards as realtime (no echo, no
+   overwriting a richer local copy). */
+var cloudPollTimer = null;
+function startCloudPolling() {
+  if (cloudPollTimer || !SUPA.configured()) return;
+  cloudPollTimer = setInterval(async function () {
+    try {
+      if (!cloudReady()) return;
+      const res = await cloudGet();
+      const remote = res && res.ok ? res.payload : null;
+      if (!remote || !remote.state) return;
+      const remoteTs = remote.exportedAt ? Date.parse(remote.exportedAt) : 0;
+      const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
+      if (remoteTs && localTs && remoteTs <= localTs) return;
+      if (statesEqual(state, remote.state)) return;
+      // Guard: never downgrade a richer local copy just because it's older.
+      if (stateDataCount(remote.state) < stateDataCount(state)) return;
+      setCloudSyncSuppressed(true);
+      try { applyCloudRemote(remote, remoteTs || undefined); } finally { setCloudSyncSuppressed(false); }
+      renderAll();
+      try { loadDraftIfNewer(); } catch (e) {}
+      updateGoogleSyncStatus('Auto-refreshed latest from your account.', 'info');
+      renderCloudStatus();
+    } catch (e) { /* poll is best-effort */ }
+  }, 60000);
+}
 /* ---------- Low-level: dispatch to Supabase or legacy Apps Script ---------- */
 /* Offline-first: every push that cannot reach the cloud marks a persistent
    "pending sync" flag. The next successful online moment (reconnect, page
@@ -150,20 +179,40 @@ function supabaseWatch(uid) { supabaseUpdate(uid); }
    made while offline — and clears the flag. Last-write-wins by timestamp is
    applied during the boot reconcile (cloudAfterSignIn). */
 var SYNC_QUEUE_KEY = 'dailyCrispyRollLedger_syncQueue';
+var CLOUD_LAST_SYNC_KEY = 'dailyCrispyRollLedger_lastCloudSync';
+/* True while the most recent push did NOT reach the cloud (this session).
+   Keeps the status pill in a visible "Sync failed — retrying" state instead
+   of showing a lie ("Synced") for hours. */
+var cloudSyncFailed = false;
 function syncQueueMark() { try { localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify({ at: new Date().toISOString() })); } catch (e) {} }
 function syncQueueClear() { try { localStorage.removeItem(SYNC_QUEUE_KEY); } catch (e) {} }
 function syncQueueIsDirty() { try { return !!localStorage.getItem(SYNC_QUEUE_KEY); } catch (e) { return false; } }
+/* When the cloud LAST confirmed a write. Persisted so the status line and the
+   Online/Cloud card can show "Last cloud sync 16:58" honestly. */
+function cloudLastSyncAt() { try { return localStorage.getItem(CLOUD_LAST_SYNC_KEY) || ''; } catch (e) { return ''; } }
+function cloudMarkLastSync() { try { localStorage.setItem(CLOUD_LAST_SYNC_KEY, new Date().toISOString()); } catch (e) {} }
 
 async function cloudPush() {
+  // A dead Supabase session is the #1 silent cause of "nothing has synced since
+  // lunch". Refresh the cached session BEFORE pushing so an expired token is
+  // either healed or reported instead of quietly returning a 401.
+  if (SUPA.configured()) {
+    try { await SUPA.sessionUser(); } catch (e) {}
+  }
   const res = SUPA.configured() ? await supabasePush() : await cloudPost('save', { payload: toGooglePayload() });
   if (res && res.ok) {
     syncQueueClear();
+    cloudMarkLastSync();
+    cloudSyncFailed = false;
     if (window.__syncQueueWasDirty) { window.__syncQueueWasDirty = false; }
+    try { updateAppStatus(); } catch (e) {}
   } else {
-    // Offline / endpoint error → queue the change and tell the user quietly.
+    // Endpoint offline / auth rejected -> queue the change and TELL the user.
     syncQueueMark();
+    cloudSyncFailed = true;
+    try { updateAppStatus(); } catch (e) {}
     if (typeof updateGoogleSyncStatus === 'function') {
-      updateGoogleSyncStatus('Offline — changes are saved on this device and will sync automatically when you are back online.', 'info');
+      updateGoogleSyncStatus('Sync failed — changes are saved on this device and will keep retrying.', 'info');
     }
   }
   return res;
@@ -171,7 +220,7 @@ async function cloudPush() {
 /* Try to send any queued changes now that we are (back) online. */
 async function flushPendingSync() {
   if (!cloudReady()) return false;
-  if (!syncQueueIsDirty()) return true;      // nothing pending
+  if (!syncQueueIsDirty() && !cloudSyncFailed) return true; // nothing pending
   window.__syncQueueWasDirty = true;
   const res = await cloudPush();
   if (res && res.ok) {
@@ -183,6 +232,16 @@ async function flushPendingSync() {
 function initSyncFlushers() {
   try {
     window.addEventListener('online', function () { flushPendingSync(); });
+    // Auto-heal: while anything is queued (or the last push failed), retry on
+    // a quiet 20s heartbeat so the user does not have to reopen the app or
+    // press anything for hours of failed attempts to unstick themselves.
+    if (!window.__syncRetryTimer) {
+      window.__syncRetryTimer = setInterval(function () {
+        try {
+          if ((syncQueueIsDirty() || cloudSyncFailed) && cloudReady()) flushPendingSync();
+        } catch (e) {}
+      }, 20000);
+    }
     window.addEventListener('beforeunload', function () {
       // A change saved in the last few hundred ms may still be awaiting its
       // debounced cloud push; an un-pushed draft counts too. Send the CURRENT
@@ -293,7 +352,16 @@ function applyCloudRemote(remote, remoteTs) {
 /* ---------- Reconcile after sign-in ----------
    Pulls the newer copy (cloud -> device) or pushes local when the
    device holds newer data (or the cloud is empty for this account).
-   Works for account login (session token) and legacy Google sign-in. */
+   Works for account login (session token) and legacy Google sign-in.
+
+   LATEST-WINS-BY-CONTENT: the decision is made on REAL RECORDS first and
+   timestamps only as a tie-breaker. Comparing timestamps alone caused the
+   classic deadlock: a device whose rich history was never pushed has an OLD
+   updatedAt, while the cloud row is timestamped NEWER but contains FEWER
+   records — so the app refused to push (remote newer) AND refused to pull
+   (count guard). Result: every other browser kept seeing the stale cloud.
+   Rule: the copy with MORE real records wins; on equal counts, the newest
+   write wins. A fresh device NEVER overwrites a populated cloud. */
 async function cloudAfterSignIn() {
   const email = cloudSignedInEmail();
   if (!email || !cloudAccountToken()) return false;
@@ -319,36 +387,63 @@ async function cloudAfterSignIn() {
   const localCount = stateDataCount(state);
   const res = await cloudGet();
   const remote = res && res.ok ? res.payload : null;
-  const remoteCount = remote && remote.state ? stateDataCount(remote.state) : 0;
+  const remoteState = remote && remote.state ? remote.state : null;
+  const remoteCount = remoteState ? stateDataCount(remoteState) : 0;
+  const remoteTs = remote && remote.exportedAt ? Date.parse(remote.exportedAt) : 0;
+  const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
 
+  // Same content both sides -> nothing to do.
+  if (remoteState && statesEqual(state, remoteState)) {
+    updateGoogleSyncStatus('Online as ' + email + '. Your ledger is up to date.', 'success');
+    renderCloudStatus();
+    return true;
+  }
+
+  // Cloud has data and this device has none -> PULL. A fresh browser must never
+  // push its empty/default state over a populated cloud.
+  if (remoteCount > 0 && localCount === 0) {
+    if (applyCloudRemote(remote, remoteTs || undefined)) {
+      renderAll();
+      updateGoogleSyncStatus('Online as ' + email + '. Loaded your cloud data onto this device.', 'success');
+      showToast('Loaded your ' + remoteCount + ' records from the cloud.', 'success');
+      try { loadDraftIfNewer(); } catch (e) {}
+    }
+    renderCloudStatus();
+    return true;
+  }
+
+  // Cloud is empty (and local empty too) -> brand-new account, nothing to sync.
   if (remoteCount === 0 && localCount === 0) {
-    // Brand-new account: nothing anywhere yet.
     showToast('Online as ' + email + '. Your entries will auto-save to your account.', 'success');
     updateGoogleSyncStatus('Online as ' + email + '. Auto-save is on.', 'success');
     renderCloudStatus();
     return true;
   }
+
+  // Cloud empty, this device has data -> first sync: adopt local UP.
   if (remoteCount === 0) {
     const up = await cloudPush();
-    if (up && up.ok) showToast('Uploaded this device’s ' + localCount + ' days to the cloud.', 'success');
-    else showToast('Could not upload to cloud yet — check the Apps Script URL.', 'error');
+    if (up && up.ok) showToast('Uploaded this device’s ' + localCount + ' records to the cloud.', 'success');
+    else showToast('Could not upload to cloud yet — it is queued and will retry.', 'error');
     updateGoogleSyncStatus('Online as ' + email + '. Uploaded local data to cloud.', 'success');
     renderCloudStatus();
     return true;
   }
-  const remoteTs = remote.exportedAt ? Date.parse(remote.exportedAt) : 0;
-  const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
-  if (remoteTs && localTs && remoteTs < localTs) {
+
+  // Both have data -> the copy with MORE real records is the authoritative one
+  // (it contains history the other is missing). Ties break by newest write.
+  if (localCount > remoteCount || (localCount === remoteCount && localTs > remoteTs)) {
     const up = await cloudPush();
-    if (up && up.ok) updateGoogleSyncStatus('Online as ' + email + '. Local copy is newer — pushed to cloud.', 'success');
+    if (up && up.ok) updateGoogleSyncStatus('Online as ' + email + '. Your copy is richer/newer — pushed to cloud.', 'success');
     else updateGoogleSyncStatus('Could not push local copy to cloud yet — it is queued and will retry.', 'info');
     renderCloudStatus();
     return true;
   }
-  if (applyCloudRemote(remote)) {
+
+  if (applyCloudRemote(remote, remoteTs || undefined)) {
     renderAll();
-    updateGoogleSyncStatus('Online as ' + email + '. Loaded your cloud data onto this device.', 'success');
-    showToast('Loaded your ' + remoteCount + ' days from the cloud.', 'success');
+    updateGoogleSyncStatus('Online as ' + email + '. Loaded latest from your account.', 'success');
+    showToast('Loaded the latest ' + remoteCount + ' records from the cloud.', 'success');
     // A draft pulled from the cloud (typed on another device) goes in the form.
     try { loadDraftIfNewer(); } catch (e) {}
   }

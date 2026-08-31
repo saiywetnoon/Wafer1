@@ -200,3 +200,52 @@ body { background: radial-gradient(1100px 420px at 50% -120px, rgba(245,158,11,.
   #panAlertBanner.pan-banner-1, #panAlertBanner.pan-banner-2, #panAlertBanner.pan-banner-3,
   .pan-nav-alert, .pan-running .pan-dot { animation: none !important; }
 }
+
+/* ============================================================
+   NAV — grouped sections + live badges (professional IA)
+   Tabs are grouped by job-to-be-done (Operations / Insight /
+   Manage / Finance / System). Small group labels help users
+   learn where things live; count badges surface attention
+   without opening the tab.
+   ============================================================ */
+.nav-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 14px;
+  margin-right: 2px;
+  border-right: 1px solid rgba(55, 65, 81, .55);
+  scroll-snap-align: start;
+}
+.nav-group:last-child { border-right: none; padding-right: 0; }
+.nav-group-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #6B7280;
+  margin-right: 4px;
+  align-self: center;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .nav-group-label { display: none; } /* space is precious on smaller screens */
+}
+.tab-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  transform: translate(30%, -30%);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  background: #EF4444;
+  color: #FFFFFF;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 0 0 2px #111827;
+}
+.tab-badge.amber { background: #F59E0B; color: #111827; }

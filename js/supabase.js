@@ -51,9 +51,13 @@ const SUPA = {
     if (!sb) return null;
     const { data, error } = await sb.auth.getSession();
     if (error) { console.warn('supabase session error', error); return null; }
-    const us = data && data.session && data.session.user;
-    if (us) { this.user = { id: us.sub || us.id, email: us.email || '' }; }
-    return this.user;
+    const us = data && data.session && data.session.user
+      ? { id: data.session.user.sub || data.session.user.id, email: data.session.user.email || '' }
+      : null;
+    // When no session exists, CLEAR the cached user — returning a stale cached
+    // id here is what silently turned "no session" into hours of 401 rejects.
+    this.user = us;
+    return us;
   },
 
   /* Keep me in sync when auth changes (login/logout). */
@@ -90,10 +94,28 @@ const SUPA = {
   /* ---- ledger read/write ---- */
   async saveLedger(userId, payload) {
     const sb = this.init(); if (!sb) return { error: 'unconfigured' };
+    // Never write with a stale/expired session: refresh the cached session and
+    // bail loudly if it is gone, so a dead token surfaces as "sync failed —
+    // retrying" instead of an invisible 401 that leaves data stuck on-device.
+    let u = this.user;
+    try { u = await this.sessionUser() || u; } catch (e) {}
+    if (!u || !u.id) return { error: 'session expired — sign in again to sync' };
     const now = new Date().toISOString();
     const { error } = await sb
-      .from('ledgers').upsert({ user_id: userId, payload: payload, updated_at: now }, { onConflict: 'user_id' });
-    return error ? { error: error.message } : { ok: true };
+      .from('ledgers').upsert({ user_id: u.id, payload: payload, updated_at: now }, { onConflict: 'user_id' });
+    if (error) {
+      const msg = String((error && (error.message || error.code)) || 'write failed');
+      // If the backend says our token is bad, confirm it server-side and drop
+      // the cached session so the app stops pretending to be logged in.
+      if (/jwt|401|403|unauthor|expired|token/i.test(msg)) {
+        try {
+          const g = await sb.auth.getUser();
+          if (g && (g.error || !g.data || !g.data.user)) this.user = null;
+        } catch (e) { this.user = null; }
+      }
+      return { error: msg };
+    }
+    return { ok: true };
   },
   async getLedger(userId) {
     const sb = this.init(); if (!sb) return null;

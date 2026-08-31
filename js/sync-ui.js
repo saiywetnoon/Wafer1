@@ -200,9 +200,22 @@ function renderCloudStatus() {
   const online = cloudIsOnline();
 
   if (online) {
-    pill.textContent = 'ONLINE';
-    pill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white';
-    status.textContent = 'This workspace is synced to ' + email + '. Any change auto-saves to the cloud and appears on any device that signs in with this account.';
+    var lastSync = (typeof cloudLastSyncAt === 'function') ? cloudLastSyncAt() : '';
+    var lastHM = '';
+    if (lastSync) {
+      try { var ld = new Date(lastSync); lastHM = pad2(ld.getHours()) + ':' + pad2(ld.getMinutes()); } catch (e) {}
+    }
+    var issue = (typeof cloudSyncFailed === 'boolean' ? cloudSyncFailed : false)
+      || (typeof syncQueueIsDirty === 'function' ? syncQueueIsDirty() : false);
+    if (issue) {
+      pill.textContent = 'SYNC ISSUE';
+      pill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white';
+      status.textContent = 'Last cloud sync: ' + (lastHM || '—') + '. ⚠ A recent change has NOT reached the cloud yet — it is saved on this device and auto-retrying. Check your internet / sign-in.';
+    } else {
+      pill.textContent = 'ONLINE';
+      pill.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white';
+      status.textContent = 'This workspace is synced to ' + email + (lastHM ? '. Last cloud sync: ' + lastHM + '.' : '') + ' Any change auto-saves to the cloud and appears on any device that signs in with this account.';
+    }
   } else if (email) {
     if (bound && bound.toLowerCase() !== email.toLowerCase()) {
       pill.textContent = 'LOCKED';

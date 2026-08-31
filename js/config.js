@@ -86,3 +86,8 @@ const DEFAULT_USAGE = {
   'Egg': 2, 'Coconut Milk': 50, 'Water': 580, 'Black Sesame': 16,
   'Additive Blend': 50, 'Electricity': 4, 'Packaging': 82
 };
+
+/* Current app build. `index.html` stamps the same id on <html data-build=…>.
+   A mismatch (old HTML or old JS in the cache) makes the app warn loudly,
+   because stale files are the #1 cause of "it says Synced but nothing uploads". */
+const __LEDGER_BUILD = 'v1.9.1';

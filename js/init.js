@@ -25,6 +25,7 @@ function renderAll() {
   if (stEl) stEl.textContent = storageUsedKB().toFixed(1) + ' KB';
   wireResponsiveTables();
   updateAppStatus();
+  if (typeof refreshTabBadges === 'function') { try { refreshTabBadges(); } catch (e) { /* best-effort */ } }
   lucide.createIcons();
 }
 
@@ -279,8 +280,19 @@ async function appStart() {
   // Build marker so a stale cached bundle is instantly visible: open DevTools →
   // console after a hard refresh. If you DO NOT see this line, your browser is
   // running an old cached copy of the JS (do a hard refresh / clear site data).
-  console.log('%c[Daily Crispy Roll] BUILD 9c4e2a (form-guard + dynamic pans + offline queue) loaded',
+  console.log('%c[Daily Crispy Roll] BUILD ' + __LEDGER_BUILD + ' (auto-sync + honor-status + inventory dedupe) loaded',
     'background:#10b981;color:#fff;padding:2px 6px;border-radius:4px;');
+  // If the HTML and JS disagree on the build id, the browser is serving a
+  // mixture of old and new cached files — the #1 cause of "it says Synced but
+  // nothing actually uploads". Make it visible instead of subtle.
+  try {
+    var htmlBuild = (document.documentElement && document.documentElement.getAttribute)
+      ? document.documentElement.getAttribute('data-build') : '';
+    if (htmlBuild && htmlBuild !== __LEDGER_BUILD) {
+      console.warn('[Daily Crispy Roll] BUILD MISMATCH html=' + htmlBuild + ' js=' + __LEDGER_BUILD + ' — hard refresh needed.');
+      showToast('⚠ Mixed old/new app files (' + htmlBuild + ' ↔ ' + __LEDGER_BUILD + '). Hard refresh (Ctrl+Shift+R) so sync works correctly.', 'error');
+    }
+  } catch (e) {}
 
   // 1) Account gate: without a valid session nobody reaches the app.
   const authed = await authBootstrap();
@@ -303,6 +315,9 @@ async function appStart() {
     try { supabaseWatch(SUPA.user.id); } catch (e) { console.warn('realtime not available', e); }
   }
   try { await cloudAfterSignIn(); } catch (e) { console.warn('cloud reconcile failed', e); }
+  // Background freshness: re-pull the account copy every 60s so an already-open
+  // tab keeps showing the latest edits from other devices (realtime backstop).
+  try { startCloudPolling(); } catch (e) { console.warn('cloud polling not available', e); }
   // From here on, EVERY save auto-pushes to the cloud (price, stock, anything).
   setCloudAutoSync(true);
   // Offline-first: retry anything saved while offline when the connection is back.

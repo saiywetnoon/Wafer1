@@ -146,9 +146,14 @@ button (🗑) that turns it into a daily-usage item and clears its stock history
 - **`CashHooks` API** — a tiny global interface (`recordSale`, `recordAdjustment`,
   `expectedToday`, `postVariance`) so a barcode scanner, POS hardware hook, or
   future hardware drawer can log cash events without touching app internals.
-- **Tabs re-arranged** — the navigation now follows the work flow: Production →
-  Fry Timers → Sales & Stock → Inventory → Dashboard → Calendar → Customers →
-  Suppliers → Cash Drawer → Business Tools → Google Sync.
+- **Tabs re-arranged** — the navigation is now grouped by job-to-be-done and
+  roughly follows the work flow: **Operations** (Production → Fry Timers →
+  Sales & Stock) · **Insight** (Dashboard → Calendar & Audit) · **Manage**
+  (Inventory → Customers → Suppliers) · **Finance** (Cash Drawer) · **System**
+  (Business Tools → Sync & Backup). Sample Data / Clear All were moved out of
+  the header into a clearly-labelled **Utilities & Danger Zone** in Business
+  Tools. Live count badges on the Inventory / Customers / Cash / Sync tabs
+  surface what needs attention without opening the tab.
 
 ## UI / appearance polish
 
@@ -479,6 +484,59 @@ listed manual workflows before treating this release as complete.
 > upgrades are additive and not part of that script.
 
 ## Changelog
+
+### v1.9.3 — professional UI & navigation polish
+- **Grouped tab navigation.** Tabs are now organized into labelled sections
+  (Operations · Insight · Manage · Finance · System) so where things live is
+  learnable at a glance, like mature apps (Stripe/Linear-style IA). The groups
+  collapse for very narrow screens, and every tab carries proper `role="tab"` /
+  `aria-selected` for accessibility.
+- **Primary task first.** On the Production tab, the daily "Today's Usage &
+  Production" form now renders BEFORE the Ingredients price list (both on
+  desktop and, crucially, on mobile where the stacking order matters). No more
+  scrolling past a settings table every day.
+- **Sample Data / Clear All moved out of the header.** They live in a clearly
+  labelled **Utilities & Danger Zone** card at the bottom of Business Tools,
+  so destructive/experimental actions are never one accidental click away from
+  your real data.
+- **Live attention badges.** The header tabs now show small count badges:
+  Inventory (items at/below low alert), Customers (with outstanding balance),
+  Cash (drawer variance), Sync (pending/unsynced changes) — you see what needs
+  attention without opening the tab.
+- **Fresh branding.** Subtitle/title now say "Cloud-Synced Across Devices"
+  and the tab is "Sync & Backup" (the backend is Supabase, not Google Sheets).
+
+### v1.9.2 — cross-device freshness (new/other browsers get the latest)
+- **Reconcile is now by CONTENT, not just timestamp.** The old code compared
+  timestamps only, which deadlocked in the most common real scenario: a device
+  whose full history was never pushed has an *older* timestamp while the cloud
+  row is *newer* but has *fewer* records — so the app refused to push *and*
+  refused to pull, and every other browser kept seeing the stale partial copy.
+  Rule now: **the copy with more real records wins** (ties break by newest
+  write). Your origin device's full history uploads automatically, and a fresh
+  browser always pulls it.
+- **A fresh/empty browser can never clobber the cloud.** Signing in on a new
+  device used to risk pushing its empty default state over a populated ledger.
+  Now an empty device always pulls.
+- **60-second background refresh for open tabs.** Realtime is the fast path
+  (~1–2 s), and a new 60 s poll is the backstop so a tab that's been left open
+  always catches up even if the realtime channel silently fails.
+
+### v1.9.1 — sync status you can trust + self-healing sync
+- **The pill now shows your LAST CONFIRMED cloud sync**, not the current clock.
+  Example: `17:38 · Synced ⇄ 16:58` means the cloud last confirmed a write at
+  16:58. If it has been hours, it is now *obvious* — instead of a frozen
+  timestamp the app clearly says **"Sync failed — retrying ⇄ 13:00"**.
+- **Silent failures are gone.** Whenever a push cannot reach the cloud, the app
+  shows a red **SYNC ISSUE** pill in the Online/Cloud card, the corner status
+  turns amber "Sync failed — retrying", and a **20-second auto-retry heartbeat**
+  keeps trying until it lands — no need to reopen the app.
+- **Session refresh before every write.** Supabase sessions can silently expire;
+  every cloud push now refreshes the cached session first and reports a dead
+  session instead of quietly returning a 401 and "looking synced".
+- **Stale-build detector.** The page now carries a build id; if your browser
+  serves a *mixture* of old and new files (the #1 cause of "it says Synced but
+  nothing uploads") a loud warning tells you to hard refresh.
 
 ### v1.9 — true auto-sync (no manual save needed)
 - **Production form auto-saves to the cloud as you type.** The draft now lives
