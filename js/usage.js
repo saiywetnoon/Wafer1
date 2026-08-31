@@ -67,11 +67,22 @@ function populateProductionForm(date) {
   }
   renderUsageTable(true);   // rebuild usage rows (this IS the date change)
   updateUsageCosts();
+  updateDraftHint();
   return true;
 }
 $('logDate').addEventListener('change', function () {
-  populateProductionForm($('logDate').value || today());
+  const curD = $('logDate').value || today();
+  populateProductionForm(curD);
+  // Picking a day that already has a batch makes the Save button UPDATE it;
+  // a fresh day resets it back to a new batch.
+  const batch = (state.production || []).find(function (p) { return p.date === curD; }) || null;
+  $('editProdId').value = batch ? batch.id : '';
+  const sb = $('saveLogBtn');
+  if (sb) sb.innerHTML = batch
+    ? '<i data-lucide="save" class="w-5 h-5"></i> Update Production'
+    : '<i data-lucide="save" class="w-5 h-5"></i> Save Production Work';
   persistDraft();
+  updateDraftHint();
 });
 
 function setDefaultProductionUsage(date) {
@@ -110,10 +121,32 @@ function renderUsageTable(force) {
       draftUsage[inp.dataset.name] = !isNaN(v) && v >= 0 ? v : 0;
       updateUsageCosts();
       persistDraft();
+      draftTouched = true;
+      updateDraftHint();
     });
   });
   updateUsageCosts();
 wireResponsiveTables();
+}
+
+/* ---------- "Draft is auto-synced" hint ----------
+   Numbers you type are captured as a draft that auto-saves on this device and
+   auto-syncs to the cloud. The hint clarifies the boundary: the numbers are
+   SAFE (synced), but a batch only enters stock/inventory when "Save Production
+   Work" is pressed — so nobody assumes typing alone moved goods into stock. */
+function updateDraftHint() {
+  const el = $('draftHint'); if (!el) return;
+  const date = $('logDate') ? $('logDate').value : today();
+  const committed = (state.production || []).some(function (p) { return p.date === date; });
+  let real = false;
+  try { real = draftHasRealContent(captureDraft()); } catch (e) {}
+  if (draftTouched && real && !committed) {
+    el.textContent = 'Auto-saving to your account · press “Save Production Work” to add this batch to stock & inventory.';
+    el.className = 'text-[11px] text-amber-400 mt-1.5 font-semibold';
+  } else {
+    el.textContent = '';
+    el.className = 'text-[11px] mt-1.5';
+  }
 }
 
 function updateUsageCosts() {
@@ -160,6 +193,8 @@ $('copyYesterdayBtn').addEventListener('click', function () {
   });
   $('additionalCost').value = yEntry.additionalCost || 0;
   updateUsageCosts();
+  draftTouched = true;
+  updateDraftHint();
   showToast("Copied yesterday's (" + yDate + ') usage into today\'s form.');
 });
 
@@ -197,6 +232,8 @@ function updateLive() {
   if (el) el.addEventListener('input', function () {
     updateUsageCosts();
     persistDraft();
+    draftTouched = true;
+    updateDraftHint();
   });
 });
 $('logDate').addEventListener('change', persistDraft);

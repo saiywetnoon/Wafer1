@@ -90,6 +90,8 @@ function loadEntryIntoForm(date) {
   });
   updateUsageCosts();
   document.querySelector('[data-tab="log"]').click();
+  draftTouched = false;
+  updateDraftHint();
 }
 
 $('prevMonth').addEventListener('click', function () { calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; } renderCalendar(); });

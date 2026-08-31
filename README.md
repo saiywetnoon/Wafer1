@@ -480,6 +480,42 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
+### v1.9 — true auto-sync (no manual save needed)
+- **Production form auto-saves to the cloud as you type.** The draft now lives
+  inside the ledger state (`state.draft`) instead of a private localStorage key,
+  so typing in the daily form pushes to your account automatically — no more
+  lost days because the "Save Production Work" button was never pressed. The
+  Save button still exists, but only to *finalize* a batch into stock/inventory.
+- **Offline-first drafts** — if the device is offline, typing is stored locally
+  and queued ("Offline — will sync"), and flushed to the cloud automatically on
+  the next online moment / page load / manual Sync. Previous-day drafts are now
+  offered once instead of being silently discarded, and legacy localStorage
+  drafts are promoted into the synced state on first load.
+- **Honest status pill** — "Synced" now really means the cloud has the latest
+  state (including your in-progress draft). While a save is still debouncing or
+  queued the pill shows "Syncing…" / "Offline — will sync". Closing the tab in
+  the debounce window now flushes the latest state instead of stranding it.
+
+### v1.9 inventory fixes
+- **No more silent save blocks.** Saving a batch used to be rejected outright
+  when ANY ingredient in the pre-filled recipe had zero stock (very common when
+  you use a few ingredients but don't stock every default). The save now goes
+  through for everything you actually have; items with nothing on hand go
+  negative in the movement ledger so the Inventory tab shows what to restock,
+  and a "⚠ Stock went below zero" toast tells you.
+- **Saving twice never double-deducts.** Re-saving a day now UPDATES that day's
+  batch in place instead of creating a duplicate batch and deducting the
+  ingredients twice. The button turns into "Update Production" for a day that
+  already has a batch, and switching dates picks the right mode.
+- **Editing deducts only the delta.** Increasing Flour 120g → 150g now adds a
+  −30g movement (net −150), not a fresh −150 on top of the old −120.
+- **Pan-timer runs merge per day.** Saving multiple fryer-pan runs for the same
+  day now merges them into ONE batch and deducts the daily recipe exactly once
+  instead of once per pan.
+- **Honest stock numbers.** The Inventory tab shows the true running balance
+  (including negative) instead of clamping to 0, so an over-used ingredient is
+  visible and restockable rather than silently hidden.
+
 ### v1.2 fixes
 - **Environment keys renamed** — `SUPABASE_URL` → `SUPABASE_URL_wafer` and
   `SUPABASE_ANON_KEY` → `SUPABASE_ANON_KEY_wafer` throughout

@@ -21,6 +21,7 @@ let state = {
   priceHistory: [],// [{ date, name, old, new }]
   recipes: [],     // [{ name, usage }] reusable production formulas
   cash: { opening: 0, adjustments: [] }, // [{ id, date, amount, label }]
+  draft: null,   // the LIVE production-form draft — synced to the cloud like any other field
   updatedAt: null
 };
 let draftUsage = {};
@@ -37,6 +38,15 @@ function setCloudAutoSync(v) { cloudAutoSync = !!v; }
    we never echo it back (which would re-trigger an event and loop forever). */
 let cloudSyncSuppressed = false;
 function setCloudSyncSuppressed(v) { cloudSyncSuppressed = !!v; }
+/* True between a save and the 700ms debounced cloud push actually starting.
+   Lets the beforeunload handler know a fresh change may still be awaiting its
+   push, so closing the tab can flush it instead of stranding it locally. */
+let pendingCloudPushQueued = false;
+/* The user has been offered their stale (previous-day) draft once per session. */
+let olderDraftPrompted = false;
+/* True as soon as the user edits the production form — used to distinguish
+   "the user typed something" from "the default recipe just pre-filled". */
+let draftTouched = false;
 
 /* ---------- Persistence (debounced) ---------- */
 function persistState() {
@@ -88,6 +98,12 @@ function loadState() {
         if (!Array.isArray(state.cash.adjustments)) state.cash.adjustments = [];
       }
       if (parsed && parsed.updatedAt) state.updatedAt = parsed.updatedAt;
+      // Synced production-form draft (auto-saved typing, cross-device).
+      if (parsed && parsed.draft && typeof parsed.draft === 'object' && parsed.draft.date && parsed.draft.usage) {
+        state.draft = parsed.draft;
+      } else if (parsed && 'draft' in parsed) {
+        state.draft = null;
+      }
       // Production / Sales / Stock (v3 — separate roll dates from sale dates)
       if (Array.isArray(parsed.production)) state.production = parsed.production;
       if (Array.isArray(parsed.sales)) state.sales = parsed.sales;
@@ -171,14 +187,23 @@ function captureDraft() {
     weightPerRoll: $('logWeightPerRoll') ? (parseFloat($('logWeightPerRoll').value) || 0) : 0,
     notes: $('logNotes') ? ($('logNotes').value || '') : '',
     laborMinutes: $('logLabor') ? (parseFloat($('logLabor').value) || 0) : 0,
-    hourlyWage: $('hourlyWage') ? (parseFloat($('hourlyWage').value) || 0) : 0
+    hourlyWage: $('hourlyWage') ? (parseFloat($('hourlyWage').value) || 0) : 0,
+    useBy: $('logUseBy') ? ($('logUseBy').value || '') : ''
   };
 }
+/* Auto-save the production form WITHOUT needing the Save button. The draft now
+   lives INSIDE the ledger state, so saveState() puts it on this device AND (as
+   soon as we are online) pushes it to the cloud automatically. Offline →
+   stored locally + queued, and flushed on the next online moment.
+   The draft value + mirror are updated on EVERY keystroke (crash/close-safe);
+   only the heavier full-state save and cloud push are debounced. */
 function persistDraft() {
+  try {
+    state.draft = Object.assign({ capturedAt: new Date().toISOString() }, captureDraft());
+    try { localStorage.setItem(companyDraftKey(), JSON.stringify(state.draft)); } catch (e) {}
+  } catch (e) { console.warn('Could not save draft', e); return; }
   clearTimeout(draftSaveTimer);
-  draftSaveTimer = setTimeout(function () {
-    try { localStorage.setItem(companyDraftKey(), JSON.stringify(captureDraft())); } catch (e) { console.warn('Could not save draft', e); }
-  }, 400);
+  draftSaveTimer = setTimeout(saveState, 400);
 }
 /* True when a saved draft represents real in-progress work. Blank / all-zero
    drafts must NOT be restored — they would otherwise hide the previous day's
@@ -198,31 +223,86 @@ function draftHasRealContent(d) {
 function loadDraftIfNewer() {
   if (draftRestored) return;
   try {
-    const raw = localStorage.getItem(companyDraftKey());
-    if (!raw) return;
-    const d = JSON.parse(raw);
-    if (!d || !d.usage || d.date !== today()) return; // only restore a same-day draft
+    // Drafts are part of the SYNCED ledger state now; the localStorage mirror is
+    // only a legacy/bootstrap fallback (and gets promoted into state on use).
+    let d = state.draft || null;
+    let local = null;
+    try {
+      const raw = localStorage.getItem(companyDraftKey());
+      if (raw) local = JSON.parse(raw);
+    } catch (e) { local = null; }
+    if (!d && local) {
+      // Older builds never synced this draft — promote it so the next save
+      // pushes it up to the cloud automatically.
+      state.draft = Object.assign({ capturedAt: new Date().toISOString() }, local);
+      d = state.draft;
+    }
+    if (!d || !d.usage) {
+      if (local && !draftHasRealContent(local)) clearDraftLocalMirror();
+      return;
+    }
     const existing = (state.production || []).find(function (p) { return p.date === d.date; });
-    if (existing || !draftHasRealContent(d)) return; // never clobber a saved batch or an empty form
-    draftUsage = Object.assign({}, d.usage);
-    const fields = {
-      logDate: d.date || today(),
-      additionalCost: d.additionalCost || 0,
-      logBagsProduced: d.bagsProduced || 0,
-      logPieces: d.pieces || 0,
-      logWeightPerRoll: d.weightPerRoll || 0,
-      logNotes: d.notes || '',
-      logLabor: d.laborMinutes || 0,
-      hourlyWage: d.hourlyWage || state.settings.hourlyWage || 1500
-    };
-    Object.keys(fields).forEach(function (id) {
-      const el = $(id);
-      if (el) el.value = fields[id];
-    });
-    draftRestored = true;
+    if (existing || !draftHasRealContent(d)) {
+      // A committed batch already covers that day (or this is an all-zero
+      // draft): drop the stale draft instead of letting it linger / re-push.
+      clearDraftLocalMirror();
+      if (state.draft) { state.draft = null; try { saveState(); } catch (e) {} }
+      return;
+    }
+    // A draft from an earlier day (e.g. typed yesterday, tab closed before the
+    // Save button was pressed) is offered once so it can be reviewed, instead
+    // of this device discarding it.
+    if (d.date !== today()) { applyStaleDraftRecovery(d); return; }
+    restoreDraftToForm(d);
   } catch (e) { console.warn('Failed to restore draft', e); }
 }
-function clearDraft() {
+/* Put a draft's values back into the production form. */
+function restoreDraftToForm(d) {
+  draftUsage = Object.assign({}, d.usage);
+  const fields = {
+    logDate: d.date || today(),
+    additionalCost: d.additionalCost || 0,
+    logBagsProduced: d.bagsProduced || 0,
+    logPieces: d.pieces || 0,
+    logWeightPerRoll: d.weightPerRoll || 0,
+    logNotes: d.notes || '',
+    logLabor: d.laborMinutes || 0,
+    hourlyWage: d.hourlyWage || state.settings.hourlyWage || 1500
+  };
+  Object.keys(fields).forEach(function (id) {
+    const el = $(id);
+    if (el) el.value = fields[id];
+  });
+  if ($('logUseBy')) $('logUseBy').value = d.useBy || '';
+  draftRestored = true;
+  // Move the form to the draft's date so the saved values are actually visible.
+  if (typeof populateProductionForm === 'function') {
+    try { populateProductionForm(d.date || today()); } catch (e) {}
+  }
+}
+/* Remove the legacy localStorage mirror of the draft. */
+function clearDraftLocalMirror() {
   try { localStorage.removeItem(companyDraftKey()); } catch (e) {}
+}
+/* A draft from a previous day is real, unsent work. Prompt once so it can be
+   reviewed and saved as a normal batch. Declining keeps the draft in the synced
+   state and the mirror — nothing is deleted by ignoring the prompt. */
+function applyStaleDraftRecovery(d) {
+  if (olderDraftPrompted) return;
+  olderDraftPrompted = true;
+  const ok = confirm(
+    'You have a production draft from ' + d.date +
+    ' (numbers typed but never added to stock).\n\n' +
+    'Load it into the form now? (It has already auto-saved to this device and will sync to your account.)'
+  );
+  if (!ok) return;
+  restoreDraftToForm(d);
+  if (typeof updateDraftHint === 'function') { try { updateDraftHint(); } catch (e) {} }
+  showToast('Loaded your draft from ' + d.date + '. Press Save Production Work when you want it added to stock.', 'info');
+}
+function clearDraft() {
+  state.draft = null;
+  try { localStorage.removeItem(companyDraftKey()); } catch (e) {}
+  try { saveState(); } catch (e) {} // push the cleared-draft state so other devices stop showing it
 }
 

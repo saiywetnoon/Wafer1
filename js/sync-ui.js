@@ -256,6 +256,8 @@ async function cloudSyncNow() {
     renderAll();
     updateGoogleSyncStatus('Synced — pulled the latest cloud copy.', 'success');
     showToast('Pulled the latest cloud data.', 'success');
+    // A draft pulled from the cloud (typed on another device) goes in the form.
+    try { loadDraftIfNewer(); } catch (e) {}
   } else {
     updateGoogleSyncStatus('Already up to date.', 'success');
   }

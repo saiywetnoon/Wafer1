@@ -109,6 +109,9 @@ function stateDataCount(s) {
   if (s.cash && Array.isArray(s.cash.adjustments)) n += s.cash.adjustments.length;
   if (s.inventory && typeof s.inventory === 'object') n += Object.keys(s.inventory).length;
   if (Array.isArray(s.inventoryMovements)) n += s.inventoryMovements.length;
+  // A synced production-form draft is real data too — it must make a fresh
+  // device pull it instead of overwriting the cloud with an empty local state.
+  if (s.draft && s.draft.date && s.draft.usage && typeof draftHasRealContent === 'function' && draftHasRealContent(s.draft)) n += 1;
   return n;
 }
 
@@ -134,6 +137,8 @@ function supabaseUpdate(uid) {
       setCloudSyncSuppressed(false);
     }
     renderAll();
+    // A draft that just arrived from another device belongs in the form too.
+    try { loadDraftIfNewer(); } catch (e) {}
     updateGoogleSyncStatus('Last update from another device just now.', 'info');
   });
 }
@@ -179,7 +184,10 @@ function initSyncFlushers() {
   try {
     window.addEventListener('online', function () { flushPendingSync(); });
     window.addEventListener('beforeunload', function () {
-      if (syncQueueIsDirty() && cloudReady()) { // best-effort last push on close
+      // A change saved in the last few hundred ms may still be awaiting its
+      // debounced cloud push; an un-pushed draft counts too. Send the CURRENT
+      // state now so closing the tab can't strand it on this device only.
+      if ((syncQueueIsDirty() || pendingCloudPushQueued || (state.draft && state.draft.date)) && cloudReady()) {
         try { cloudPush(); } catch (e) {}
       }
     });
@@ -255,6 +263,11 @@ function applyCloudRemote(remote, remoteTs) {
   }
   if (r.inventoryMovementVersion) state.inventoryMovementVersion = r.inventoryMovementVersion;
   if (r.cash) state.cash = Object.assign({ opening: 0, adjustments: [] }, r.cash);
+
+  // A synced production-form draft (auto-saved typing) is part of the ledger.
+  if (r.draft !== undefined) {
+    state.draft = (r.draft && typeof r.draft === 'object' && r.draft.date) ? Object.assign({}, r.draft) : null;
+  }
 
   // Plain array collections share identical copy semantics.
   copyArrayFields(r, [
@@ -336,6 +349,8 @@ async function cloudAfterSignIn() {
     renderAll();
     updateGoogleSyncStatus('Online as ' + email + '. Loaded your cloud data onto this device.', 'success');
     showToast('Loaded your ' + remoteCount + ' days from the cloud.', 'success');
+    // A draft pulled from the cloud (typed on another device) goes in the form.
+    try { loadDraftIfNewer(); } catch (e) {}
   }
   renderCloudStatus();
   return true;

@@ -21,7 +21,12 @@ function saveProduction() {
   const wage = parseFloat($('hourlyWage').value) || state.settings.hourlyWage || 0;
   const laborCost = laborHrs * wage;
 
-  const editId = document.getElementById('editProdId').value;
+  const requestedEditId = document.getElementById('editProdId').value;
+  // Never create a SECOND batch for a day that already has one — that would
+  // deduct the ingredients twice. Re-opening a saved day pre-fills its batch,
+  // so pressing Save must EDIT that batch in place, not duplicate it.
+  const dayBatch = (state.production || []).find(function (p) { return p.date === date; });
+  const editId = requestedEditId || (dayBatch ? dayBatch.id : '');
   const isUpdate = !!editId;
   const costPerPiece = pieces > 0 ? Math.round(capital / pieces * 100) / 100 : 0;
   const wPerRoll = parseFloat($('logWeightPerRoll').value) || 0;
@@ -70,11 +75,20 @@ function saveProduction() {
   rebuildStockAndCogs();
   saveState();
   renderAll();
-  document.getElementById('editProdId').value = '';
+  // Keep the form locked to this batch so clicking Save again UPDATES it instead
+  // of creating a duplicate (which would deduct the ingredients a second time).
+  document.getElementById('editProdId').value = record.id;
   var saveBtn = $('saveLogBtn');
-  saveBtn.innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Save Production Work';
+  saveBtn.innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Update Production';
   lucide.createIcons();
   showToast(isUpdate ? 'Production updated for ' + date : 'Production saved for ' + date + ' — ' + fmt(pieces) + ' pieces ready to sell.');
+  const over = overConsumedStockItems().filter(function (label) {
+    const itemName = label.split(' ')[0];
+    return (usage[itemName] || 0) > 0;   // only warn about items THIS batch used
+  });
+  if (over.length) {
+    showToast('⚠ Stock went below zero: ' + over.join(', ') + ' — record a purchase or Add Stock to restore.', 'info');
+  }
   pulseSuccess($('saveLogBtn'));
   triggerGoogleSync();
   clearDraft();
@@ -91,15 +105,46 @@ function saveProduction() {
   $('logNotes').value = '';
   if ($('logUseBy')) $('logUseBy').value = '';
   updateUsageCosts();
+  draftTouched = false;
+  updateDraftHint();
 }
 
 $('saveLogBtn').addEventListener('click', saveProduction);
 
 /* One-click save of a pan batch's production (used by the run tracker and pan
    presets). Writes the same Production entry as the main form, then navigates
-   to the Production tab so the totals are visible. */
+   to the Production tab so the totals are visible. Multiple runs in one day
+   (e.g. three pans) MERGE into that day's batch so the daily recipe is only
+   ever deducted from inventory ONCE — not once per pan. */
 function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
   if (!date || !(pieces > 0)) { showToast('No finished batch to save.', 'error'); return; }
+  const runUsage = usage || currentUsage();
+  const existing = (state.production || []).find(function (p) { return p.date === date; });
+
+  // -------- Merge into an existing batch for the same day (no double deduct) --------
+  if (existing) {
+    existing.pieces = (existing.pieces || 0) + Math.round(pieces);
+    existing.bags = (existing.bags || 0) + Math.round(bags || Math.ceil(pieces / 6));
+    existing.notes = (existing.notes || '') + (notes ? (existing.notes ? ' · ' : '') + notes : '');
+    if (useBy && !existing.useBy) existing.useBy = useBy;
+    if (!existing.usage || !Object.keys(existing.usage).length) existing.usage = Object.assign({}, runUsage);
+    if (!existing.capital) existing.capital = Math.round(ingredientCostFor(existing.usage));
+    rebuildStockAndCogs();
+    saveState();
+    renderAll();
+    triggerGoogleSync();
+    clearDraft();
+    $('editProdId').value = existing.id;
+    $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Update Production';
+    lucide.createIcons();
+    showToast('Added to today’s production — ' + fmt(existing.pieces) + ' pieces total.', 'success');
+    pulseSuccess($('saveLogBtn'));
+    document.querySelector('[data-tab="log"]').click();
+    draftTouched = false;
+    updateDraftHint();
+    return;
+  }
+
   const record = {
     id: uid(),
     date: date,
@@ -107,7 +152,7 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
     bags: Math.round(bags || Math.ceil(pieces / 6)),
     weightPerRoll: 0, mixWeight: 0, expectedRolls: 0,
     notes: notes || '',
-    usage: Object.assign({}, usage || currentUsage()),
+    usage: Object.assign({}, runUsage),
     additionalCost: 0,
     capital: 0, laborMinutes: 0, laborCost: 0, costPerPiece: 0
   };
@@ -129,8 +174,17 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
   $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Save Production Work';
   lucide.createIcons();
   showToast('Batch saved to production for ' + record.date + ' — ' + fmt(record.pieces) + ' pieces ready to sell.');
+  const mergedOver = overConsumedStockItems().filter(function (label) {
+    const itemName = label.split(' ')[0];
+    return (record.usage[itemName] || 0) > 0;  // only warn about items THIS batch used
+  });
+  if (mergedOver.length) {
+    showToast('⚠ Stock went below zero: ' + mergedOver.join(', ') + ' — record a purchase or Add Stock to restore.', 'info');
+  }
   pulseSuccess($('saveLogBtn'));
   document.querySelector('[data-tab="log"]').click();
+  draftTouched = false;
+  updateDraftHint();
 }
 
 /* ============================================================
@@ -187,6 +241,8 @@ function editProduction(id) {
   $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Update Production';
   lucide.createIcons();
   updateUsageCosts();
+  draftTouched = false;
+  updateDraftHint();
   document.querySelector('[data-tab="log"]').click();
   showToast('Editing production for ' + p.date + ' — adjust then click Update Production.', 'info');
 }

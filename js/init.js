@@ -221,10 +221,26 @@ async function loadFromSheetsApi() {
 // When the workspace is ONLINE (cloud mode), push to the account's cloud copy.
 function triggerGoogleSync() {
   clearTimeout(googleSyncTimer);
-  googleSyncTimer = setTimeout(function () {
-    if (googleAuthUser && googleSheetsId) syncToSheetsApi();
-    if (cloudIsOnline()) cloudPush();
-    else syncToGoogle({ silent: true });
+  googleSyncTimer = setTimeout(async function () {
+    pendingCloudPushQueued = true;
+    try {
+      if (googleAuthUser && googleSheetsId) syncToSheetsApi();
+      // 1) A Supabase session can silently expire after boot; restore it before
+      //    deciding we are offline, so saves keep reaching the cloud.
+      if (SUPA.configured() && !(SUPA.user && SUPA.user.id)) {
+        try { await SUPA.sessionUser(); } catch (e) { /* restore is best-effort */ }
+      }
+      // 2) NEVER silently drop a save. Push when online; when a cloud IS
+      //    configured but we can't reach it right now, push anyway so the
+      //    change is queued ("will sync when back online") instead of being
+      //    lost. Only a truly local setup (legacy mode with no account and no
+      //    server URL) stays silent — there is nothing to queue then.
+      pendingCloudPushQueued = false; // push is starting; beforeunload may flush on its own
+      if (cloudIsOnline() || cloudIsAvailable()) await cloudPush();
+    } catch (e) {
+      console.warn('auto cloud push failed', e);
+      pendingCloudPushQueued = false;
+    }
   }, 700);
 }
 

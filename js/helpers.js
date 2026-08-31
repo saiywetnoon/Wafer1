@@ -227,7 +227,9 @@ function inventoryStockFor(name) {
 }
 function syncInventorySnapshot(name) {
   const item = ensureInventoryItem(name);
-  item.stock = Math.max(0, Math.round(inventoryStockFor(name) * 100) / 100);
+  // True running balance — may be NEGATIVE after over-using stock without a
+  // purchase, so the user sees what needs restocking instead of a lie ("0").
+  item.stock = Math.round(inventoryStockFor(name) * 100) / 100;
   return item.stock;
 }
 /* An ingredient counts as STOCK only when it can be bought and stored (flour,
@@ -351,10 +353,26 @@ function inventoryUsageShortage(oldUsage, newUsage) {
     const oldQty = parseFloat((oldUsage || {})[name]) || 0;
     const newQty = parseFloat((newUsage || {})[name]) || 0;
     const additional = newQty - oldQty;
+    if (additional <= 0) return;
     const available = inventoryStockFor(name);
-    if (additional > available) shortage = { name: name, available: available, requested: additional };
+    // Only flag a REAL shortage: stock is on hand but the batch needs more than
+    // remains. Items with NOTHING on hand (0 or already negative — e.g. a
+    // default-recipe ingredient the user never stocked) must NOT silently block
+    // the whole save; the batch is still recorded and the running balance goes
+    // negative so the Inventory tab shows exactly what needs restocking.
+    if (available > 0 && additional > available) shortage = { name: name, available: available, requested: additional };
   });
   return shortage;
+}
+/* Items whose running balance is NEGATIVE right now — used to warn the user
+   that a save consumed more than was on hand, so they know to restock. */
+function overConsumedStockItems() {
+  const out = [];
+  (state.prices || []).filter(isStockItem).forEach(function (ing) {
+    const bal = Math.round(inventoryStockFor(ing.name) * 100) / 100;
+    if (bal < 0) out.push(ing.name + ' ' + bal);
+  });
+  return out;
 }
 function reconcileProductionInventory(oldUsage, newUsage, date, referenceId) {
   const names = new Set(Object.keys(oldUsage || {}).concat(Object.keys(newUsage || {})));
@@ -446,7 +464,8 @@ function updateAppStatus() {
   var hm = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
   var configured = (typeof cloudIsAvailable === 'function') ? cloudIsAvailable() : false;
   var online = (typeof cloudIsOnline === 'function') ? cloudIsOnline() : true;
-  var dirty = (typeof syncQueueIsDirty === 'function') ? syncQueueIsDirty() : false;
+  var dirty = (typeof syncQueueIsDirty === 'function' ? syncQueueIsDirty() : false)
+    || (typeof pendingCloudPushQueued === 'boolean' ? pendingCloudPushQueued : false);
   var label, stateClass;
   if (!configured) { label = 'Local'; stateClass = 'synced'; }
   else if (online && !dirty) { label = 'Synced'; stateClass = 'synced'; }
