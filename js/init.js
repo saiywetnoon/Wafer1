@@ -26,6 +26,7 @@ function renderAll() {
   wireResponsiveTables();
   updateAppStatus();
   if (typeof refreshTabBadges === 'function') { try { refreshTabBadges(); } catch (e) { /* best-effort */ } }
+  if (typeof refreshNotifications === 'function') { try { refreshNotifications(); } catch (e) { /* best-effort */ } }
   lucide.createIcons();
 }
 
@@ -320,6 +321,8 @@ async function appStart() {
   try { startCloudPolling(); } catch (e) { console.warn('cloud polling not available', e); }
   // From here on, EVERY save auto-pushes to the cloud (price, stock, anything).
   setCloudAutoSync(true);
+  // Topbar notification bell + dropdown.
+  try { initNotifications(); } catch (e) { console.warn('notifications unavailable', e); }
   // Offline-first: retry anything saved while offline when the connection is back.
   initSyncFlushers();
   try { await flushPendingSync(); } catch (e) { console.warn('pending sync flush failed', e); }

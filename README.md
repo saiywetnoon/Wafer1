@@ -154,6 +154,11 @@ button (🗑) that turns it into a daily-usage item and clears its stock history
   the header into a clearly-labelled **Utilities & Danger Zone** in Business
   Tools. Live count badges on the Inventory / Customers / Cash / Sync tabs
   surface what needs attention without opening the tab.
+- **Left sidebar navigation** — the grouped tabs live in a sticky **left
+  sidebar** on desktop and wide tablets; on narrow phones they collapse into a
+  horizontal scroll strip under the topbar. A topbar **« / »** toggle collapses
+  the sidebar to an icon-only rail (preference is saved), and every nav item
+  has a hover tooltip so the rail stays discoverable.
 
 ## UI / appearance polish
 

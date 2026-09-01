@@ -455,6 +455,40 @@ function pulseSuccess(el) {
   el.classList.add('save-pulse');
 }
 function pad2(n) { return (n < 10 ? '0' : '') + n; }
+/* ---------- Sidebar (left nav) ---------- */
+/* Preserves a user's left-sidebar collapse preference (icon-only rail on wide
+   screens) and gives every nav tab a tooltip for the collapsed state. */
+function wireSidebar() {
+  var btn = $('sidebarToggleBtn');
+  var key = 'ledger_sidebarCollapsed';
+  var isCollapsed = false;
+  try { isCollapsed = localStorage.getItem(key) === '1'; } catch (e) {}
+  if (isCollapsed) document.body.classList.add('sidebar-collapsed');
+  if (btn) {
+    var glyph = $('sidebarToggleGlyph');
+    function syncBtn() {
+      var collapsed = document.body.classList.contains('sidebar-collapsed');
+      btn.setAttribute('aria-expanded', String(!collapsed));
+      btn.setAttribute('title', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+      if (glyph) glyph.textContent = collapsed ? '»' : '«';
+    }
+    syncBtn();
+    btn.addEventListener('click', function () {
+      document.body.classList.toggle('sidebar-collapsed');
+      try { localStorage.setItem(key, document.body.classList.contains('sidebar-collapsed') ? '1' : '0'); } catch (e) {}
+      syncBtn();
+    });
+  }
+  // Tooltips so an icon-only rail is still discoverable.
+  document.querySelectorAll('.sidebar .tab-btn').forEach(function (b) {
+    if (!b.getAttribute('title')) b.setAttribute('title', (b.textContent || '').trim());
+  });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', wireSidebar);
+} else {
+  wireSidebar();
+}
 /* Live "saved · synced/offline" pill in the corner.
    The ⇄ HH:MM part is the time the cloud last CONFIRMED a write (persisted),
    not the current clock — so a frozen "13:00" is obviously the last sync, and
@@ -533,6 +567,98 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     if (btn.dataset.tab === 'sales') { updateSaleLive(); renderSalesTab(); }
   });
 });
+
+/* ---------- Notifications (bell in the topbar) ----------
+   Surfaces what needs attention without opening a tab: low/out-of-stock
+   ingredients, customers who owe money, a stuck cloud sync, and cash
+   variance. Clicking an item jumps to that tab. */
+function refreshNotifications() {
+  var items = [];
+  try {
+    (state.prices || []).forEach(function (ing) {
+      if (!isStockItem(ing.name)) return;
+      var st = inventoryStockFor(ing.name);
+      var alert = (state.inventory && state.inventory[ing.name]) ? (state.inventory[ing.name].lowAlert || 0) : 0;
+      if (st <= alert) items.push({ tab: 'inventory', icon: 'package', text: ing.name + ' low / out (' + fmt(st) + ')', kind: 'warn' });
+    });
+  } catch (e) {}
+  try {
+    (state.customers || []).forEach(function (c) {
+      if (c && (parseFloat(c.debt) || 0) > 0) items.push({ tab: 'customers', icon: 'users', text: c.name + ' owes ' + fmtKs(c.debt), kind: 'danger' });
+    });
+  } catch (e) {}
+  try {
+    var dirty = (typeof syncQueueIsDirty === 'function' && syncQueueIsDirty())
+      || (typeof cloudSyncFailed === 'boolean' && cloudSyncFailed);
+    if (dirty) items.push({ tab: 'sync', icon: 'cloud', text: 'Changes not synced to your account yet', kind: 'warn' });
+  } catch (e) {}
+  try {
+    var ceEl = $('cashExpectedToday'), ccEl = $('cashCounted');
+    if (ceEl && ccEl) {
+      var ce = parseFloat((ceEl.textContent || '0').replace(/[^\d.-]/g, '')) || 0;
+      var cc = parseFloat(ccEl.value) || 0;
+      if (cc > 0 && Math.abs(cc - ce) > 0) items.push({ tab: 'cash', icon: 'banknote', text: 'Cash variance ' + fmtKs(cc - ce), kind: 'info' });
+    }
+  } catch (e) {}
+
+  var badge = $('notifBadge'), list = $('notifList'), empty = $('notifEmpty');
+  if (badge) {
+    if (items.length) { badge.textContent = items.length > 9 ? '9+' : String(items.length); badge.classList.remove('hidden'); }
+    else { badge.textContent = ''; badge.classList.add('hidden'); }
+  }
+  if (list) {
+    if (!items.length) {
+      if (empty) empty.classList.remove('hidden');
+      list.innerHTML = '';
+    } else {
+      if (empty) empty.classList.add('hidden');
+      list.innerHTML = items.slice(0, 7).map(function (it) {
+        return '<div class="notif-item" data-tab="' + it.tab + '"><i data-lucide="' + it.icon + '" class="w-4 h-4 notif-' + it.kind + '"></i><span>' + esc(it.text) + '</span></div>';
+      }).join('');
+      if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
+    }
+  }
+}
+function initNotifications() {
+  if (window.__notifInit) return;
+  window.__notifInit = true;
+  var toggle = $('notifToggleBtn');
+  if (!toggle) return;
+  toggle.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var p = $('notifPanel');
+    if (!p) return;
+    var willOpen = p.classList.contains('hidden');
+    p.classList.toggle('hidden', !willOpen);
+    toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    if (willOpen) refreshNotifications();
+  });
+  document.addEventListener('click', function () {
+    var p = $('notifPanel');
+    if (p && !p.classList.contains('hidden')) p.classList.add('hidden');
+    var t = $('notifToggleBtn');
+    if (t) t.setAttribute('aria-expanded', 'false');
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      var p = $('notifPanel');
+      if (p && !p.classList.contains('hidden')) p.classList.add('hidden');
+    }
+  });
+  var list = $('notifList');
+  if (list) list.addEventListener('click', function (e) {
+    var item = (e.target && e.target.classList && e.target.classList.contains('notif-item')) ? e.target
+      : (e.target && e.target.closest ? e.target.closest('.notif-item') : null);
+    if (!item) return;
+    var tab = item.getAttribute('data-tab');
+    if (!tab) return;
+    var btn = document.querySelector('[data-tab="' + tab + '"]');
+    if (btn && btn.classList.contains('tab-btn')) btn.click();
+    var p = $('notifPanel');
+    if (p) p.classList.add('hidden');
+  });
+  refreshNotifications();
+}
 
 /* ---------- Header live badges ----------
    Small count badges on tabs surface what needs attention without opening the

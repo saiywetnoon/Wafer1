@@ -37,6 +37,9 @@ tailwind.config = {
 </script>
 
 <link rel="stylesheet" href="css/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen">
@@ -44,90 +47,106 @@ tailwind.config = {
 <!-- ===================== HEADER ===================== -->
 <!-- ===================== APP (hidden until login) ===================== -->
 <div id="appContainer" class="hidden">
-<header class="sticky top-0 z-40 bg-gray-900/90 backdrop-blur border-b border-gray-800">
-  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-    <div class="flex items-center gap-3">
-      <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500 to-amberdeep-700 flex items-center justify-center shadow-lg shadow-amber-500/30">
-        <i data-lucide="calendar-check" class="w-6 h-6 text-cream-100"></i>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-brand">
+      <div class="brand-mark">
+        <i data-lucide="calendar-check" class="w-6 h-6 text-amber-100"></i>
       </div>
       <div>
-        <h1 class="text-lg sm:text-xl font-extrabold tracking-tight text-amber-400 leading-none">Daily Crispy Roll Ledger</h1>
-        <p class="text-[11px] sm:text-xs text-gray-400 mt-0.5">High-Frequency Daily Record-Keeping · Cloud-Synced Across Devices</p>
+        <h1 class="brand-title">Daily Crispy Roll Ledger</h1>
+        <p class="brand-sub">Cloud-synced across devices</p>
       </div>
     </div>
-    <div class="flex items-center gap-2">
-      <button id="companyNameBtn" onclick="openCompanySwitch()" title="Switch workspace" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1.5 max-w-[160px]">
+    <button id="sidebarToggleBtn" class="icon-btn" title="Collapse sidebar" aria-label="Toggle sidebar" aria-expanded="true">
+      <span class="sidebar-glyph" id="sidebarToggleGlyph">«</span>
+    </button>
+    <div class="topbar-actions">
+      <button id="companyNameBtn" onclick="openCompanySwitch()" title="Switch workspace" class="topbar-btn">
         <i data-lucide="building-2" class="w-4 h-4 text-amber-400 shrink-0"></i> <span id="companyName" class="truncate">—</span>
       </button>
       <div id="googleSignInDiv" class="hidden"></div>
-      <button id="googleSignOutBtn" class="hidden px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1.5 text-emerald-400">
+      <button id="googleSignOutBtn" class="hidden topbar-btn text-emerald-400">
         <i data-lucide="log-out" class="w-4 h-4"></i> <span id="googleUserLabel">Sign Out</span>
       </button>
-      <button id="adminBtn" class="hidden px-3 py-2 rounded-lg bg-purple-900/50 hover:bg-purple-800/70 transition text-xs font-semibold flex items-center gap-1.5 text-purple-300" title="Approve new accounts">
+      <button id="adminBtn" class="hidden topbar-btn text-purple-300" title="Approve new accounts">
         <i data-lucide="shield" class="w-4 h-4"></i> Admin
       </button>
-      <button id="authLogoutBtn" class="hidden px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-xs font-semibold flex items-center gap-1.5 text-red-400" title="Sign out of your account">
+      <button id="authLogoutBtn" class="hidden topbar-btn text-red-400" title="Sign out of your account">
         <i data-lucide="log-out" class="w-4 h-4"></i> <span id="authUserLabel">Sign out</span>
       </button>
+      <div class="notif-wrap">
+        <button id="notifToggleBtn" class="icon-btn relative" title="Notifications & alerts" aria-haspopup="true" aria-expanded="false">
+          <i data-lucide="bell" class="w-[18px] h-[18px] text-gray-300"></i>
+          <span id="notifBadge" class="hidden notif-badge"></span>
+        </button>
+        <div id="notifPanel" class="notif-panel hidden">
+          <div class="notif-header">Notifications</div>
+          <div id="notifList" class="notif-list"></div>
+          <div id="notifEmpty" class="notif-empty">All caught up ✓</div>
+        </div>
+      </div>
     </div>
   </div>
-  <nav role="tablist" aria-label="Ledger sections" class="max-w-7xl mx-auto px-4 pb-2 flex items-center gap-x-4 gap-y-1 overflow-x-auto scrollbar-thin">
-    <div class="nav-group">
-      <span class="nav-group-label">Operations</span>
-      <button data-tab="log" role="tab" aria-selected="true" class="tab-btn active flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 text-gray-900 whitespace-nowrap transition">
-        <i data-lucide="clipboard-list" class="w-4 h-4"></i> Production
-      </button>
-      <button data-tab="timers" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-        <i data-lucide="timer" class="w-4 h-4"></i> Fry Timers
-      </button>
-      <button data-tab="sales" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-        <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i> Sales & Stock
-      </button>
-    </div>
-    <div class="nav-group">
-      <span class="nav-group-label">Insight</span>
-      <button data-tab="dashboard" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-        <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
-      </button>
-      <button data-tab="calendar" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-        <i data-lucide="calendar" class="w-4 h-4"></i> Calendar & Audit
-      </button>
-    </div>
-    <div class="nav-group">
-      <span class="nav-group-label">Manage</span>
-      <button data-tab="inventory" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-        <i data-lucide="package" class="w-4 h-4"></i> Inventory
-        <span id="badge-inventory" class="tab-badge hidden"></span>
-      </button>
-      <button data-tab="customers" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-        <i data-lucide="users" class="w-4 h-4"></i> Customers
-        <span id="badge-customers" class="tab-badge hidden"></span>
-      </button>
-      <button data-tab="suppliers" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-        <i data-lucide="store" class="w-4 h-4"></i> Suppliers
-      </button>
-    </div>
-    <div class="nav-group">
-      <span class="nav-group-label">Finance</span>
-      <button data-tab="cash" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-        <i data-lucide="banknote" class="w-4 h-4"></i> Cash Drawer
-        <span id="badge-cash" class="tab-badge hidden"></span>
-      </button>
-    </div>
-    <div class="nav-group">
-      <span class="nav-group-label">System</span>
-      <button data-tab="tools" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-        <i data-lucide="wrench" class="w-4 h-4"></i> Business Tools
-      </button>
-      <button data-tab="sync" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
-        <i data-lucide="cloud" class="w-4 h-4"></i> Sync & Backup
-        <span id="badge-sync" class="tab-badge hidden"></span>
-      </button>
-    </div>
-  </nav>
 </header>
-
-<main class="max-w-7xl mx-auto px-4 py-6">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <nav role="tablist" aria-label="Ledger sections" class="sidebar-nav">
+        <div class="nav-group">
+          <span class="nav-group-label">Operations</span>
+          <button data-tab="log" role="tab" aria-selected="true" class="tab-btn active flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 text-gray-900 whitespace-nowrap transition">
+            <i data-lucide="clipboard-list" class="w-4 h-4"></i> Production
+          </button>
+          <button data-tab="timers" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+            <i data-lucide="timer" class="w-4 h-4"></i> Fry Timers
+          </button>
+          <button data-tab="sales" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+            <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i> Sales & Stock
+          </button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label">Insight</span>
+          <button data-tab="dashboard" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+            <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
+          </button>
+          <button data-tab="calendar" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+            <i data-lucide="calendar" class="w-4 h-4"></i> Calendar & Audit
+          </button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label">Manage</span>
+          <button data-tab="inventory" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+            <i data-lucide="package" class="w-4 h-4"></i> Inventory
+            <span id="badge-inventory" class="tab-badge hidden"></span>
+          </button>
+          <button data-tab="customers" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+            <i data-lucide="users" class="w-4 h-4"></i> Customers
+            <span id="badge-customers" class="tab-badge hidden"></span>
+          </button>
+          <button data-tab="suppliers" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+            <i data-lucide="store" class="w-4 h-4"></i> Suppliers
+          </button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label">Finance</span>
+          <button data-tab="cash" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+            <i data-lucide="banknote" class="w-4 h-4"></i> Cash Drawer
+            <span id="badge-cash" class="tab-badge hidden"></span>
+          </button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-group-label">System</span>
+          <button data-tab="tools" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+            <i data-lucide="wrench" class="w-4 h-4"></i> Business Tools
+          </button>
+          <button data-tab="sync" role="tab" aria-selected="false" class="tab-btn relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+            <i data-lucide="cloud" class="w-4 h-4"></i> Sync & Backup
+            <span id="badge-sync" class="tab-badge hidden"></span>
+          </button>
+        </div>
+      </nav>
+    </aside>
+<main class="main-content">
 
   <!-- ===================== DAILY LOG ===================== -->
   <section id="tab-log" class="tab-panel">
@@ -1154,6 +1173,7 @@ tailwind.config = {
   </section>
 
 </main>
+  </div><!-- /.app-shell -->
 <div id="appStatusBar" title="Autosave & sync status">
   <span class="dot"></span>
   <span id="appStatusText">…</span>
