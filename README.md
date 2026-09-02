@@ -41,6 +41,7 @@ dail-ledger v1.1/
 │   ├── cash.js             Cash Drawer / cash-flow + manual adjustments
 │   ├── companies.js        Multi-company workspaces, login/switch screen + boot gating
 │   ├── cloud.js            Online / cloud abstraction layer (provider-agnostic)
+│   ├── ai.js               AI Root Cause (local rules engine + optional ChatGPT/DeepSeek)
 │   └── init.js             INIT + Google account sign-in + app bootstrap (loads last)
 └── google-sync.gs          Google Apps Script backend (deploy to a Sheet)
 ```
@@ -104,6 +105,61 @@ only re-populated when the selected production **date** changes (changing the
 date loads that day's saved batch, or restores the default/previous usage).
 Re-renders from cloud sync or switching tabs do **not** reset your
 bags / pieces / labor / notes while you are editing them.
+
+### Mix-first workflow (record ingredients → pack later)
+
+Production follows your real kitchen flow. You usually know **ingredients**
+first and only know **actual bags & pieces** after packaging is done:
+
+1. Enter the ingredient quantities (and labor if you like) — the **Expected
+   Rolls** line appears immediately under the form (uses the weight-per-roll
+   you enter, or your recent average if you leave it blank).
+2. Press **Save Production Work** with bags/pieces still empty → this records
+   the **mix** (consumes inventory once) and shows **⏳ PACKING** in the recent
+   list. Nothing is added to ready-to-sell stock yet.
+3. After packaging, reopen the **same date**, type the actual **bags** and
+   **pieces** (a live **Pieces per Bag** readout appears), and press
+   **Update Production**. That updates the batch in place — ingredients are
+   NOT deducted twice, and the packed rolls are added to ready-to-sell stock.
+
+Saving an all-empty form is blocked, so a stray click can't create a blank
+batch.
+
+## AI Root Cause Analysis
+
+The **AI Root Cause** tab (under **Insight**) finds the likely **root cause** of
+a production day's problems. It works on any recorded date (defaults to today)
+and is fully functional with **no API key and no internet** — the analysis is
+computed on-device from your own ledger data.
+
+What is analysed for the chosen date:
+
+| Signal | What it checks |
+|---|---|
+| **Yield loss** | pieces rolled vs `expectedRolls` (mix weight ÷ weight/roll) |
+| **Weight/roll drift** | today's `weightPerRoll` vs the median of recent batches |
+| **Labor efficiency** | minutes per 100 pieces vs your baseline |
+| **Cost per piece** | capital ÷ pieces vs your baseline (price / yield / waste) |
+| **Waste** | today's waste vs your typical daily waste |
+| **Recipe mix** | each ingredient's grams per 100 pieces vs history (measuring slips) |
+| **Quality notes** | keyword detection: not crispy, burnt, salty, heavy, broken… |
+| **Pieces/bag & expiry** | packing drift and use-by dates |
+
+Each finding gives a **confidence score**, the **evidence** that triggered it,
+the **estimated impact** (pieces / money), and concrete **checks + fixes** for
+the kitchen. A **health score (0–100)** summarizes the day.
+
+**Optional LLM summary (ChatGPT or DeepSeek):** open **AI Provider Settings**
+(⚙ on the tab) and paste an API key (OpenAI `sk-…` or DeepSeek `sk-…`). The
+key is stored **only on this device** — it is never uploaded, synced, or shared.
+Then **Ask AI (ChatGPT / DeepSeek)** sends the *same aggregate numbers* (never
+customer names, phones, or balances) to the provider for a plain-language
+root-cause narrative. No key = you still get the full on-device analysis.
+
+A production day in **⏳ PACKING** state (mix recorded, actual counts not yet
+entered) shows a helpful "finish packing first" note and is excluded from
+misleading yield findings — so you can run the AI right after recording the mix
+to see the expected roll count, then again after packaging for the real report.
 
 ## Stock vs. daily-usage items
 

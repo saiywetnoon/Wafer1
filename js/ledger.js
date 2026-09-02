@@ -4,13 +4,28 @@
    sales here — sales are logged separately (any day), so rolling
    today and selling tomorrow works correctly.
    ============================================================ */
+/* Same as validateNum but treats an EMPTY field as 0 — so the mix can be saved
+   before the actual bags/pieces are known after packaging. */
+function validateOptionalNum(input) {
+  const raw = (input.value || '').trim();
+  if (raw === '') { input.classList.remove('field-error'); return 0; }
+  const val = parseFloat(raw);
+  if (isNaN(val) || val < 0) { input.classList.add('field-error'); return null; }
+  input.classList.remove('field-error');
+  return val;
+}
+
 function saveProduction() {
   const date = validateText($('logDate'));
-  const bags = validateNum($('logBagsProduced'));
-  const pieces = validateNum($('logPieces'));
-  const laborMin = validateNum($('logLabor'));
-  if (date === null || bags === null || pieces === null || laborMin === null) {
-    showToast('Please complete date, bags, pieces and labor with valid numbers.', 'error');
+  if (date === null) {
+    showToast('Please pick a production date.', 'error');
+    return;
+  }
+  const bags = validateOptionalNum($('logBagsProduced'));
+  const pieces = validateOptionalNum($('logPieces'));
+  const laborMin = validateOptionalNum($('logLabor'));
+  if (bags === null || pieces === null || laborMin === null) {
+    showToast('Bags, pieces and labor must be zero or valid numbers.', 'error');
     return;
   }
   const usage = currentUsage();
@@ -21,6 +36,15 @@ function saveProduction() {
   const wage = parseFloat($('hourlyWage').value) || state.settings.hourlyWage || 0;
   const laborCost = laborHrs * wage;
 
+  // A mix-only save (nothing packed yet) must still represent REAL work: at
+  // least some ingredients measured, or a finished count, or a quality note.
+  const usageAny = Object.keys(usage).some(function (k) { return (parseFloat(usage[k]) || 0) > 0; });
+  const notesRaw = ($('logNotes').value || '').trim();
+  if (!usageAny && pieces <= 0 && bags <= 0 && laborMin <= 0 && !notesRaw) {
+    showToast('Nothing to save yet — enter the ingredient quantities first (expected rolls will appear below).', 'error');
+    return;
+  }
+
   const requestedEditId = document.getElementById('editProdId').value;
   // Never create a SECOND batch for a day that already has one — that would
   // deduct the ingredients twice. Re-opening a saved day pre-fills its batch,
@@ -30,9 +54,15 @@ function saveProduction() {
   const isUpdate = !!editId;
   const costPerPiece = pieces > 0 ? Math.round(capital / pieces * 100) / 100 : 0;
   const wPerRoll = parseFloat($('logWeightPerRoll').value) || 0;
+  // At MIX time the real weight per roll is unknown — use the recent average
+  // so "expected rolls" is still meaningful for planning. The record keeps the
+  // entered value (0 = not measured yet); the true expected count is refined
+  // when the day is updated after packaging.
+  const wprEstimate = recentWeightPerRoll() || 0;
+  const wprForExpected = wPerRoll || wprEstimate || 0;
   const mixWeight = totalMixWeightFor(usage);
-  const expectedRolls = wPerRoll > 0 ? Math.floor(mixWeight / wPerRoll) : 0;
-  const notes = ($('logNotes').value || '').trim();
+  const expectedRolls = wprForExpected > 0 ? Math.floor(mixWeight / wprForExpected) : 0;
+  const notes = notesRaw;
   const useBy = ($('logUseBy') ? ($('logUseBy').value || '').trim() : '');
 
   const record = {
@@ -81,7 +111,9 @@ function saveProduction() {
   var saveBtn = $('saveLogBtn');
   saveBtn.innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Update Production';
   lucide.createIcons();
-  showToast(isUpdate ? 'Production updated for ' + date : 'Production saved for ' + date + ' — ' + fmt(pieces) + ' pieces ready to sell.');
+  showToast(isUpdate
+    ? (pieces > 0 ? 'Production updated for ' + date + ' — ' + fmt(pieces) + ' pieces ready to sell.' : 'Mix updated for ' + date + '. Add actual bags & pieces after packing.')
+    : (pieces > 0 ? 'Production saved for ' + date + ' — ' + fmt(pieces) + ' pieces ready to sell.' : 'Mix recorded for ' + date + ' — expected ~' + fmt(expectedRolls) + ' rolls. Update actual counts after packing.'));
   const over = overConsumedStockItems().filter(function (label) {
     const itemName = label.split(' ')[0];
     return (usage[itemName] || 0) > 0;   // only warn about items THIS batch used
@@ -199,8 +231,11 @@ function renderProduction() {
     return;
   }
   tbody.innerHTML = list.map(function (p) {
+    const pendingPack = !(p.pieces > 0);
     const exp = p.expectedRolls > 0 ? fmt(p.expectedRolls) : '—';
-    const diff = (p.expectedRolls > 0) ? ((p.pieces - p.expectedRolls >= 0 ? '+' : '') + fmt(p.pieces - p.expectedRolls)) : '—';
+    const diff = (p.pieces > 0 && p.expectedRolls > 0)
+      ? ((p.pieces - p.expectedRolls >= 0 ? '+' : '') + fmt(p.pieces - p.expectedRolls))
+      : (pendingPack && p.expectedRolls > 0 ? '<span class="text-[10px] font-bold text-amber-400 whitespace-nowrap">⏳ PACKING</span>' : '—');
     const note = p.notes ? '<span class="text-[10px] text-gray-400" title="' + esc(p.notes).replace(/"/g, '&quot;') + '">' + esc(p.notes).slice(0, 30) + (p.notes.length > 30 ? '…' : '') + '</span>' : '<span class="text-gray-600">—</span>';
     const useBy = p.useBy ? '<span class="text-[10px] font-bold text-orange-400 ml-1" title="Sell / use by">exp ' + esc(p.useBy) + '</span>' : '';
     const wpr = p.weightPerRoll ? fmt(p.weightPerRoll) + 'g' : '—';

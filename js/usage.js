@@ -39,6 +39,23 @@ function previousProductionUsage(date) {
   })[0];
 }
 
+/* Median grams-per-roll from recent batches. Used to estimate the expected
+   roll count at MIX time, when the actual weight per roll is not known yet
+   (it is only measured while rolling). Falls back to 0 when there is no
+   history. */
+function recentWeightPerRoll(max) {
+  max = max || 14;
+  const wprs = (state.production || [])
+    .filter(function (p) { return p && parseFloat(p.weightPerRoll) > 0; })
+    .sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); })
+    .slice(0, max)
+    .map(function (p) { return parseFloat(p.weightPerRoll); });
+  if (!wprs.length) return 0;
+  const sorted = wprs.slice().sort(function (a, b) { return a - b; });
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2 * 10) / 10;
+}
+
 /* ---------- Production form population (never fights the user) ----------
    Repeated renderAll() calls (cloud sync, other tabs redrawing) must never
    silently overwrite quantities the user is currently typing. So the form is
@@ -214,16 +231,27 @@ function updateLive() {
   const laborCost = laborHrs * wage;
   const mixWeight = totalMixWeightFor(usage);
   const wPerRoll = parseFloat($('logWeightPerRoll').value) || 0;
-  const expectedRolls = (wPerRoll > 0) ? Math.floor(mixWeight / wPerRoll) : 0;
+  // At MIX time the actual weight/roll is not known yet — fall back to the
+  // recent average so "expected rolls" is still useful for planning.
+  const wprUsed = wPerRoll || recentWeightPerRoll() || 0;
+  const wprEstimated = wprUsed > 0 && !wPerRoll;
+  const expectedRolls = (wprUsed > 0) ? Math.floor(mixWeight / wprUsed) : 0;
   $('liveCapital').textContent = fmtKs(capital);
   $('liveLaborHrs').textContent = laborHrs.toFixed(2) + ' hrs';
   $('liveLaborCost').textContent = fmtKs(laborCost);
   $('totalMixWeight').textContent = fmt(Math.round(mixWeight)) + ' g';
-  $('liveExpectedRolls').textContent = expectedRolls > 0 ? fmt(expectedRolls) + ' rolls (~' + fmt(Math.round(mixWeight % wPerRoll)) + ' g left)' : '—';
-  $('liveRollDiff').textContent = expectedRolls > 0 ? (parts - expectedRolls >= 0 ? '+' : '') + fmt(parts - expectedRolls) : '—';
-  $('liveRollDiff').className = 'font-bold ' + (expectedRolls > 0 ? (parts >= expectedRolls ? 'text-emerald-400' : 'text-amber-400') : 'text-gray-500');
+  $('liveExpectedRolls').textContent = expectedRolls > 0
+    ? fmt(expectedRolls) + ' rolls' + (wprEstimated ? ' (est. ' + fmt(wprUsed) + ' g/roll)' : ' (~' + fmt(Math.round(mixWeight % wprUsed)) + ' g left)')
+    : '—';
+  $('liveRollDiff').textContent = (expectedRolls > 0 && parts > 0) ? (parts - expectedRolls >= 0 ? '+' : '') + fmt(parts - expectedRolls) : (expectedRolls > 0 ? 'add after packing' : '—');
+  $('liveRollDiff').className = 'font-bold text-[11px] ' + (expectedRolls > 0 ? (parts > 0 ? (parts >= expectedRolls ? 'text-emerald-400' : 'text-amber-400') : 'text-gray-500') : 'text-gray-500');
   $('liveCostPiece').textContent = parts > 0 ? fmtKs(Math.round((capital / parts) * 100) / 100) : '—';
   $('liveCostBag').textContent = bags > 0 ? fmtKs(Math.round((capital / bags) * 100) / 100) : '—';
+  const pcsBagEl = $('livePcsBag');
+  if (pcsBagEl) {
+    pcsBagEl.textContent = (parts > 0 && bags > 0) ? fmt(Math.round(parts / bags * 10) / 10) + ' pcs/bag' : '—';
+    pcsBagEl.className = 'font-bold ' + (parts > 0 && bags > 0 ? 'text-emerald-400' : 'text-gray-500');
+  }
   const onHand = (state.stock && state.stock.pieces) || 0;
   $('liveStockAfter').textContent = fmt(onHand + parts) + ' ready';
 }

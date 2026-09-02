@@ -558,6 +558,7 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     $('tab-' + btn.dataset.tab).classList.remove('hidden');
     if (btn.dataset.tab === 'dashboard') renderDashboard();
     if (btn.dataset.tab === 'calendar') renderCalendar();
+    if (btn.dataset.tab === 'ai') renderAiAnalysis();
     if (btn.dataset.tab === 'inventory') renderInventory();
     if (btn.dataset.tab === 'customers') renderCustomers();
     if (btn.dataset.tab === 'suppliers') renderSuppliers();

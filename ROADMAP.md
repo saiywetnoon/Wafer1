@@ -23,6 +23,8 @@ approved account's data kept private.
 | Customers and debt | 🟡 | Customer records, standing orders, debt, and capped repayments exist; sales are not yet linked to customers. |
 | Suppliers and purchases | 🟡 | Supplier records, purchases, and payments exist; inventory movements are not fully unified. |
 | Cash drawer | ✅ | Opening cash, adjustments, debt repayments, expenses, and supplier payments feed cash reporting. |
+| Production workflow | ✅ | Mix-first recording: ingredients saved before packaging, expected rolls estimated, actual bags/pieces updated in place after packing (no double deduction). |
+| AI root cause | ✅ | On-device diagnostic engine (yield, weight, labor, cost, waste, recipe, notes) + optional ChatGPT/DeepSeek narrative. |
 | Backups | 🟡 | Download/restore backup exists; automatic server-side version history does not. |
 | Offline installable app | ⬜ | Not yet a PWA. |
 | Team workspaces | ⬜ | Not yet supported; each account currently owns one private ledger. |
@@ -95,6 +97,49 @@ Legend: ✅ complete · 🟡 usable but incomplete · ⬜ not started
 - [ ] A credit sale increases exactly one customer's debt.
 - [ ] A partial payment reduces debt and records only the money actually paid.
 - [ ] A receipt can be printed without exposing another user's data.
+
+## Completed this release — Production workflow + AI root cause
+
+### 8. Mix-first production workflow
+
+**Outcome:** record ingredients before packaging; update actuals afterward.
+
+- [x] Saving a production day with empty bags/pieces records the **mix** and
+  deducts inventory once.
+- [x] Expected roll count is shown live from entered weight/roll **or** the
+  recent weight/roll average when left blank.
+- [x] Reopening the same date after packaging and entering actual bags/pieces
+  **updates** the batch in place (no duplicate, no double deduction).
+- [x] Packing-pending days show **⏳ PACKING** in the recent list.
+- [x] Live **Pieces per Bag** readout appears once both bags and pieces exist.
+
+**Acceptance checks**
+
+- [ ] Mix-only save creates one batch/day, list shows ⏳ PACKING.
+- [ ] Adding actuals after packaging keeps a single batch and does not deduct
+  ingredients again.
+- [ ] Finished-goods stock increases only after the packaging update.
+
+### 9. AI root cause analysis
+
+**Outcome:** find the root cause of a bad production day, on-device or via LLM.
+
+- [x] New **AI Root Cause** tab (Insight) with date picker + Analyze.
+- [x] Local diagnostic engine: yield, weight/roll drift, labor, cost, waste,
+  recipe-mix and quality-note findings, each with evidence + fixes + impact.
+- [x] Health score (0–100) and pending-pack (⏳) state handling.
+- [x] Optional ChatGPT (OpenAI) / DeepSeek narrative via a device-only API key.
+- [x] Node verification `_verify_ai.js` covers classifier, profile, rules,
+  provider presets, prompt privacy, and mix-first save.
+
+**Acceptance checks**
+
+- [ ] A heavy-weight day reports the weight root cause; a normal-weight but
+  short-yield day reports the yield-loss cause (not both).
+- [ ] A healthy day reports no problems and scores 100.
+- [ ] A mix-only (packing-pending) day reports no misleading findings.
+- [ ] The LLM prompt contains aggregate numbers only (no customer data).
+- [ ] Everything works offline with no API key.
 
 ## Following release — Daily operations
 
