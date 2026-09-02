@@ -204,6 +204,29 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
   ok(stock('Flour') === baselines.flour - 120, 'packing update does NOT deduct ingredients again');
   ok(state.stock.pieces === baselines.pieces + 236, 'finished stock now reflects the packed pieces');
 
+  /* ---- 6) dynamic save-button label ---- */
+  console.log('== 6) context-aware save button ==');
+  reset();
+  seedHistory();
+  storeEl('editProdId', { value: '' });
+  storeEl('logBagsProduced', { value: '' });
+  storeEl('logPieces', { value: '' });
+  storeEl('saveLogBtn', { innerHTML: '', dataset: {} });
+  draftUsage = Object.assign({}, DEFAULT_USAGE); draftUsage.Flour = 120;
+  refreshSaveButton();
+  ok(els.saveLogBtn.innerHTML.indexOf('Save Mix Now') >= 0, 'ingredients entered + no actuals → button says "Save Mix Now"');
+  storeEl('logPieces', { value: '236' });
+  storeEl('logBagsProduced', { value: '40' });
+  refreshSaveButton();
+  ok(els.saveLogBtn.innerHTML.indexOf('Save Production Work') >= 0, 'actuals entered → button says "Save Production Work"');
+  storeEl('editProdId', { value: 'batch-1' });
+  refreshSaveButton();
+  ok(els.saveLogBtn.innerHTML.indexOf('Update Production') >= 0, 'editing a packed batch → button says "Update Production"');
+  storeEl('logPieces', { value: '' });
+  storeEl('logBagsProduced', { value: '' });
+  refreshSaveButton();
+  ok(els.saveLogBtn.innerHTML.indexOf('Update Mix') >= 0, 'editing a mix-only batch → button says "Update Mix…"');
+
   console.log(fail === 0 ? 'ALL AI + MIX-FIRST CHECKS PASSED' : (fail + ' FAILED'));
 })();
 `;

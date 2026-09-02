@@ -55,6 +55,40 @@ function recentWeightPerRoll(max) {
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2 * 10) / 10;
 }
+/* ---------- Context-aware Save button ----------
+   The Production form is two-phase: you can save the MIX (ingredients) before
+   packaging is done. The button label adapts so it is never misleading and it
+   is obvious that bags/pieces are optional until "after packaging". */
+function productionFormHasActuals() {
+  return (parseFloat($('logPieces') ? $('logPieces').value : 0) || 0) > 0
+    || (parseFloat($('logBagsProduced') ? $('logBagsProduced').value : 0) || 0) > 0;
+}
+function productionFormHasMix() {
+  const usage = currentUsage();
+  return Object.keys(usage).some(function (k) { return (parseFloat(usage[k]) || 0) > 0; });
+}
+function refreshSaveButton() {
+  const sb = $('saveLogBtn');
+  if (!sb) return;
+  const editEl = document.getElementById('editProdId');
+  const editId = (editEl && editEl.value) || '';
+  let label;
+  if (editId) {
+    label = productionFormHasActuals() ? 'Update Production' : 'Update Mix — add real bags & pieces after packing';
+  } else if (productionFormHasActuals()) {
+    label = 'Save Production Work';
+  } else if (productionFormHasMix()) {
+    label = 'Save Mix Now — Expected Rolls Ready';
+  } else {
+    label = 'Save Production Work';
+  }
+  if (!sb.dataset) sb.dataset = {};
+  if (sb.dataset.savelabel !== label) {
+    sb.dataset.savelabel = label;
+    sb.innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> ' + label;
+    if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
+  }
+}
 
 /* ---------- Production form population (never fights the user) ----------
    Repeated renderAll() calls (cloud sync, other tabs redrawing) must never
@@ -94,10 +128,7 @@ $('logDate').addEventListener('change', function () {
   // a fresh day resets it back to a new batch.
   const batch = (state.production || []).find(function (p) { return p.date === curD; }) || null;
   $('editProdId').value = batch ? batch.id : '';
-  const sb = $('saveLogBtn');
-  if (sb) sb.innerHTML = batch
-    ? '<i data-lucide="save" class="w-5 h-5"></i> Update Production'
-    : '<i data-lucide="save" class="w-5 h-5"></i> Save Production Work';
+  refreshSaveButton();
   persistDraft();
   updateDraftHint();
 });
@@ -175,6 +206,7 @@ function updateUsageCosts() {
   $('totalCapital').textContent = fmtKs(total);
   const totalWeightEl = $('usageTotalWeight');
   if (totalWeightEl) totalWeightEl.textContent = fmt(Math.round(totalUsageWeightGrams(usage))) + ' g';
+  refreshSaveButton();
   state.prices.forEach(function (ing) {
     const qty = usage[ing.name] || 0;
     const cost = ing.unit === 'g' ? (qty / 1000) * (parseFloat(ing.price) || 0) : qty * (parseFloat(ing.price) || 0);

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" data-build="v1.10.0">
+<html lang="en" class="dark" data-build="v1.10.1">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -215,6 +215,10 @@ tailwind.config = {
           <input id="editProdId" type="hidden" value="">
         </div>
 
+        <div class="flex items-center gap-2 mb-2">
+          <span class="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-extrabold">STEP 1</span>
+          <span class="text-xs font-bold text-gray-300">Record the mix now — expected rolls appear instantly below</span>
+        </div>
         <div class="overflow-x-auto scrollbar-thin mb-3">
           <table class="w-full text-xs responsive-table">
             <thead>
@@ -240,23 +244,29 @@ tailwind.config = {
           <div class="flex justify-between border-t border-gray-700 pt-1.5"><span class="font-semibold">Total Capital Today</span><span id="totalCapital" class="font-bold text-amber-400">0 Ks</span></div>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label class="text-xs font-semibold text-gray-400">Total Bags (Packed) <span class="text-[10px] text-gray-500 normal-case">— after packaging</span></label>
-            <input id="logBagsProduced" type="number" min="0" step="1" placeholder="e.g. 40" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+        <div class="p-2.5 rounded-xl border border-dashed border-amber-700/40 bg-amber-500/5 mb-4">
+          <div class="flex items-center gap-2 mb-2 px-1">
+            <span class="px-2 py-0.5 rounded-full bg-amber-500 text-gray-900 text-[10px] font-extrabold">STEP 2</span>
+            <span class="text-[11px] font-bold text-amber-300">AFTER PACKAGING — leave empty now, come back later</span>
           </div>
-          <div>
-            <label class="text-xs font-semibold text-gray-400">Actual Pieces Rolled <span class="text-[10px] text-gray-500 normal-case">— after packaging</span></label>
-            <input id="logPieces" type="number" min="0" step="1" placeholder="e.g. 240" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
-          </div>
-          <div>
-            <label class="text-xs font-semibold text-gray-400">Weight of 1 roll (g) <span class="text-[10px] text-gray-500 normal-case">— blank uses recent average</span></label>
-            <input id="logWeightPerRoll" type="number" min="0" step="0.5" placeholder="e.g. 11" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
-            <p class="text-[10px] text-gray-500 mt-1">Used to compute expected roll count from the total mix weight. Leave empty at mix time to estimate from your recent batches.</p>
-          </div>
-          <div>
-            <label class="text-xs font-semibold text-gray-400">Labor Worked (Minutes)</label>
-            <input id="logLabor" type="number" min="0" step="5" placeholder="e.g. 240" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs font-semibold text-gray-400">Total Bags (Packed) <span class="text-[10px] text-gray-500 normal-case">optional</span></label>
+              <input id="logBagsProduced" type="number" min="0" step="1" placeholder="e.g. 40" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800/60 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-400">Actual Pieces Rolled <span class="text-[10px] text-gray-500 normal-case">optional</span></label>
+              <input id="logPieces" type="number" min="0" step="1" placeholder="e.g. 240" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800/60 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-400">Weight of 1 roll (g) <span class="text-[10px] text-gray-500 normal-case">blank = uses recent average</span></label>
+              <input id="logWeightPerRoll" type="number" min="0" step="0.5" placeholder="e.g. 11" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800/60 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+              <p class="text-[10px] text-gray-500 mt-1">Used to compute expected roll count from the total mix weight.</p>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-400">Labor Worked (Minutes) <span class="text-[10px] text-gray-500 normal-case">optional</span></label>
+              <input id="logLabor" type="number" min="0" step="5" placeholder="e.g. 240" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800/60 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+            </div>
           </div>
         </div>
 
@@ -608,7 +618,7 @@ tailwind.config = {
     </div>
 
     <!-- AI Provider Settings modal -->
-    <div id="aiSettingsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div id="aiSettingsModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
       <div class="w-full max-w-md rounded-xl border border-gray-700 bg-gray-900 shadow-2xl">
         <div class="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
           <h3 class="font-bold text-sm flex items-center gap-2"><i data-lucide="key" class="w-4 h-4 text-amber-400"></i> AI Provider Settings</h3>
@@ -1270,7 +1280,7 @@ tailwind.config = {
 </div><!-- /#appContainer -->
 
 <!-- Toast Container -->
-<div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2 w-80 max-w-[90vw]"></div>
+<div id="toastContainer" class="fixed top-16 right-4 z-[95] space-y-2 w-80 max-w-[90vw] pointer-events-none"></div>
 
 <!-- ===================== ACCOUNT LOGIN / SIGN UP ===================== -->
 <div id="authScreen" class="fixed inset-0 z-[200] bg-gray-950 overflow-y-auto">

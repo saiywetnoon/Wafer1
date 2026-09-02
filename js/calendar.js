@@ -71,7 +71,7 @@ function loadEntryIntoForm(date) {
     $('logLabor').value = batch.laborMinutes || 0;
     $('logWeightPerRoll').value = batch.weightPerRoll || 0;
     $('logNotes').value = batch.notes || '';
-    var sb = $('saveLogBtn'); sb.innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Update Production';
+    refreshSaveButton();
   } else {
     document.getElementById('editProdId').value = '';
     $('additionalCost').value = 0;
@@ -80,7 +80,7 @@ function loadEntryIntoForm(date) {
     $('logLabor').value = 0;
     $('logWeightPerRoll').value = 0;
     $('logNotes').value = '';
-    $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Save Production Work';
+    refreshSaveButton();
   }
   lucide.createIcons();
   state.prices.forEach(function (ing) {

@@ -108,9 +108,7 @@ function saveProduction() {
   // Keep the form locked to this batch so clicking Save again UPDATES it instead
   // of creating a duplicate (which would deduct the ingredients a second time).
   document.getElementById('editProdId').value = record.id;
-  var saveBtn = $('saveLogBtn');
-  saveBtn.innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Update Production';
-  lucide.createIcons();
+  refreshSaveButton();
   showToast(isUpdate
     ? (pieces > 0 ? 'Production updated for ' + date + ' — ' + fmt(pieces) + ' pieces ready to sell.' : 'Mix updated for ' + date + '. Add actual bags & pieces after packing.')
     : (pieces > 0 ? 'Production saved for ' + date + ' — ' + fmt(pieces) + ' pieces ready to sell.' : 'Mix recorded for ' + date + ' — expected ~' + fmt(expectedRolls) + ' rolls. Update actual counts after packing.'));
@@ -167,8 +165,7 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
     triggerGoogleSync();
     clearDraft();
     $('editProdId').value = existing.id;
-    $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Update Production';
-    lucide.createIcons();
+    refreshSaveButton();
     showToast('Added to today’s production — ' + fmt(existing.pieces) + ' pieces total.', 'success');
     pulseSuccess($('saveLogBtn'));
     document.querySelector('[data-tab="log"]').click();
@@ -203,8 +200,7 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
   triggerGoogleSync();
   clearDraft();
   $('editProdId').value = '';
-  $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Save Production Work';
-  lucide.createIcons();
+  refreshSaveButton();
   showToast('Batch saved to production for ' + record.date + ' — ' + fmt(record.pieces) + ' pieces ready to sell.');
   const mergedOver = overConsumedStockItems().filter(function (label) {
     const itemName = label.split(' ')[0];
@@ -273,8 +269,6 @@ function editProduction(id) {
   $('logWeightPerRoll').value = p.weightPerRoll || 0;
   $('logNotes').value = p.notes || '';
   if ($('logUseBy')) $('logUseBy').value = p.useBy || '';
-  $('saveLogBtn').innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Update Production';
-  lucide.createIcons();
   updateUsageCosts();
   draftTouched = false;
   updateDraftHint();

@@ -111,16 +111,18 @@ bags / pieces / labor / notes while you are editing them.
 Production follows your real kitchen flow. You usually know **ingredients**
 first and only know **actual bags & pieces** after packaging is done:
 
-1. Enter the ingredient quantities (and labor if you like) — the **Expected
-   Rolls** line appears immediately under the form (uses the weight-per-roll
-   you enter, or your recent average if you leave it blank).
-2. Press **Save Production Work** with bags/pieces still empty → this records
-   the **mix** (consumes inventory once) and shows **⏳ PACKING** in the recent
-   list. Nothing is added to ready-to-sell stock yet.
-3. After packaging, reopen the **same date**, type the actual **bags** and
-   **pieces** (a live **Pieces per Bag** readout appears), and press
-   **Update Production**. That updates the batch in place — ingredients are
-   NOT deducted twice, and the packed rolls are added to ready-to-sell stock.
+1. **Step 1 — the mix.** Enter the ingredient quantities. The **Expected
+   Rolls** line appears immediately (uses the weight-per-roll you enter, or
+   your recent average if you leave it blank), and the Save button switches to
+   **"Save Mix Now — Expected Rolls Ready"**.
+2. Press Save with bags/pieces still empty → this records the **mix**
+   (consumes inventory once) and shows **⏳ PACKING** in the recent list.
+   Nothing is added to ready-to-sell stock yet.
+3. **Step 2 — after packaging** (the marked, dashed section). Reopen the same
+   date, type the actual **bags** and **pieces** (a live **Pieces per Bag**
+   readout appears), and the button becomes **"Update Production"**. That
+   updates the batch in place — ingredients are NOT deducted twice, and the
+   packed rolls are added to ready-to-sell stock.
 
 Saving an all-empty form is blocked, so a stray click can't create a blank
 batch.
