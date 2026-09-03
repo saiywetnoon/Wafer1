@@ -628,15 +628,16 @@ tailwind.config = {
           <div>
             <label class="text-xs font-semibold text-gray-400">Provider</label>
             <select id="aiProvider" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+              <option value="pollinations">Free AI (no key)</option>
               <option value="openai">ChatGPT (OpenAI)</option>
               <option value="deepseek">DeepSeek</option>
             </select>
           </div>
-          <div>
+          <div id="aiKeyWrap">
             <label class="text-xs font-semibold text-gray-400">API Key</label>
             <input id="aiApiKey" type="password" placeholder="sk-…" autocomplete="off" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
-            <p class="text-[10px] text-gray-500 mt-1">Stored only on this device — it is never uploaded or synced. Get a key at platform.openai.com or platform.deepseek.com.</p>
           </div>
+          <p id="aiKeyHint" class="text-[10px] text-gray-500 -mt-2">Stored only on this device — it is never uploaded or synced. Get a key at platform.openai.com or platform.deepseek.com.</p>
           <div class="grid grid-cols-1 gap-3">
             <div>
               <label class="text-xs font-semibold text-gray-400">Endpoint</label>

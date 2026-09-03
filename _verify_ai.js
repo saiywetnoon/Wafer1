@@ -40,11 +40,21 @@ global.triggerGoogleSync = () => {};
 global.renderAll = () => {};
 global.setCloudSyncSuppressed = () => {};
 global.setCloudAutoSync = () => {};
+/* fetch stub — lets us test askLLM() without a network. Responds with an
+   OpenAI-style chat completion so the free no-key path can be exercised. */
+global.fetch = (url, opts) => {
+  global.__fetchCalls = (global.__fetchCalls || []).concat({ url, opts });
+  return Promise.resolve({
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve({ choices: [{ message: { content: 'Free AI answer' } }] })
+  });
+};
 const localStorageData = {};
 global.localStorage = { getItem: (k) => (k in localStorageData ? localStorageData[k] : null), setItem: (k, v) => { localStorageData[k] = String(v); }, removeItem: (k) => { delete localStorageData[k]; } };
 
 const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers.js') + '\n' + read('usage.js') + '\n' + read('ledger.js') + '\n' + read('ai.js') + '\n' + `
-;(function runTests() {
+;(async function runTests() {
   let pass = 0, fail = 0;
   function ok(cond, msg) { if (cond) { pass++; console.log('PASS ' + msg); } else { fail++; console.log('FAIL ' + msg); } }
   const A = window.AiAnalyzer;
@@ -57,6 +67,7 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
     if (!els.editProdId) storeEl('editProdId', { value: '' });
     els.editProdId.value = '';
     Object.keys(localStorageData).forEach(k => delete localStorageData[k]); // clear AI config between tests
+    if (global.__fetchCalls) global.__fetchCalls = [];
   }
   function refreshInputs(bag, pcs, labor, add, wpr) {
     storeEl('logDate', { value: '2026-08-31' });
@@ -88,9 +99,15 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
   console.log('== 2) LLM provider presets ==');
   const dOpen = A.providerDefaults('openai');
   const dDeep = A.providerDefaults('deepseek');
-  ok(A.providers && A.providers.openai && A.providers.deepseek, 'providers registry lists OpenAI + DeepSeek');
+  const dFree = A.providerDefaults('pollinations');
+  ok(A.providers && A.providers.openai && A.providers.deepseek && A.providers.pollinations, 'providers registry lists OpenAI + DeepSeek + Free');
   ok(dDeep.provider === 'deepseek' && /deepseek/.test(dDeep.endpoint) && dDeep.model === 'deepseek-chat', 'DeepSeek preset has its endpoint + model');
   ok(dOpen.provider === 'openai' && dOpen.model === 'gpt-4o-mini', 'OpenAI preset has its endpoint + model');
+  ok(dFree.provider === 'pollinations' && /pollinations/.test(dFree.endpoint), 'Free preset has the no-key endpoint + model');
+  ok(A.providerNeedsKey('pollinations') === false && A.providerNeedsKey('openai') === true && A.providerNeedsKey('deepseek') === true, 'free provider needs no key; OpenAI/DeepSeek do');
+  // With no stored config/key, the app defaults to the FREE provider (zero setup).
+  const fc = A.normalizedConfig();
+  ok(fc.provider === 'pollinations' && !fc.apiKey, 'first-run default is Free AI (no key), no key stored');
 /* ---- 3) profile builder + rules engine ---- */
   console.log('== 3) profile + rules engine ==');
   function seedHistory() {
@@ -172,6 +189,15 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
   ok(jsonKeys.indexOf('"phone"') < 0 && jsonKeys.indexOf('"customerName"') < 0 &&
      jsonKeys.indexOf('"debt"') < 0 && jsonKeys.indexOf('"email"') < 0,
      'prompt JSON contains NO customer/phone/debt/email fields');
+
+  /* Free no-key provider: askLLM must NOT demand a key, and must send NO auth header. */
+  console.log('== 4b) free no-key provider path ==');
+  A.setConfig({ provider: 'pollinations' });   // no apiKey stored
+  const answer = await A.askLLM(prof, findings);
+  ok(answer.text === 'Free AI answer', 'askLLM resolves through the free provider with NO api key');
+  const call = global.__fetchCalls[global.__fetchCalls.length - 1];
+  ok(/text\.pollinations\.ai/.test(call.url), 'free request goes to the Pollinations endpoint');
+  ok(!call.opts.headers.Authorization, 'no Authorization header is sent for the key-free provider');
 /* ---- 5) mix-first production save ---- */
   console.log('== 5) mix-first production save ==');
   reset();

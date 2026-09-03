@@ -597,25 +597,38 @@ function buildProfileForDate(date) {
     return out;
   }
 /* ============================================================
-     LLM PROVIDERS — OpenAI (ChatGPT) and DeepSeek
-     Both providers speak the OpenAI chat/completions wire format,
-     so one askLLM() path serves both with a different endpoint
-     and model name. The user picks a provider in the ⚙ panel.
+     LLM PROVIDERS — ChatGPT (OpenAI), DeepSeek, and Free (no key)
+     ChatGPT + DeepSeek need an API key. The Free option uses
+     Pollinations.ai — a public, key-free OpenAI-compatible endpoint —
+     so you can get a plain-language summary with NO API key at all.
      ============================================================ */
   var LLM_PROVIDERS = {
-    openai:   { label: 'ChatGPT (OpenAI)', endpoint: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini' },
-    deepseek: { label: 'DeepSeek',         endpoint: 'https://api.deepseek.com/chat/completions',   model: 'deepseek-chat' }
+    openai:       { label: 'ChatGPT (OpenAI)',            endpoint: 'https://api.openai.com/v1/chat/completions',      model: 'gpt-4o-mini',  needsKey: true },
+    deepseek:     { label: 'DeepSeek',                    endpoint: 'https://api.deepseek.com/chat/completions',        model: 'deepseek-chat', needsKey: true },
+    pollinations: { label: 'Free AI (no key)',            endpoint: 'https://text.pollinations.ai/openai',              model: 'openai',        needsKey: false }
   };
 
+  /* Does this provider need a key at all? Free ones work with none. */
+  function providerNeedsKey(provider) {
+    var p = LLM_PROVIDERS[provider];
+    return !!(p && p.needsKey);
+  }
   function providerDefaults(provider) {
-    var key = (provider === 'deepseek') ? 'deepseek' : 'openai';
-    return { provider: key, endpoint: LLM_PROVIDERS[key].endpoint, model: LLM_PROVIDERS[key].model };
+    var key = 'openai';
+    if (provider === 'deepseek' || provider === 'pollinations') key = provider;
+    var def = LLM_PROVIDERS[key];
+    if (!def) { key = 'openai'; def = LLM_PROVIDERS[key]; }
+    return { provider: key, endpoint: def.endpoint, model: def.model };
   }
   /* Merge whatever is stored with the provider's defaults so a stale
-     config (old endpoint/model) is repaired automatically. */
+     config (old endpoint/model) is repaired automatically. When nothing
+     is configured yet, default to the FREE no-key provider so the AI
+     summary works with zero setup; a saved API key switches the user
+     to their paid provider. */
   function aiNormalizedConfig() {
     var c = aiGetConfig() || {};
-    var d = providerDefaults(c.provider);
+    var defaultProvider = (c.apiKey) ? 'openai' : 'pollinations';
+    var d = providerDefaults(c.provider || defaultProvider);
     return {
       provider: d.provider,
       endpoint: c.endpoint || d.endpoint,
@@ -709,8 +722,9 @@ function buildProfileForDate(date) {
   function askLLM(profile, findings) {
     return new Promise(function (resolve, reject) {
       var cfg = aiNormalizedConfig();
-      if (!cfg.apiKey) {
-        reject(new Error('No API key configured.'));
+      var needKey = providerNeedsKey(cfg.provider);
+      if (needKey && !cfg.apiKey) {
+        reject(new Error('No API key configured for ' + (LLM_PROVIDERS[cfg.provider] || {}).label + '. Pick "Free AI (no key)" in ⚙ AI Provider Settings, or add a key.'));
         return;
       }
       var body = promptPayload(profile, findings, cfg.model);
@@ -719,9 +733,12 @@ function buildProfileForDate(date) {
         ? setTimeout(function () { if (controller) controller.abort(); }, LLM_TIMEOUT_MS)
         : null;
 
+      var headers = { 'Content-Type': 'application/json' };
+      if (cfg.apiKey) headers['Authorization'] = 'Bearer ' + cfg.apiKey;
+
       fetch(cfg.endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.apiKey },
+        headers: headers,
         body: JSON.stringify(body),
         signal: controller ? controller.signal : undefined
       }).then(function (res) {
@@ -832,10 +849,13 @@ function buildProfileForDate(date) {
     }
     var cfg = aiNormalizedConfig();
     var provider = LLM_PROVIDERS[cfg.provider] || LLM_PROVIDERS.openai;
-    box.innerHTML = cfg.apiKey
-      ? '<div class="text-xs text-gray-500">Ready to ask <b>' + esc(provider.label) + '</b> (' + esc(cfg.model) + ') for a root-cause narrative.</div>'
-      : '<div class="text-xs text-gray-500">Add a <b>ChatGPT or DeepSeek API key</b> in ⚙ Settings to get a plain-language root-cause summary. ' +
-        'Until then you already have the on-device analysis above — no key needed, works offline.</div>';
+    if (cfg.apiKey) {
+      box.innerHTML = '<div class="text-xs text-gray-500">Ready to ask <b>' + esc(provider.label) + '</b> (' + esc(cfg.model) + ') for a root-cause narrative.</div>';
+    } else if (!providerNeedsKey(cfg.provider)) {
+      box.innerHTML = '<div class="text-xs text-gray-500">Ready to ask <b>Free AI (no key)</b> — no API key needed. It sends only today\'s aggregate numbers to a free public service; if it is busy the on-device analysis above still works.</div>';
+    } else {
+      box.innerHTML = '<div class="text-xs text-gray-500">Pick <b>Free AI (no key)</b> in \u2699 Settings to get the summary with no API key, or add a <b>ChatGPT / DeepSeek</b> key for a private\u2011key call. The on-device analysis above already works offline.</div>';
+    }
   }
 /* ---------- Settings panel ---------- */
   function refreshAiSettingsPanel() {
@@ -845,6 +865,13 @@ function buildProfileForDate(date) {
     $('aiEndpoint').value = cfg.endpoint;
     $('aiModel').value = cfg.model;
     if ($('aiApiKey')) $('aiApiKey').value = cfg.apiKey;
+    var needKey = providerNeedsKey(cfg.provider);
+    var keyWrap = $('aiKeyWrap');
+    if (keyWrap) keyWrap.style.display = needKey ? '' : 'none';
+    var keyHint = $('aiKeyHint');
+    if (keyHint) keyHint.textContent = needKey
+      ? 'Stored only on this device — never uploaded or synced. Get a key at platform.openai.com or platform.deepseek.com.'
+      : 'No key needed — this free provider works out of the box. The key field is hidden.';
   }
 
   function openAiSettings() {
@@ -865,8 +892,12 @@ function buildProfileForDate(date) {
     cfg.endpoint = ($('aiEndpoint').value || d.endpoint).trim();
     cfg.model = ($('aiModel').value || d.model).trim();
     var key = $('aiApiKey') ? $('aiApiKey').value.trim() : '';
-    if (key) cfg.apiKey = key;
-    else cfg.apiKey = '';
+    if (providerNeedsKey(provider)) {
+      if (key) cfg.apiKey = key;
+      else cfg.apiKey = '';
+    } else {
+      cfg.apiKey = '';   // free provider never stores a key
+    }
     aiSaveConfig(cfg);
     closeAiSettings();
     if (typeof showToast === 'function') showToast('AI provider settings saved (local only).', 'success');
@@ -878,6 +909,7 @@ function buildProfileForDate(date) {
     var d = providerDefaults($('aiProvider').value);
     $('aiEndpoint').value = d.endpoint;
     $('aiModel').value = d.model;
+    refreshAiSettingsPanel();   // hide the key field for the free provider
   }
 
   /* ---------- Ask the LLM ---------- */
@@ -954,9 +986,12 @@ function buildProfileForDate(date) {
     summarizeNotes: summarizeNotes,
     promptPayload: promptPayload,
     providerDefaults: providerDefaults,
+    providerNeedsKey: providerNeedsKey,
+    askLLM: askLLM,
     providers: LLM_PROVIDERS,
     getConfig: aiGetConfig,
     setConfig: aiSaveConfig,
+    normalizedConfig: aiNormalizedConfig,
     render: renderAiAnalysis
   };
 })();
