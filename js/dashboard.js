@@ -35,7 +35,7 @@ function renderDashboard() {
   const todaySales = salesList().filter(function (s) { return s.date === todayStr; });
   const revenueToday = todaySales.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
   const capitalToday = todayProduction.reduce(function (s, p) { return s + (p.capital || 0); }, 0);
-  const netToday = todaySales.reduce(function (s, x) { return s + ((x.amount || 0) - (x.cogs || 0)); }, 0);
+  const netToday = revenueToday - capitalToday;
   const ratio = t.capital > 0 ? (t.net / t.capital) * 100 : 0;
   $('kpiRevenue').textContent = fmtKs(revenueToday);
   $('kpiCapital').textContent = fmtKs(capitalToday);

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" data-build="v1.10.1">
+<html lang="en" class="dark" data-build="v1.10.2">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -37,6 +37,8 @@ tailwind.config = {
 </script>
 
 <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="hkop_kop_favicon.ico">
+  <link rel="apple-touch-icon" href="hkop_kop_favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -383,6 +385,8 @@ tailwind.config = {
       <div class="flex flex-wrap items-center gap-3 mb-3">
         <div class="p-3 rounded-lg bg-gray-800/60 text-sm"><span class="text-gray-400">Sale amount &nbsp;</span><span id="saleAmountLive" class="font-bold text-emerald-400">0 Ks</span></div>
         <div class="p-3 rounded-lg bg-gray-800/60 text-sm"><span class="text-gray-400">Pieces / bag &nbsp;</span><span id="salePiecesBag" class="font-bold">—</span></div>
+        <div class="p-3 rounded-lg bg-gray-800/60 text-sm"><span class="text-gray-400">Cost of these pieces &nbsp;</span><span id="saleCogsLive" class="font-bold text-amber-400">0 Ks</span></div>
+        <div class="p-3 rounded-lg bg-emerald-600/20 border border-emerald-600/40 text-sm"><span class="text-gray-300">Profit (amount − cost) &nbsp;</span><span id="saleProfitLive" class="font-bold text-emerald-400">0 Ks</span></div>
         <div class="p-3 rounded-lg bg-emerald-600/20 border border-emerald-600/40 text-sm"><span class="text-gray-300">Ready to sell now </span><span id="saleStockLive" class="font-bold text-emerald-400">0 pieces ready</span></div>
       </div>
       <button id="addSaleBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold shadow-lg shadow-emerald-500/30 hover:opacity-90 transition flex items-center justify-center gap-2">
@@ -1180,7 +1184,7 @@ tailwind.config = {
 
 <!-- ===================== CASH DRAWER ===================== -->
   <section id="tab-cash" class="tab-panel hidden">
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
       <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
         <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="banknote" class="w-4 h-4 text-emerald-400"></i> Cash On Hand</div>
         <div id="cashCurrent" class="text-2xl font-extrabold text-emerald-400">0 Ks</div>
@@ -1200,6 +1204,11 @@ tailwind.config = {
         <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="users" class="w-4 h-4 text-amber-400"></i> Customer Receivables</div>
         <div id="cashReceivable" class="text-lg font-extrabold text-amber-400">0 Ks</div>
         <div class="text-[10px] text-gray-500 mt-1">money customers owe you</div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
+        <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="plus-minus" class="w-4 h-4 text-sky-400"></i> Net Change</div>
+        <div id="cashNetChange" class="text-lg font-extrabold text-gray-200">0 Ks</div>
+        <div class="text-[10px] text-gray-500 mt-1">cash in − cash out</div>
       </div>
     </div>
 
@@ -1384,31 +1393,31 @@ tailwind.config = {
 </div>
 
 
-    <script src="js/config.js"></script>
-    <script src="js/supabase.js"></script>
-    <script src="js/storage.js"></script>
-    <script src="js/google.js"></script>
-    <script src="js/helpers.js"></script>
-    <script src="js/pricing.js"></script>
-    <script src="js/usage.js"></script>
-    <script src="js/ledger.js"></script>
-    <script src="js/sales.js"></script>
-    <script src="js/dashboard.js"></script>
-    <script src="js/calendar.js"></script>
-    <script src="js/csv.js"></script>
-    <script src="js/sync-ui.js"></script>
-    <script src="js/sample-data.js"></script>
-    <script src="js/inventory.js"></script>
-    <script src="js/customers.js"></script>
-    <script src="js/suppliers.js"></script>
-    <script src="js/tools.js"></script>
-    <script src="js/pan-timers.js"></script>
-    <script src="js/cash.js"></script>
-    <script src="js/companies.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/cloud.js"></script>
-    <script src="js/ai.js"></script>
-    <script src="js/init.js"></script>
+    <script src="js/config.js?v=20260903"></script>
+    <script src="js/supabase.js?v=20260903"></script>
+    <script src="js/storage.js?v=20260903"></script>
+    <script src="js/google.js?v=20260903"></script>
+    <script src="js/helpers.js?v=20260903"></script>
+    <script src="js/pricing.js?v=20260903"></script>
+    <script src="js/usage.js?v=20260903"></script>
+    <script src="js/ledger.js?v=20260903"></script>
+    <script src="js/sales.js?v=20260903"></script>
+    <script src="js/dashboard.js?v=20260903"></script>
+    <script src="js/calendar.js?v=20260903"></script>
+    <script src="js/csv.js?v=20260903"></script>
+    <script src="js/sync-ui.js?v=20260903"></script>
+    <script src="js/sample-data.js?v=20260903"></script>
+    <script src="js/inventory.js?v=20260903"></script>
+    <script src="js/customers.js?v=20260903"></script>
+    <script src="js/suppliers.js?v=20260903"></script>
+    <script src="js/tools.js?v=20260903"></script>
+    <script src="js/pan-timers.js?v=20260903"></script>
+    <script src="js/cash.js?v=20260903"></script>
+    <script src="js/companies.js?v=20260903"></script>
+    <script src="js/auth.js?v=20260903"></script>
+    <script src="js/cloud.js?v=20260903"></script>
+    <script src="js/ai.js?v=20260903"></script>
+    <script src="js/init.js?v=20260903"></script>
 
 </body>
 </html>

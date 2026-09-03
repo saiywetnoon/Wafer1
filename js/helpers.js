@@ -42,21 +42,24 @@ function salesList() {
   });
 }
 
-/* Aggregate money + quantities across ALL production and sales. */
+/* Aggregate money + quantities across ALL production and sales.
+   SAME-DAY profit model: net = total revenue − total production cost. */
 function financeTotalsAll() {
   var prod = prodList();
   var sales = salesList();
+  var totalCapital = prod.reduce(function (s, p) { return s + (p.capital || 0); }, 0);
+  var totalRevenue = sales.reduce(function (s, sl) { return s + (sl.amount || 0); }, 0);
   return {
-    capital: prod.reduce(function (s, p) { return s + (p.capital || 0); }, 0),
+    capital: totalCapital,
     productionBags: prod.reduce(function (s, p) { return s + (p.bags || 0); }, 0),
     productionPieces: prod.reduce(function (s, p) { return s + (p.pieces || 0); }, 0),
     laborMin: prod.reduce(function (s, p) { return s + (p.laborMinutes || 0); }, 0),
     laborCost: prod.reduce(function (s, p) { return s + (p.laborCost || 0); }, 0),
-    revenue: sales.reduce(function (s, sl) { return s + (sl.amount || 0); }, 0),
-    cogs: sales.reduce(function (s, sl) { return s + (sl.cogs || 0); }, 0),
+    revenue: totalRevenue,
+    cogs: totalCapital,
     salesBags: sales.reduce(function (s, sl) { return s + (sl.bags || 0); }, 0),
     salesPieces: sales.reduce(function (s, sl) { return s + (sl.pieces || 0); }, 0),
-    net: sales.reduce(function (s, sl) { return s + ((sl.amount || 0) - (sl.cogs || 0)); }, 0)
+    net: totalRevenue - totalCapital
   };
 }
 
@@ -166,7 +169,9 @@ function stockAvgCostPerPiece() {
 }
 
 /* One combined array keyed by date with what was ROLLED and what was SOLD,
-   so the dashboard/calendar/monthly have a single view of the day. */
+   so the dashboard/calendar/monthly have a single view of the day.
+   A day's profit = that day's sales − that day's production cost (same-day
+   matching). No pooled averages, no unsold-roll money dragged into today. */
 function entriesProdSales() {
   var map = {};
   (state.production || []).forEach(function (p) {
@@ -179,12 +184,42 @@ function entriesProdSales() {
     if (!map[s.date]) map[s.date] = { date: s.date, prodBags: 0, prodPieces: 0, capital: 0, laborMin: 0, laborCost: 0, soldBags: 0, soldPieces: 0, revenue: 0, cogs: 0, net: 0 };
     var d = map[s.date];
     d.soldBags += (s.bags || 0); d.soldPieces += (s.pieces || 0); d.revenue += (s.amount || 0);
-    d.cogs += (s.cogs || 0); d.net += ((s.amount || 0) - (s.cogs || 0));
+  });
+  // Same-day profit model: net = that day's revenue − that day's production cost.
+  Object.keys(map).forEach(function (k) {
+    map[k].cogs = map[k].capital || 0;
+    map[k].net = (map[k].revenue || 0) - (map[k].capital || 0);
   });
   return Object.keys(map).sort().map(function (k) { return map[k]; });
 }
 
 /* ---------- Cash-sync-safe / metrics helpers ---------- */
+/* Same-day production lookup: the cost the user actually spent on the day's
+   batch. A day's profit is computed as that day's sales MINUS that day's
+   production cost — not a pooled average that drags unsold rolls or other
+   days' batches into today. */
+function productionCostOn(date) {
+  var pieces = 0, capital = 0;
+  (state.production || []).forEach(function (p) {
+    if (p.date === date) { pieces += (p.pieces || 0); capital += (p.capital || 0); }
+  });
+  return { pieces: pieces, capital: capital };
+}
+/* Per-sale profit the way the shop thinks about it: sale amount minus the cost
+   of the rolls made THAT same day. Pieces sold beyond that day's production are
+   old stock (their cost was already counted on the day they were made). */
+function saleProfit(s) {
+  if (!s) return 0;
+  var amount = s.amount || 0;
+  var day = productionCostOn(s.date);
+  var pieces = s.pieces || 0;
+  var cost = 0;
+  if (day.pieces > 0) {
+    var rate = day.capital / day.pieces;
+    cost = Math.round(Math.min(pieces, day.pieces) * rate);
+  }
+  return Math.round(amount - cost);
+}
 function storageUsedKB() {
   try {
     const raw = localStorage.getItem(companyStateKey()) || '';

@@ -116,7 +116,15 @@ function updateSaleLive() {
   if (status === 'paid' || isNaN(paid)) paid = status === 'credit' ? 0 : amount;
   paid = Math.max(0, Math.min(amount, paid));
   const onHand = (state.stock && state.stock.pieces) || 0;
+  // Same-day cost basis: price this sale from the rolls made on ITS own date.
+  const costDate = $('saleDate') ? $('saleDate').value : (typeof today === 'function' ? today() : '');
+  const dayProd = productionCostOn(costDate);
+  const costQty = dayProd.pieces > 0 ? Math.min(pieces, dayProd.pieces) : 0;
+  const cogs = dayProd.pieces > 0 ? Math.round(costQty * (dayProd.capital / dayProd.pieces)) : 0;
+  const profit = Math.round(amount - cogs);
   if ($('saleAmountLive')) $('saleAmountLive').textContent = fmtKs(amount);
+  if ($('saleCogsLive')) $('saleCogsLive').textContent = fmtKs(cogs) + ' @ ' + (dayProd.pieces > 0 ? Math.round(dayProd.capital / dayProd.pieces) : 0) + '/pc';
+  if ($('saleProfitLive')) { $('saleProfitLive').textContent = fmtKs(profit); $('saleProfitLive').className = 'font-bold ' + (profit >= 0 ? 'text-emerald-400' : 'text-red-400'); }
   if ($('saleStockLive')) $('saleStockLive').textContent = fmt(onHand) + ' pieces ready';
   if ($('salePiecesBag')) $('salePiecesBag').textContent = bags > 0 ? (pieces / bags).toFixed(1) : '—';
   if ($('saleCreditLive')) $('saleCreditLive').textContent = 'Credit: ' + fmtKs(Math.max(0, amount - paid));
@@ -196,7 +204,7 @@ function renderSalesTab() {
       '<td class="py-2 pr-2">' + (s.bags > 0 ? (s.pieces / s.bags).toFixed(1) : '—') + '</td>' +
       '<td class="py-2 pr-2 text-emerald-400 font-semibold">' + fmtKs(s.amount) + '</td>' +
       '<td class="py-2 pr-2 text-xs"><span class="text-emerald-400">' + fmtKs(paid) + '</span>' + (credit ? ' <span class="text-red-400">/ ' + fmtKs(credit) + '</span>' : '') + '</td>' +
-      '<td class="py-2 pr-2 ' + (s.net >= 0 ? 'text-emerald-400' : 'text-red-400') + ' font-bold">' + fmtKs(s.net) + '</td>' +
+      '<td class="py-2 pr-2 ' + ((saleProfit(s) >= 0) ? 'text-emerald-400' : 'text-red-400') + ' font-bold">' + fmtKs(saleProfit(s)) + '</td>' +
       '<td class="py-2"><div class="flex gap-2">' +
       '<button onclick="printSaleReceipt(\'' + s.id + '\')" class="text-emerald-400 hover:text-emerald-300 transition" title="Print receipt"><i data-lucide="receipt" class="w-4 h-4"></i></button>' +
       '<button onclick="selectSaleToEdit(\'' + s.id + '\')" class="text-amber-400 hover:text-amber-300 transition" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>' +
