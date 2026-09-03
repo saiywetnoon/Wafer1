@@ -9,6 +9,7 @@ const read = (f) => fs.readFileSync(path.join(dir, f), 'utf8');
 const els = {};
 function mkEl() { return { value: '', textContent: '', className: '', innerHTML: '', classList: { add() {}, remove() {}, contains() { return false; } }, addEventListener() {}, appendChild() {}, remove() {}, setAttribute() {}, style: {} }; }
 global.document = {
+  body: { classList: { add() {}, remove() {}, contains() { return false; }, toggle() {}, setAttribute() {} } },
   getElementById(id) { if (!els[id]) els[id] = mkEl(); return els[id]; },
   querySelector() {
     // A fake table row: enough <td> cells for updateUsageCosts, plus click() for

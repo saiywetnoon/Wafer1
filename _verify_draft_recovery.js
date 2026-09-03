@@ -23,7 +23,7 @@ global.cloudSyncFailed = false;
 global.pendingCloudPushQueued = false;
 const els = {};
 function $makeEl() { return { value: '', textContent: '', className: '', classList: { add() {}, remove() {} }, addEventListener() {}, style: {}, appendChild() {}, remove() {}, setAttribute() {} }; }
-global.document = { getElementById: (id) => { if (!els[id]) els[id] = $makeEl(); return els[id]; }, querySelectorAll: () => [], createElement: () => $makeEl() };
+global.document = { body: { classList: { add() {}, remove() {}, contains() { return false; }, toggle() {}, setAttribute() {} } }, getElementById: (id) => { if (!els[id]) els[id] = $makeEl(); return els[id]; }, querySelectorAll: () => [], createElement: () => $makeEl() };
 global.showToast = () => {};
 global.lucide = { createIcons() {} };
 global.uid = () => 'uid-' + Math.random().toString(36).slice(2, 9);

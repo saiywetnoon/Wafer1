@@ -130,75 +130,36 @@ function renderAuditTable() {
   }
   if (from) entries = entries.filter(function (x) { return x.date >= from; });
   if (to) entries = entries.filter(function (x) { return x.date <= to; });
+  entries = entries.slice().sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
   const tbody = $('auditBody');
   $('auditEmpty').classList.toggle('hidden', entries.length > 0);
   if (!entries.length) { tbody.innerHTML = ''; return; }
   tbody.innerHTML = entries.map(function (e) {
-    const details = buildIngredientBreakdown(e);
+    const soldBags = e.soldBags || 0;
+    const costPerBag = soldBags > 0 ? Math.round(e.cogs / soldBags) : 0;
+    const marginPct = e.revenue > 0 ? (((e.revenue - e.cogs) / e.revenue) * 100).toFixed(1) : '—';
     return '<tr class="border-b border-gray-800">' +
-      '<td class="py-2 pr-2 whitespace-nowrap">' + esc(e.date) + '</td>' +
-      '<td class="py-2 pr-2 text-amber-400 font-semibold">' + fmtKs(e.capital) + '</td>' +
-      '<td class="py-2 pr-2">' + fmt(e.bagsProduced) + '</td>' +
-      '<td class="py-2 pr-2">' + fmt(e.pieces) + '</td>' +
-      '<td class="py-2 pr-2">' + fmt(e.bagsSold) + '</td>' +
-      '<td class="py-2 pr-2 text-emerald-400 font-semibold">' + fmtKs(e.revenue) + '</td>' +
-      '<td class="py-2 pr-2">' + ((e.laborMinutes || 0) / 60).toFixed(2) + '</td>' +
-      '<td class="py-2 pr-2 ' + (e.net >= 0 ? 'text-emerald-400' : 'text-red-400') + ' font-bold">' + fmtKs(e.net) + '</td>' +
-      '<td class="py-2 pr-2 text-gray-300">' + fmtKs(e.costPerBag || 0) + '</td>' +
-      '<td class="py-2 pr-2 ' + ((e.marginPct || 0) >= 0 ? 'text-emerald-400' : 'text-red-400') + '">' + (e.marginPct || 0) + '%</td>' +
-      '<td class="py-2">' + details + '</td>' +
-      '</tr>';
-  }).join('');
-}
-
-function buildIngredientBreakdown(e) {
-  if (!e.usage) return '<span class="text-gray-600">—</span>';
-  const parts = state.prices.map(function (ing) {
-    const qty = e.usage[ing.name];
-    if (!qty) return null;
-    return esc(ing.name) + ': ' + fmt(qty) + (ing.unit === 'g' ? 'g' : 'u');
-  }).filter(Boolean);
-  return '<span class="text-[10px] text-gray-500" title="' + parts.join(' | ').replace(/"/g, '') + '">' + (parts.length ? parts.slice(0, 4).join(', ') + (parts.length > 4 ? ' +' + (parts.length - 4) : '') : '—') + '</span>';
-}
-
-$('filterFrom').addEventListener('change', renderAuditTable);
-$('filterTo').addEventListener('change', renderAuditTable);
-$('weekSelect').addEventListener('change', renderAuditTable);
-
-/* ---- v1.6 override: audit rows show rolled vs sold ---- */
-function renderAuditTable() {
-  const from = $('filterFrom').value;
-  const to = $('filterTo').value;
-  const week = $('weekSelect').value;
-  let entries = entriesProdSales();
-  if (week) {
-    const parts = week.split('|');
-    entries = entries.filter(function (x) { return x.date >= parts[0] && x.date <= parts[1]; });
-  }
-  if (from) entries = entries.filter(function (x) { return x.date >= from; });
-  if (to) entries = entries.filter(function (x) { return x.date <= to; });
-  const tbody = $('auditBody');
-  $('auditEmpty').classList.toggle('hidden', entries.length > 0);
-  if (!entries.length) { tbody.innerHTML = ''; return; }
-  tbody.innerHTML = entries.map(function (e) {
-    return '<tr class="border-b border-gray-800">' +
-      '<td class="py-2 pr-2 whitespace-nowrap">' + esc(e.date) + '</td>' +
-      '<td class="py-2 pr-2 text-amber-400 font-semibold">' + fmtKs(e.capital) + '</td>' +
-      '<td class="py-2 pr-2">' + fmt(e.prodBags) + '</td>' +
-      '<td class="py-2 pr-2">' + fmt(e.prodPieces) + '</td>' +
-      '<td class="py-2 pr-2">' + fmt(e.soldBags) + '</td>' +
-      '<td class="py-2 pr-2 text-emerald-400 font-semibold">' + fmtKs(e.revenue) + '</td>' +
-      '<td class="py-2 pr-2">' + ((e.laborMin || 0) / 60).toFixed(2) + '</td>' +
-      '<td class="py-2 pr-2 ' + (e.net >= 0 ? 'text-emerald-400' : 'text-red-400') + ' font-bold">' + fmtKs(e.net) + '</td>' +
-      '<td class="py-2 pr-2 ' + (e.soldPieces > 0 ? 'text-emerald-400' : 'text-gray-600') + '">' + fmt(e.soldPieces) + ' sold</td>' +
-      '<td class="py-2">' + auditDayDetail(e) + '</td>' +
+      '<td class="py-2 pr-2 whitespace-nowrap font-medium text-gray-200">' + esc(e.date) + '</td>' +
+      '<td class="py-2 pr-2 text-amber-400 font-semibold tabular-nums text-right whitespace-nowrap">' + fmtKs(e.capital) + '</td>' +
+      '<td class="py-2 pr-2 tabular-nums text-right">' + fmt(e.prodBags) + '</td>' +
+      '<td class="py-2 pr-2 tabular-nums text-right">' + fmt(e.prodPieces) + '</td>' +
+      '<td class="py-2 pr-2 tabular-nums text-right">' + fmt(e.soldBags) + '</td>' +
+      '<td class="py-2 pr-2 text-emerald-400 font-semibold tabular-nums text-right whitespace-nowrap">' + fmtKs(e.revenue) + '</td>' +
+      '<td class="py-2 pr-2 tabular-nums text-right whitespace-nowrap">' + ((e.laborMin || 0) / 60).toFixed(2) + '</td>' +
+      '<td class="py-2 pr-2 ' + (e.net >= 0 ? 'text-emerald-400' : 'text-red-400') + ' font-bold tabular-nums text-right whitespace-nowrap">' + fmtKs(e.net) + '</td>' +
+      '<td class="py-2 pr-2 tabular-nums text-right whitespace-nowrap">' + fmtKs(costPerBag) + '</td>' +
+      '<td class="py-2 pr-2 ' + ((marginPct !== '—' && parseFloat(marginPct) >= 0) ? 'text-emerald-400' : 'text-red-400') + ' tabular-nums text-right whitespace-nowrap">' + marginPct + '%</td>' +
+      '<td class="py-2 text-gray-300">' + auditDayDetail(e) + '</td>' +
       '</tr>';
   }).join('');
 }
 function auditDayDetail(e) {
   const parts = [];
   if (e.prodPieces > 0) parts.push('rolled ' + fmt(e.prodPieces) + ' pcs');
-  if (e.soldBags > 0) parts.push('sold ' + fmt(e.soldBags) + ' bags');
+  if (e.soldBags > 0) parts.push('sold ' + fmt(e.soldBags) + ' bags / ' + fmtKs(e.net));
   if (!parts.length) return '<span class="text-gray-600">—</span>';
   return '<span class="text-[10px] text-gray-500">' + parts.join(', ') + '</span>';
 }
+$('filterFrom').addEventListener('change', renderAuditTable);
+$('filterTo').addEventListener('change', renderAuditTable);
+$('weekSelect').addEventListener('change', renderAuditTable);

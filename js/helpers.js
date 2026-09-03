@@ -82,7 +82,16 @@ function rebuildStockAndCogs() {
       var item = ev.type === 1 ? ev.s : ev.w;
       var qty = item.pieces !== undefined ? item.pieces : item.qty;
       var avg = stock.pieces > 0 ? (stock.cost / stock.pieces) : 0;
-      var cost = Math.round((qty || 0) * avg);
+      // Never charge cost for rolls that don't exist in the ledger. If a sale or
+      // waste is logged with MORE pieces than we have produced, only charge the
+      // cost of what was actually in stock — the surplus sold pieces are flagged
+      // as out-of-ledger stock instead of silently inflating COGS (which was
+      // crushing profits: e.g. producing 100 @9,100 and selling 130 was charging
+      // 130 × avg and reporting a huge fake "cost").
+      var availableQty = stock.pieces;
+      var costQty = Math.max(0, Math.min(qty, availableQty));
+      var cost = Math.round(costQty * avg);
+      var overSold = (qty || 0) - costQty;   // pieces beyond produced stock
       if (ev.type === 1) {
         item.cogs = cost;
         item.avgCost = Math.round(avg * 100) / 100;
