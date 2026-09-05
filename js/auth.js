@@ -1,105 +1,60 @@
 /* ============================================================
    ACCOUNTS — email + password with owner approval
    ------------------------------------------------------------
-   Two backends:
-   • Supabase (OPTION B, recommended): real auth + sessions,
-     automatic sign-in, no deployment URL, realtime sync.
-   • Legacy Apps Script: only used if Supabase isn't configured.
+   Backend: Supabase (auth + sessions + realtime). There is NO
+   legacy Apps-Script path anymore — this app is Supabase-only.
    ============================================================ */
 
-const AUTH_SERVER_KEY = 'dailyCrispyRollLedger_authServer';
-const AUTH_TOKEN_KEY = 'dailyCrispyRollLedger_authToken';
-const AUTH_EMAIL_KEY = 'dailyCrispyRollLedger_authEmail';
-const AUTH_ROLE_KEY = 'dailyCrispyRollLedger_authRole';
 let authUser = null; // { email, role }
 
-/* ---------- active session getters (Supabase-aware) ---------- */
+/* ---------- active session getters (Supabase) ---------- */
 async function sbAuthUser() {
-  if (SUPA.configured()) {
-    const u = await SUPA.sessionUser();
-    await SUPA.getProfile();
-    return {
-      email: (u && u.email) || '',
-      id: (u && u.id) || '',
-      role: SUPA.profile.role || 'user',
-      status: SUPA.profile.status || 'pending'
-    };
-  }
-  return null;
+  if (!SUPA.libReady()) return null;
+  const u = await SUPA.sessionUser();
+  await SUPA.getProfile();
+  return {
+    email: (u && u.email) || '',
+    id: (u && u.id) || '',
+    role: SUPA.profile.role || 'user',
+    status: SUPA.profile.status || 'pending'
+  };
 }
-function authEmail() {
-  if (SUPA.configured()) return (SUPA.user && SUPA.user.email) || '';
-  try { return localStorage.getItem(AUTH_EMAIL_KEY) || ''; } catch (e) { return ''; }
-}
-function authToken() {
-  if (SUPA.configured()) return (SUPA.user && SUPA.user.id) || '';
-  try { return localStorage.getItem(AUTH_TOKEN_KEY) || ''; } catch (e) { return ''; }
-}
-function authRole() {
-  if (SUPA.configured()) return SUPA.profile.role || 'user';
-  try { return localStorage.getItem(AUTH_ROLE_KEY) || ''; } catch (e) { return ''; }
-}
+function authEmail() { return (SUPA.user && SUPA.user.email) || ''; }
+function authToken() { return (SUPA.user && SUPA.user.id) || ''; }
+function authRole() { return (SUPA.profile && SUPA.profile.role) || 'user'; }
 function authIsAdmin() { return authRole() === 'admin'; }
-
-/* ---------- Legacy (Apps Script) primitives (fallback) ---------- */
-function authServerUrl() {
-  try { const s = localStorage.getItem(AUTH_SERVER_KEY); if (s) return s; } catch (e) {}
-  const cfg = typeof getGoogleSyncConfig === 'function' ? getGoogleSyncConfig() : null;
-  return (cfg && cfg.sheetUrl) || '';
-}
-function saveAuthServerUrl(url) {
-  try { localStorage.setItem(AUTH_SERVER_KEY, String(url || '').trim()); } catch (e) {}
-}
-async function authPost(action, extra) {
-  const url = authServerUrl();
-  if (!url) return { ok: false, error: 'No server URL configured (legacy mode).' };
-  const body = Object.assign({ action: action, token: authToken() }, extra || {});
-  try {
-    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    return await resp.json();
-  } catch (e) { console.error('legacy auth ' + action + ' failed', e); return { ok: false, error: String(e) }; }
-}
-function legacyStoreLogin(r) {
-  if (!r || !r.email) return;
-  try { localStorage.setItem(AUTH_EMAIL_KEY, r.email); localStorage.setItem(AUTH_ROLE_KEY, r.role || 'user'); } catch (e) {}
-}
 function clearAuthUser() {
   authUser = null;
-  try { localStorage.removeItem(AUTH_TOKEN_KEY); localStorage.removeItem(AUTH_EMAIL_KEY); localStorage.removeItem(AUTH_ROLE_KEY); } catch (e) {}
+  // Clear any stale legacy key that earlier builds may have left behind.
+  try {
+    ['dailyCrispyRollLedger_authServer', 'dailyCrispyRollLedger_authToken',
+     'dailyCrispyRollLedger_authEmail', 'dailyCrispyRollLedger_authRole'].forEach(function (k) { localStorage.removeItem(k); });
+  } catch (e) {}
 }
 
 /* ---------- Sign up / In / Out ---------- */
 async function authSignup(email, password) {
-  if (SUPA.configured()) {
-    const r = await SUPA.signUp(email, password);
-    if (r.error || !r.data) return { ok: false, message: (r.error && r.error.message) || 'Sign-up failed.' };
-    // Supabase's DB trigger creates a pending profile row automatically.
-    return { ok: true, status: 'pending', role: 'user', message: 'Account created — awaiting admin approval.' };
-  }
-  const r = await authPost('signup', { email: email, password: password });
-  return r;
+  if (!SUPA.libReady()) return { ok: false, message: SUPA.connectionError() };
+  const r = await SUPA.signUp(email, password);
+  if (r.error || !r.data) return { ok: false, message: (r.error && r.error.message) || 'Sign-up failed.' };
+  // Supabase's DB trigger creates a pending profile row automatically.
+  return { ok: true, status: 'pending', role: 'user', message: 'Account created — awaiting admin approval.' };
 }
 async function authLogin(email, password) {
-  if (SUPA.configured()) {
-    const r = await SUPA.signIn(email, password);
-    if (r.error) return { ok: false, message: (r.error && r.error.message) || 'Login failed.' };
-    await SUPA.sessionUser();
-    await SUPA.getProfile();
-    if (SUPA.profile.status !== 'approved') {
-      return { ok: false, message: SUPA.profile.status === 'pending'
-        ? 'Your account is awaiting admin approval.'
-        : 'This account was not approved. Contact the owner.' };
-    }
-    return { ok: true, email: SUPA.user.email, role: SUPA.profile.role, id: SUPA.user.id };
+  if (!SUPA.libReady()) return { ok: false, message: SUPA.connectionError() };
+  const r = await SUPA.signIn(email, password);
+  if (r.error) return { ok: false, message: (r.error && r.error.message) || 'Login failed.' };
+  await SUPA.sessionUser();
+  await SUPA.getProfile();
+  if (SUPA.profile.status !== 'approved') {
+    return { ok: false, message: SUPA.profile.status === 'pending'
+      ? 'Your account is awaiting admin approval.'
+      : 'This account was not approved. Contact the owner.' };
   }
-  const r = await authPost('login', { email: email, password: password });
-  if (r && r.ok) legacyStoreLogin(r);
-  return r;
+  return { ok: true, email: SUPA.user.email, role: SUPA.profile.role, id: SUPA.user.id };
 }
 async function authLogout() {
-  if (SUPA.configured()) { await SUPA.signOut(); }
-  else { await authPost('logout', {}); }
+  if (SUPA.libReady()) await SUPA.signOut();
   clearAuthUser();
 }
 // @@AUTH2@@
@@ -108,40 +63,31 @@ async function authLogout() {
    BOOT GATE — only approved sessions reach the app
    ============================================================ */
 async function authBootstrap() {
-  if (SUPA.configured()) {
-    const u = await sbAuthUser();
-    if (u && u.email) {
-      if (u.status === 'approved') {
-        renderAuthBadge();
-        // Coming from a password-reset link (recovery session): keep the auth
-        // screen in front so the "set new password" pane is actually visible.
-        if (__authRecovery) {
-          showAuthScreen('Set a new password to continue.');
-          showNewPasswordPane();
-          return false;
-        }
-        hideAuthScreen();
-        return true;
-      }
-      showAuthScreen(u.status === 'pending'
-        ? 'Your account is awaiting admin approval.'
-        : 'This account was not approved. Contact the owner.');
-      return false;
-    }
+  if (!SUPA.libReady()) {
+    // Supabase is configured but the library didn't load (CDN blocked/offline).
+    // Show the login screen with the honest backend warning.
     showAuthScreen();
     return false;
   }
-  // Legacy Apps-Script fallback.
-  const token = authToken();
-  const email = authEmail();
-  if (!token || !email) { showAuthScreen(); return false; }
-  const r = await authPost('me', {});
-  if (r && r.ok && r.email) {
-    renderAuthBadge();
-    hideAuthScreen();
-    return true;
+  const u = await sbAuthUser();
+  if (u && u.email) {
+    if (u.status === 'approved') {
+      renderAuthBadge();
+      // Coming from a password-reset link (recovery session): keep the auth
+      // screen in front so the "set new password" pane is actually visible.
+      if (__authRecovery) {
+        showAuthScreen('Set a new password to continue.');
+        showNewPasswordPane();
+        return false;
+      }
+      hideAuthScreen();
+      return true;
+    }
+    showAuthScreen(u.status === 'pending'
+      ? 'Your account is awaiting admin approval.'
+      : 'This account was not approved. Contact the owner.');
+    return false;
   }
-  clearAuthUser();
   showAuthScreen();
   return false;
 }
@@ -149,19 +95,11 @@ async function authBootstrap() {
 function showAuthScreen(msg) {
   const s = $('authScreen'); if (s) s.classList.remove('hidden');
   const app = $('appContainer'); if (app) app.classList.add('hidden');
-  // The legacy "Apps Script Web App URL" block is ONLY for installations that
-  // deliberately left the Supabase keys empty. If Supabase is configured
-  // (URL + anon key present) this app is on the real backend, so that field
-  // must NEVER appear — even if the Supabase library is still loading or a
-  // CDN was blocked. Hiding is keyed to the CONFIG, not to window.supabase.
-  const legacy = !!(SUPABASE_URL_wafer && SUPABASE_ANON_KEY_wafer);
-  const det = document.querySelector('#authScreen details');
-  if (det) det.classList.toggle('hidden', legacy);
-  // If Supabase is configured but its library failed to load, say so honestly
-  // instead of silently offering the legacy backend.
+  // There is no legacy backend anymore — the "Server settings" field is gone.
+  // If Supabase failed to load, say so honestly instead of offering it.
   const warn = $('authBackendWarn');
   if (warn) {
-    if (legacy && !window.supabase) {
+    if (!window.supabase) {
       warn.textContent = '⚠ The Supabase connection couldn\u2019t load (network or ad-blocker?). Check your internet and reload. You won\u2019t be able to sign in until it loads.';
       warn.classList.remove('hidden');
     } else {
@@ -201,8 +139,6 @@ function switchAuthTab(mode) {
 function authReadInputs() {
   const email = (($('authEmail') || {}).value || '').trim();
   const password = (($('authPassword') || {}).value || '');
-  const server = (($('authServerUrl') || {}).value || '').trim();
-  if (server) saveAuthServerUrl(server);
   return { email: email, password: password };
 }
 async function doAuthLogin() {
@@ -235,7 +171,7 @@ function showNewPasswordPane() {
   const pw = $('newPassword'); if (pw) setTimeout(function () { pw.focus(); }, 20);
 }
 async function doAuthReset() {
-  if (!SUPA.configured()) { setAuthMsg('Password reset requires the Supabase account backend.', 'error'); return; }
+  if (!SUPA.libReady()) { setAuthMsg(SUPA.connectionError(), 'error'); return; }
   const email = (($('resetEmail') || {}).value || '').trim();
   if (!email) { setAuthMsg('Enter your email address.', 'error'); return; }
   setAuthMsg('Sending reset link…', 'info');
@@ -297,12 +233,8 @@ async function openAdminConsole() {
   setAdminMsg('Loading accounts…', 'info');
   list.innerHTML = '<div class="text-xs text-gray-500">Loading…</div>';
   let users = [];
-  if (SUPA.configured()) {
-    users = await SUPA.listUsers();
-  } else {
-    const r = await authPost('listUsers', {});
-    users = (r && r.ok && r.users) ? r.users : [];
-  }
+  if (!SUPA.libReady()) { setAdminMsg(SUPA.connectionError(), 'error'); return; }
+  users = await SUPA.listUsers();
   setAdminMsg(users.length ? '' : 'No accounts yet. Share your app link so members can request an account.');
   if (!users.length) { list.innerHTML = '<div class="text-xs text-gray-500">No accounts yet. Share your app link and users can request an account.</div>'; return; }
   list.innerHTML = users.map(function (u) { return adminRow(u); }).join('');
@@ -338,9 +270,8 @@ function setAdminMsg(text, type) {
 }
 async function adminAct(action, id, email) {
   if (!id) { setAdminMsg('This account has no valid ID.', 'error'); return; }
-  let res;
-  if (SUPA.configured()) res = await SUPA.setAccountStatus(id, action === 'approve' ? 'approved' : 'rejected');
-  else res = await authPost(action, { email: email });
+  if (!SUPA.libReady()) { setAdminMsg(SUPA.connectionError(), 'error'); return; }
+  const res = await SUPA.setAccountStatus(id, action === 'approve' ? 'approved' : 'rejected');
   const ok = !!(res && res.ok);
   setAdminMsg((res && (res.message || res.error)) || (ok ? (action === 'approve' ? 'Approved ' + email : 'Rejected ' + email) : 'Action failed.'), ok ? 'success' : 'error');
   await openAdminConsole();
@@ -391,7 +322,7 @@ if ($('newPassword')) $('newPassword').addEventListener('keydown', function (e) 
    session; this app's copy opens showing a "set new password" pane — and keeps
    the auth screen in front of the app until the new password is saved. */
 let __authRecovery = false;
-if (SUPA.configured()) {
+if (SUPA.libReady()) {
   SUPA.onAuthState(function (event) {
     if (event === 'PASSWORD_RECOVERY') __authRecovery = true;
   });

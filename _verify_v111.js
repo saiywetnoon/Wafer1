@@ -19,6 +19,20 @@ check('no gsi/client script', !html.includes('accounts.google.com/gsi/client'));
 check('supabase SRI present', html.includes('integrity="sha384-EyR2P0'));
 check('supabase version pinned (not floating @2)', !/supabase-js@2\/dist/.test(html) && html.includes('@supabase/supabase-js@2.115.0'));
 check('auth backend-warning element', html.includes('authBackendWarn'));
+// Supabase-only regression guards
+check('no legacy authServerUrl field in HTML', !html.includes('id="authServerUrl"'));
+check('no legacySheetsCard in HTML', !html.includes('legacySheetsCard'));
+check('no Google sign-in div in HTML', !html.includes('googleSignInDiv'));
+check('backup/restore buttons present', html.includes('exportFullBackupBtn') && html.includes('restoreFullBackupBtn'));
+const authJs = fs.readFileSync(path.join(__dirname, 'js', 'auth.js'), 'utf8');
+check('auth.js has no authPost', !authJs.includes('function authPost'));
+check('auth.js uses SUPA.libReady', authJs.includes('SUPA.libReady()'));
+const cloudJs = fs.readFileSync(path.join(__dirname, 'js', 'cloud.js'), 'utf8');
+check('cloud.js has no cloudPost', !cloudJs.includes('async function cloudPost'));
+check('cloud.js is Supabase-only', cloudJs.includes('return supabaseGet();'));
+const googleJs = fs.readFileSync(path.join(__dirname, 'js', 'google.js'), 'utf8');
+check('google.js has no syncToGoogle', !googleJs.includes('async function syncToGoogle'));
+check('google.js status is Supabase-aware', googleJs.includes('SUPA.libReady()'));
 
 const css = fs.readFileSync(path.join(__dirname, 'css', 'tailwind.css'), 'utf8');
 ['sm:w-64', 'lg:grid-cols-5', 'max-h-32', 'text-sky-400', 'hover:text-sky-300', 'sm:col-span-3'].forEach(function (c) {

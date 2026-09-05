@@ -24,6 +24,24 @@ const SUPA = {
     return ready;
   },
 
+  /* True when Supabase is configured AND its library actually loaded.
+     Used everywhere the old code asked "is the Supabase backend active?" —
+     the app is Supabase-only, so if the library is missing we must say so. */
+  libReady() {
+    return !!(SUPABASE_URL_wafer && SUPABASE_ANON_KEY_wafer && window.supabase);
+  },
+
+  /* Human-readable reason when the Supabase backend can't be used right now. */
+  connectionError() {
+    if (!SUPABASE_URL_wafer || !SUPABASE_ANON_KEY_wafer) {
+      return 'This build is missing its Supabase URL/anon key (see js/config.js).';
+    }
+    if (!window.supabase) {
+      return 'The Supabase connection couldn\u2019t load (network or ad-blocker?). Check your internet and reload.';
+    }
+    return 'Not connected to Supabase.';
+  },
+
   /* Lazy-initialise the Supabase client + reflect auth state. */
   init() {
     if (this.client) return this.client;

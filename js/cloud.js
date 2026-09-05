@@ -2,65 +2,28 @@
    CLOUD — online / access-from-anywhere layer
    ============================================================
    A single provider-agnostic interface the app uses to go online.
-   Today it is backed by Google (Apps Script multi-tenant cloud in
-   google-sync.gs). To swap in another provider later (e.g.
-   Supabase), implement the same cloudPush/pull/backup/list/restore
-   methods and keep every other module unchanged.
-
-   Model:
-   - A workspace is "bound" to a verified Google-account email
-     (stored per-company as cfg.cloud.email).
-   - When the signed-in Google account matches the bound email the
-     workspace is ONLINE: data auto-pulls on open and auto-pushes
-     on every change, from any device.
-   - If nothing is bound yet, signing in auto-binds and then
-     decides whether to pull (cloud has newer/any data) or push
-     (this device starts the cloud copy).
+   Backend: Supabase. There is NO legacy Apps-Script upstream
+   anymore — this app is Supabase-only.
    ============================================================ */
 
-function cloudRawIdToken() { return (googleAuthUser && googleAuthUser.rawCredential) || ''; }
-/* Account session token first (new login), legacy Google id token second. */
-function cloudAccountToken() { return authToken() || cloudRawIdToken(); }
-function cloudSignedInEmail() { return authEmail() || ((googleAuthUser && googleAuthUser.email) || ''); }
-function cloudCfg() { return getGoogleSyncConfig(); }
-function cloudBoundEmail() { return (cloudCfg().cloud || {}).email || ''; }
-/* The backend URL: the login screen's saved URL wins, otherwise the old per-company config. */
-function cloudEndpoint() { return authServerUrl() || cloudCfg().sheetUrl || ''; }
+function cloudSignedInEmail() { return authEmail(); }
+function cloudEndpoint() { return ''; }   // legacy Apps-Script concept — always empty now
 
-function setCloudBoundEmail(email) {
-  const cfg = getGoogleSyncConfig();
-  if (!cfg.cloud) cfg.cloud = {};
-  cfg.cloud.email = (email || '').toLowerCase();
-  setGoogleSyncConfig(cfg);
-}
-
-/* Is this workspace currently ONLINE? In Supabase mode it's online the moment
-   a user session exists (no deployment URL needed). */
+/* Is this workspace currently ONLINE? Yes the moment a Supabase session exists. */
 function cloudIsOnline() {
-  if (SUPA.configured()) {
-    return !!(SUPA.user && SUPA.user.id);
-  }
-  const email = cloudSignedInEmail();
-  const token = cloudAccountToken();
-  if (!token || !email || !cloudEndpoint()) return false;
-  if (authEmail()) return true;
-  const bound = cloudBoundEmail();
-  return !bound || bound.toLowerCase() === email.toLowerCase();
+  return !!(SUPA.user && SUPA.user.id);
 }
-/* Is a cloud deployment reachable at all? */
+/* Is a cloud backend reachable at all? */
 function cloudIsAvailable() {
-  if (SUPA.configured()) return true;
-  return !!cloudEndpoint() && !!cloudAccountToken();
+  return true;
 }
-/* Can sync / upload / download run RIGHT NOW?
-   Supabase mode needs NO deployment URL — the logged-in session IS the
-   connection. Legacy mode still requires the Apps Script URL + a token. */
+/* Can sync / upload / download run RIGHT NOW? The logged-in Supabase session
+   IS the connection — there is no deployment URL to configure. */
 function cloudReady() {
-  if (SUPA.configured()) return !!(SUPA.user && SUPA.user.id);
-  return !!cloudEndpoint() && !!cloudAccountToken();
+  return !!(SUPA.user && SUPA.user.id);
 }
 function cloudNeedsUrl() {
-  return !SUPA.configured();
+  return false;
 }
 /* Supabase-native push/get (primary path). */
 async function supabasePush() {
@@ -150,7 +113,7 @@ function supabaseWatch(uid) { supabaseUpdate(uid); }
    overwriting a richer local copy). */
 var cloudPollTimer = null;
 function startCloudPolling() {
-  if (cloudPollTimer || !SUPA.configured()) return;
+  if (cloudPollTimer || !SUPA.libReady()) return;
   cloudPollTimer = setInterval(async function () {
     try {
       if (!cloudReady()) return;
@@ -172,7 +135,7 @@ function startCloudPolling() {
     } catch (e) { /* poll is best-effort */ }
   }, 60000);
 }
-/* ---------- Low-level: dispatch to Supabase or legacy Apps Script ---------- */
+/* ---------- Low-level offline-first queue ---------- */
 /* Offline-first: every push that cannot reach the cloud marks a persistent
    "pending sync" flag. The next successful online moment (reconnect, page
    load, manual sync) replays the CURRENT state — which contains every change
@@ -196,10 +159,8 @@ async function cloudPush() {
   // A dead Supabase session is the #1 silent cause of "nothing has synced since
   // lunch". Refresh the cached session BEFORE pushing so an expired token is
   // either healed or reported instead of quietly returning a 401.
-  if (SUPA.configured()) {
-    try { await SUPA.sessionUser(); } catch (e) {}
-  }
-  const res = SUPA.configured() ? await supabasePush() : await cloudPost('save', { payload: toGooglePayload() });
+  try { await SUPA.sessionUser(); } catch (e) {}
+  const res = await supabasePush();
   if (res && res.ok) {
     syncQueueClear();
     cloudMarkLastSync();
@@ -253,44 +214,14 @@ function initSyncFlushers() {
   } catch (e) { /* listeners are best-effort */ }
 }
 async function cloudGet() {
-  if (SUPA.configured()) return supabaseGet();
-  const url = cloudEndpoint();
-  if (!url) return { ok: false, error: 'No Apps Script URL configured.' };
-  if (!cloudAccountToken()) return { ok: false, error: 'Sign in first.' };
-  try {
-    const u = new URL(url);
-    u.searchParams.set('action', 'get');
-    u.searchParams.set('token', authToken());
-    u.searchParams.set('idToken', cloudRawIdToken());
-    const resp = await fetch(u.toString(), { method: 'GET' });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    return await resp.json();
-  } catch (e) {
-    console.error('cloud GET failed', e);
-    return { ok: false, error: String(e) };
-  }
+  return supabaseGet();
 }
-/* ---------- Legacy Apps-Script helper (only used when not configured) ---------- */
-async function cloudPost(action, extra) {
-  const url = cloudEndpoint();
-  if (!url) return { ok: false, message: 'No Apps Script URL configured.' };
-  const authTokenValue = authToken();
-  const idToken = cloudRawIdToken();
-  if (!authTokenValue && !idToken) return { ok: false, message: 'Sign in first.' };
-  const body = Object.assign({ action: action, token: authTokenValue, idToken: idToken }, extra || {});
-  try {
-    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    return await resp.json();
-  } catch (e) {
-    console.error('cloud POST ' + action + ' failed', e);
-    return { ok: false, error: String(e) };
-  }
-}
-async function cloudBackup() { return SUPA.configured() ? { ok: false, message: 'Use Download backup instead (Supabase).' } : cloudPost('backup', { payload: toGooglePayload() }); }
-async function cloudList() { return SUPA.configured() ? { ok: true, backups: [] } : cloudPost('list'); }
-async function cloudRestore() { return SUPA.configured() ? { ok: false, message: 'Use Download backup instead (Supabase).' } : cloudPost('restore', { fileName: '' }); }
-async function cloudClear() { return SUPA.configured() ? { ok: true, message: 'Cleared.' } : cloudPost('clear'); }
+/* Supabase-only backup helpers. There is no Google Drive upstream anymore:
+   a downloadable JSON snapshot IS the backup (see cloudBackupNow in sync-ui). */
+async function cloudBackup() { return { ok: false, message: 'Use Download backup instead (Supabase).' }; }
+async function cloudList() { return { ok: true, backups: [] }; }
+async function cloudRestore() { return { ok: false, message: 'Use Download backup instead (Supabase).' }; }
+async function cloudClear() { return { ok: true, message: 'Cleared.' }; }
 /* ---------- Merge a remote cloud state into the current workspace ---------- */
 /* Copy every listed array field from a remote payload onto state, but only when
    the remote actually carries that array (so a partial copy can never null or
@@ -364,25 +295,11 @@ function applyCloudRemote(remote, remoteTs) {
    write wins. A fresh device NEVER overwrites a populated cloud. */
 async function cloudAfterSignIn() {
   const email = cloudSignedInEmail();
-  if (!email || !cloudAccountToken()) return false;
+  if (!email || !authToken()) return false;
   renderCloudStatus();
   if (!cloudReady()) {
-    updateGoogleSyncStatus(cloudNeedsUrl()
-      ? 'Signed in. Add your Apps Script URL in the Online/Cloud card to go online.'
-      : 'Signed in. Syncing your account…', 'info');
+    updateGoogleSyncStatus('Signed in. Syncing your account…', 'info');
     return false;
-  }
-  // Legacy Google-account binding only (not used in account mode).
-  if (!authEmail()) {
-    const bound = cloudBoundEmail();
-    if (!bound) {
-      setCloudBoundEmail(email); // first time -> bind this account to this workspace
-      updateGoogleSyncStatus('Bound this workspace to ' + email + '. Syncing now…', 'info');
-    } else if (bound.toLowerCase() !== email.toLowerCase()) {
-      updateGoogleSyncStatus('This workspace is bound to ' + bound + '. Sign into that Google account to sync it.', 'info');
-      renderCloudStatus();
-      return false;
-    }
   }
   const localCount = stateDataCount(state);
   const res = await cloudGet();

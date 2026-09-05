@@ -32,30 +32,10 @@ function companyDraftKey() { return companyKeys().draftKey; }
 function companyConfigKey() { return companyKeys().configKey; }
 
 /* ============================================================
-   GOOGLE ACCOUNT (OAuth) — PASTE YOUR CLIENT ID HERE
+   SUPABASE — THE backend (auth + database + realtime)
    ============================================================
-   1. Go to https://console.cloud.google.com/apis/credentials
-   2. Click "Create Credentials" → OAuth client ID
-   3. Application type: Web application
-   4. Authorized JavaScript origins: your site origin
-      e.g. http://localhost:5500 or https://your-domain.com
-   5. Enable "Google Sheets API" under the Library
-   6. Copy the Client ID below.
-============================================================ */
-const GOOGLE_CLIENT_ID = '';  // ← PASTE YOUR GOOGLE OAuth CLIENT ID HERE
-const GOOGLE_SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
-let googleAuthUser = null;      // { email, name, accessToken }
-let googleSheetsId = null;      // cached spreadsheet ID for this user
-let googleAuthTokenClient = null;
-const GOOGLE_SHEET_NAME = 'LedgerState';
-
-/* ============================================================
-   SUPABASE (OPTION B — the real backend)
-   ============================================================
-   Paste your project URL + anon key here once. After that, nobody
-   sees or enters a deployment URL anywhere — sign-in and sync are
-   handled by Supabase automatically, exactly like a real app.
-   Leave empty to keep using the legacy Apps-Script backend.
+   The app is Supabase-only. The legacy Google Apps Script path
+   was removed in v1.11.
 ============================================================ */
 const SUPABASE_URL_wafer = 'https://yirdgfiklgsygwbafzgk.supabase.co';
 const SUPABASE_ANON_KEY_wafer = 'sb_publishable_w7aR1Lrjd4ED3k5vPeXfIQ_rxSA8pMN';

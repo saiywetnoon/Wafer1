@@ -30,231 +30,21 @@ function renderAll() {
   lucide.createIcons();
 }
 
-/* ============================================================
-   GOOGLE ACCOUNT INIT — Sign in with Google
-   ============================================================ */
-let googleSignInInitialized = false;
-let googleTokenClient = null;
-
-/* The Google Identity script is no longer loaded unconditionally in <head>.
-   Load it on demand — and only when the app is configured with a Client ID. */
-function loadGoogleIdentityScript(onReady) {
-  if (window.google && window.google.accounts) { onReady(); return; }
-  const s = document.createElement('script');
-  s.src = 'https://accounts.google.com/gsi/client';
-  s.onload = onReady;
-  s.onerror = function () {
-    console.warn('Google identity script could not load — Google sync unavailable.');
-    showToast('Google sign-in could not load. Check your connection.', 'error');
-  };
-  document.head.appendChild(s);
-}
-
-function initGoogleSignIn() {
-  if (!GOOGLE_CLIENT_ID || googleSignInInitialized) return;
-  googleSignInInitialized = true;
-  const btn = $('googleSignInDiv');
-  if (!btn) return;
-  btn.classList.remove('hidden');
-  loadGoogleIdentityScript(function () {
-    if (!window.google || !window.google.accounts) return;
-    google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleCredential,
-      auto_select: false
-    });
-    try { google.accounts.id.renderButton(btn, { theme: 'outline', size: 'medium', width: 220, text: 'signin_with', shape: 'pill' }); }
-    catch (e) { console.warn('Google button render failed', e); }
-  });
-}
-
-function handleGoogleCredential(response) {
-  try {
-    const payload = JSON.parse(atob(response.credential.split('.')[1]));
-    googleAuthUser = {
-      email: payload.email,
-      name: payload.name,
-      picture: payload.picture,
-      sub: payload.sub,
-      accessToken: null,
-      rawCredential: response.credential || ''  // JWT id token → multi-tenant cloud auth
-    };
-    // Request an OAuth access token so we can call the Sheets API
-    googleTokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: GOOGLE_SHEETS_SCOPE,
-      callback: function (tokenResponse) {
-        if (tokenResponse && tokenResponse.access_token) {
-          googleAuthUser.accessToken = tokenResponse.access_token;
-          $('googleUserLabel').textContent = 'Logout: ' + (googleAuthUser.email || googleAuthUser.name || 'User');
-          $('googleSignOutBtn').classList.remove('hidden');
-          $('googleSignInDiv').classList.add('hidden');
-          showToast('Signed in as ' + (googleAuthUser.name || googleAuthUser.email), 'success');
-          updateGoogleSyncStatus('Signed in with Google. Your ledger will auto-save to your Google account.', 'success');
-          // Cloud-first: reconcile this workspace with the account's cloud copy
-          // (mobile/full-screen scope). Falls back to legacy single-sheet mode.
-          const legacySheetId = getGoogleSyncConfig().sheetId;
-          if (legacySheetId && !cloudEndpoint()) {
-            googleSheetsId = legacySheetId;
-            loadFromSheetsApi();
-          } else {
-            cloudAfterSignIn();
-          }
-        } else {
-          showToast('Google auth token could not be obtained.', 'error');
-        }
-      },
-      error_callback: function (err) {
-        console.error('Google token error', err);
-        showToast('Google auth failed. Check that the Sheets API is enabled.', 'error');
-      }
-    });
-    googleTokenClient.requestAccessToken();
-  } catch (e) {
-    console.error('Google sign-in parsing failed', e);
-    showToast('Google sign-in failed.', 'error');
-  }
-}
-
-$('googleSignOutBtn').addEventListener('click', function () {
-  googleAuthUser = null;
-  googleSheetsId = null;
-  this.classList.add('hidden');
-  $('googleSignInDiv').classList.remove('hidden');
-  if (window.google && google.accounts && google.accounts.id) {
-    google.accounts.id.disableAutoSelect();
-  }
-  showToast('Signed out of Google.');
-  updateGoogleSyncStatus('Signed out. Local-only mode.', 'info');
-  renderSyncTab();
-});
-
-/* ---------- Google Sheets API v4 direct save/load ---------- */
-async function loadFromGoogleAccount() {
-  if (!googleAuthUser) return;
-  // If we already have a sheet ID configured, load from it; otherwise ask the user.
-  const cfg = getGoogleSyncConfig();
-  if (cfg.sheetId) {
-    googleSheetsId = cfg.sheetId;
-    await loadFromSheetsApi();
-  } else {
-    await setupGSheetIdInput();
-  }
-}
-
-async function setupGSheetIdInput() {
-  const sheetId = await Modal.prompt({
-    title: 'Google Sheet ID',
-    message: 'Paste your Google Sheet ID (the long string from your sheet URL) to sync this ledger to your Google account.\n\n' +
-      'Open your Google Sheet → look at the URL: docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit\n\n' +
-      'Leave empty to skip and use local-only mode for now.'
-  });
-  if (!sheetId) return;
-  googleSheetsId = sheetId;
-  const cfg = getGoogleSyncConfig();
-  cfg.sheetId = sheetId;
-  cfg.sheetUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + sheetId;
-  setGoogleSyncConfig(cfg);
-  syncToSheetsApi();
-}
-
-async function syncToSheetsApi() {
-  if (!googleAuthUser || !googleSheetsId) return false;
-  try {
-    const payload = toGooglePayload();
-    // Values: [exportedAt, app, stateJSON]
-    const values = [[payload.exportedAt, payload.app, JSON.stringify(payload.state)]];
-    const sheetUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + googleSheetsId + '/values/' + GOOGLE_SHEET_NAME + '!A1:C1?valueInputOption=RAW';
-    const resp = await fetch(sheetUrl, {
-      method: 'PUT',
-      headers: { 'Authorization': 'Bearer ' + googleAuthUser.accessToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: values })
-    });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    updateGoogleSyncStatus('Synced to Google Sheets (OAuth).', 'success');
-    return true;
-  } catch (e) {
-    console.warn('Google Sheets API save failed', e);
-    updateGoogleSyncStatus('Google Sheets API save failed.', 'error');
-    return false;
-  }
-}
-
-async function loadFromSheetsApi() {
-  if (!googleAuthUser || !googleSheetsId) return false;
-  try {
-    const sheetUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + googleSheetsId + '/values/' + GOOGLE_SHEET_NAME + '!A1:C1';
-    const resp = await fetch(sheetUrl, {
-      headers: { 'Authorization': 'Bearer ' + googleAuthUser.accessToken }
-    });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const data = await resp.json();
-    const row = data && data.values && data.values[0];
-    if (!row || !row[2]) {
-      showToast('No data found in this Google Sheet yet.', 'info');
-      return false;
-    }
-    const remoteState = JSON.parse(row[2]);
-    if (!remoteState || !remoteState.entries) { showToast('Sheet contains no valid ledger data.', 'error'); return false; }
-    const remoteTs = row[0] ? Date.parse(row[0]) : 0;
-    const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
-    if (remoteTs && localTs && remoteTs < localTs) {
-      showToast('Google Sheet data is older than local; local copy kept.', 'info');
-      return false;
-    }
-    if (remoteState.prices && Array.isArray(remoteState.prices)) state.prices = remoteState.prices;
-    if (remoteState.entries) state.entries = remoteState.entries;
-    if (Array.isArray(remoteState.production)) state.production = remoteState.production;
-    if (Array.isArray(remoteState.sales)) state.sales = remoteState.sales;
-    if (remoteState.stock) state.stock = remoteState.stock;
-    if (remoteState.settings) state.settings = Object.assign({ hourlyWage: 1500 }, remoteState.settings);
-    if (remoteState.inventory) state.inventory = remoteState.inventory;
-    if (Array.isArray(remoteState.inventoryMovements)) state.inventoryMovements = remoteState.inventoryMovements;
-    if (remoteState.inventoryMovementVersion) state.inventoryMovementVersion = remoteState.inventoryMovementVersion;
-    if (remoteState.customers) state.customers = remoteState.customers;
-    if (remoteState.suppliers) state.suppliers = remoteState.suppliers;
-    if (remoteState.purchases) state.purchases = remoteState.purchases;
-    if (remoteState.payments) state.payments = remoteState.payments;
-    if (remoteState.customerPayments) state.customerPayments = remoteState.customerPayments;
-    if (remoteState.expenses) state.expenses = remoteState.expenses;
-    if (remoteState.recurringExpenses) state.recurringExpenses = remoteState.recurringExpenses;
-    if (remoteState.waste) state.waste = remoteState.waste;
-    if (remoteState.priceHistory) state.priceHistory = remoteState.priceHistory;
-    if (Array.isArray(remoteState.recipes)) state.recipes = remoteState.recipes;
-    if (remoteState.cash) state.cash = Object.assign({ opening: 0, adjustments: [] }, remoteState.cash);
-    if (typeof migrateInventoryMovements === 'function') migrateInventoryMovements();
-    state.version = 2;
-    state.updatedAt = new Date().toISOString();
-    saveState();
-    renderAll();
-    showToast('Ledger data loaded from Google Sheets.', 'success');
-    updateGoogleSyncStatus('Data loaded from Google Sheets (OAuth).', 'success');
-    return true;
-  } catch (e) {
-    console.error('Google Sheets API load failed', e);
-    showToast('Failed to load from Google Sheets.', 'error');
-    return false;
-  }
-}
-
-// Override: if a Google sheet ID is configured, also push to Sheets API on save.
-// When the workspace is ONLINE (cloud mode), push to the account's cloud copy.
+// Override: every save pushes to the account's Supabase cloud copy.
 function triggerGoogleSync() {
   clearTimeout(googleSyncTimer);
   googleSyncTimer = setTimeout(async function () {
     pendingCloudPushQueued = true;
     try {
-      if (googleAuthUser && googleSheetsId) syncToSheetsApi();
       // 1) A Supabase session can silently expire after boot; restore it before
       //    deciding we are offline, so saves keep reaching the cloud.
-      if (SUPA.configured() && !(SUPA.user && SUPA.user.id)) {
+      if (!(SUPA.user && SUPA.user.id)) {
         try { await SUPA.sessionUser(); } catch (e) { /* restore is best-effort */ }
       }
       // 2) NEVER silently drop a save. Push when online; when a cloud IS
       //    configured but we can't reach it right now, push anyway so the
       //    change is queued ("will sync when back online") instead of being
-      //    lost. Only a truly local setup (legacy mode with no account and no
-      //    server URL) stays silent — there is nothing to queue then.
+      //    lost.
       pendingCloudPushQueued = false; // push is starting; beforeunload may flush on its own
       if (cloudIsOnline() || cloudIsAvailable()) await cloudPush();
     } catch (e) {
@@ -271,20 +61,20 @@ function triggerGoogleSync() {
 function reportBackendMode() {
   const keys = !!(SUPABASE_URL_wafer && SUPABASE_ANON_KEY_wafer);
   const lib = !!window.supabase;
-  const mode = SUPA.configured()
-    ? 'SUPABASE (URL-free, auto-sync)'
-    : (keys ? 'SUPABASE-CONFIGURED BUT LIB MISSING' : 'LEGACY APPS-SCRIPT');
+  const mode = keys
+    ? (lib ? 'SUPABASE (URL-free, auto-sync)' : 'SUPABASE-CONFIGURED BUT LIB MISSING')
+    : 'NOT CONFIGURED';
   console.log('%c[Daily Crispy Roll] Backend mode: ' + mode +
     (keys && lib ? ' — ' + (window.__supaSrc || 'jsdelivr') + (window.__supaFallback ? ' (fallback CDN)' : '') : ''),
     'background:#10b981;color:#fff;padding:2px 6px;border-radius:4px;');
 
   const st = $('googleSyncStatus');
   if (!st) return;
-  if (!keys && !lib) {
-    st.textContent = 'Backend: legacy Apps-Script mode. Configure a server URL, or add Supabase keys to enable one-click sync.';
+  if (!keys) {
+    st.textContent = 'Backend not configured: add your Supabase URL + anon key in js/config.js.';
     st.className = 'text-xs text-amber-400 mt-2';
-  } else if (keys && !lib) {
-    st.textContent = 'Supabase is configured but its library failed to load (network/CDN blocked or ad-blocker). The login screen now explains this instead of offering the legacy field.';
+  } else if (!lib) {
+    st.textContent = 'Supabase is configured but its library failed to load (network/CDN blocked or ad-blocker). Check your internet and reload.';
     st.className = 'text-xs text-red-400 mt-2';
   }
 }
@@ -328,12 +118,11 @@ async function appStart() {
   loadState();
   loadDraftIfNewer();
   renderAll();
-  initGoogleSignIn();
   // Offline-first installable app: register the service worker (caches the app
   // shell + CDN libraries so the next open works even with no connection).
   registerServiceWorker();
   // Supabase: subscribe to live updates so other devices appear automatically.
-  if (SUPA.configured() && SUPA.user && SUPA.user.id) {
+  if (SUPA.libReady() && SUPA.user && SUPA.user.id) {
     try { supabaseWatch(SUPA.user.id); } catch (e) { console.warn('realtime not available', e); }
   }
   try { await cloudAfterSignIn(); } catch (e) { console.warn('cloud reconcile failed', e); }
