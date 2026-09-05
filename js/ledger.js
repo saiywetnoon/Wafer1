@@ -141,19 +141,25 @@ function saveProduction() {
 
 $('saveLogBtn').addEventListener('click', saveProduction);
 
-/* One-click save of a pan batch's production (used by the run tracker and pan
-   presets). Writes the same Production entry as the main form, then navigates
-   to the Production tab so the totals are visible. Multiple runs in one day
-   (e.g. three pans) MERGE into that day's batch so the daily recipe is only
-   ever deducted from inventory ONCE — not once per pan. */
-function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
-  if (!date || !(pieces > 0)) { showToast('No finished batch to save.', 'error'); return; }
+/* One-click save of a pan batch's production (used by the run tracker, the pan's
+   automatic roll counting and per-pan timings). Writes the same Production entry
+   as the main form, then navigates to the Production tab so the totals are
+   visible. Multiple runs in one day (e.g. three pans) MERGE into that day's
+   batch so the daily recipe is only ever deducted from inventory ONCE — not
+   once per pan. Returns TRUE on success (callers can safely clear the run).
+   `quiet` suppresses the success toast and the tab switch so the automatic
+   reporting in the Fry Timers screen never yanks the user out of the timers. */
+function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
+  if (!date || !(pieces > 0)) { if (!quiet) showToast('No finished batch to save.', 'error'); return false; }
   const runUsage = usage || currentUsage();
   const existing = (state.production || []).find(function (p) { return p.date === date; });
 
   // -------- Merge into an existing batch for the same day (no double deduct) --------
   if (existing) {
     existing.pieces = (existing.pieces || 0) + Math.round(pieces);
+    // Bags come from the caller: the pan's own Bags/batch setting (auto-report)
+    // or what the user entered in the batch log. Only fall back to the
+    // 6-per-bag estimate when no bag count is given.
     existing.bags = (existing.bags || 0) + Math.round(bags || Math.ceil(pieces / 6));
     existing.notes = (existing.notes || '') + (notes ? (existing.notes ? ' · ' : '') + notes : '');
     if (useBy && !existing.useBy) existing.useBy = useBy;
@@ -166,12 +172,14 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
     clearDraft();
     $('editProdId').value = existing.id;
     refreshSaveButton();
-    showToast('Added to today’s production — ' + fmt(existing.pieces) + ' pieces total.', 'success');
-    pulseSuccess($('saveLogBtn'));
-    document.querySelector('[data-tab="log"]').click();
+    if (!quiet) {
+      showToast('Added to today’s production — ' + fmt(existing.pieces) + ' pieces total.', 'success');
+      pulseSuccess($('saveLogBtn'));
+      document.querySelector('[data-tab="log"]').click();
+    }
     draftTouched = false;
     updateDraftHint();
-    return;
+    return true;
   }
 
   const record = {
@@ -190,7 +198,7 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
   const shortage = inventoryUsageShortage({}, record.usage);
   if (shortage) {
     showToast('Not enough ' + shortage.name + '. Available: ' + fmt(shortage.available) + '; batch needs ' + fmt(shortage.requested) + ' more.', 'error');
-    return;
+    return false;
   }
   state.production.push(record);
   reconcileProductionInventory({}, record.usage, record.date, record.id);
@@ -201,7 +209,9 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
   clearDraft();
   $('editProdId').value = '';
   refreshSaveButton();
-  showToast('Batch saved to production for ' + record.date + ' — ' + fmt(record.pieces) + ' pieces ready to sell.');
+  if (!quiet) {
+    showToast('Batch saved to production for ' + record.date + ' — ' + fmt(record.pieces) + ' pieces ready to sell.');
+  }
   const mergedOver = overConsumedStockItems().filter(function (label) {
     const itemName = label.split(' ')[0];
     return (record.usage[itemName] || 0) > 0;  // only warn about items THIS batch used
@@ -209,10 +219,13 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy) {
   if (mergedOver.length) {
     showToast('⚠ Stock went below zero: ' + mergedOver.join(', ') + ' — record a purchase or Add Stock to restore.', 'info');
   }
-  pulseSuccess($('saveLogBtn'));
-  document.querySelector('[data-tab="log"]').click();
+  if (!quiet) {
+    pulseSuccess($('saveLogBtn'));
+    document.querySelector('[data-tab="log"]').click();
+  }
   draftTouched = false;
   updateDraftHint();
+  return true;
 }
 
 /* ============================================================

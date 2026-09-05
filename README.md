@@ -86,12 +86,34 @@ interfere with each other. For each pan:
 - **Scaleable pan count** — ⚙ Settings now has "Number of frying pans (1–9)".
   Add/remove pans as your production line grows; each pan keeps its own theme
   and a dedicated shortcut key (1–9).
+- **Per-pan timing, rolls & bags** — ⚙ Settings has a **"Per-pan timings, rolls
+  & bags"** section: each pan can run its **own** fold + final duration with its
+  **own Rolls** and **own Bags** per finished batch (all set by you — uncheck
+  "Use global" to customise that pan, or "Use global for all" to clear every
+  override). The duration dropdown on each card is always anchored on that pan's
+  own total (so a selection is never out of step with its timing), and picking a
+  value updates that pan's own fold/final proportionally.
+- **Automatic roll + bag count → Production** — when a timer finishes, the pan
+  counts the **Rolls & Bags** you set for it. With **"Automatically report
+  finished batches to Production"** on (the default), those exact counts are
+  added straight into the Production panel and merged into that day's batch:
+  **Pieces** grows by the Rolls and **Bags Prod.** grows by the Bags. The daily
+  recipe stays deducted exactly once. Turn auto-report off to keep the counts in
+  the Today's Batch Log (where you can also edit Rolls & Bags per pan) and use
+  the **Log finished batch → Production** button instead. A batch that fails to
+  report (e.g. a stock shortage) is kept so it can be retried, and a refresh can
+  never double-count a finished batch.
+- **Manual reset** — reset any pan yourself at any time (the Reset button,
+  `Shift+1..9`, or right-click / middle-click). Resetting a pan that already
+  finished cancels its pending batch count, so a manual reset never double-reports
+  a batch.
 - **Settings** — the ⚙ button opens a panel that customises the batch timing
   (fold checkpoint seconds and final-heat seconds, which set the per-pan total),
-  the beep volume, and which alerts fire: beeps, toast messages, browser-tab
-  title flash, Fry Timers menu-button flash, and mobile vibration. Changes
-  apply immediately to ready pans; running batches keep their duration but use
-  the new checkpoint timings. Settings are persisted with the timers.
+  the default Rolls/batch and Bags/batch, auto-reporting, the beep volume, and
+  which alerts fire: beeps, toast messages, browser-tab title flash, Fry Timers
+  menu-button flash, and mobile vibration. Changes apply immediately to ready
+  pans; running batches keep their duration but use the new checkpoint timings.
+  Settings are persisted with the timers.
 
 Only `index.html` (new tab + `<script>` tag), `css/styles.css`, and the new
 `js/pan-timers.js` are involved. The generic `.tab-btn` handler in
@@ -179,9 +201,11 @@ button (🗑) that turns it into a daily-usage item and clears its stock history
 - **Target-Profit Calculator** — enter the profit you want for the day and it
   tells you how many bags / rolls to produce (and sell) to hit it, factoring in
   standing orders.
-- **Pan batch log** — on the Fry Timers tab, each finished pan's pieces are
-  remembered in "Today's Batch Log"; "Log finished batch → Production" records
-  them straight into Production.
+- **Pan batch log + auto-count reporting** — on the Fry Timers tab, a finished
+  pan automatically counts its **Rolls & Bags** (you set them) in "Today's Batch
+  Log" and, with auto-report on (the default), reports them straight into the
+  Production panel; otherwise "Log finished batch → Production" records them
+  manually.
 
 ## Group B — Inventory & purchasing
 

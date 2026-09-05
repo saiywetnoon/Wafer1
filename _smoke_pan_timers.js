@@ -82,6 +82,59 @@ class CardEl extends El {
   }
 }
 
+/* Per-pan override rows container stub: parses the module's generated row HTML
+   so the settings form round-trip (show → save) really reads the rendered
+   per-pan fold/final/rolls values back into settings. */
+class OvRowsEl extends El {
+  constructor() { super('panPerPanRows'); this._els = []; }
+  set innerHTML(v) {
+    super.innerHTML = v;
+    this._els = [];
+    const tags = String(v).match(/<input\b[^>]*>/g) || [];
+    tags.forEach(function (tag) {
+      const e = new El();
+      let mm;
+      const stripped = tag.replace(/<input\b/, '');
+      if ((mm = tag.match(/data-ov-use="([^"]+)"/))) {
+        e._kind = 'use'; e._id = mm[1];
+        e.checked = / checked/.test(stripped);
+        e.setAttribute('data-ov-use', e._id);
+      } else if ((mm = tag.match(/data-ov-fold="([^"]+)"/))) {
+        e._kind = 'fold'; e._id = mm[1];
+        const vm = tag.match(/value="([^"]*)"/); e.value = vm ? vm[1] : '';
+        e.disabled = / disabled/.test(stripped);
+        e.setAttribute('data-ov-fold', e._id);
+      } else if ((mm = tag.match(/data-ov-final="([^"]+)"/))) {
+        e._kind = 'final'; e._id = mm[1];
+        const vm = tag.match(/value="([^"]*)"/); e.value = vm ? vm[1] : '';
+        e.disabled = / disabled/.test(stripped);
+        e.setAttribute('data-ov-final', e._id);
+      } else if ((mm = tag.match(/data-ov-rolls="([^"]+)"/))) {
+        e._kind = 'rolls'; e._id = mm[1];
+        const vm = tag.match(/value="([^"]*)"/); e.value = vm ? vm[1] : '';
+        e.disabled = / disabled/.test(stripped);
+        e.setAttribute('data-ov-rolls', e._id);
+      } else if ((mm = tag.match(/data-ov-bags="([^"]+)"/))) {
+        e._kind = 'bags'; e._id = mm[1];
+        const vm = tag.match(/value="([^"]*)"/); e.value = vm ? vm[1] : '';
+        e.disabled = / disabled/.test(stripped);
+        e.setAttribute('data-ov-bags', e._id);
+      }
+      if (e._id) this._els.push(e);
+    }, this);
+  }
+  querySelector(sel) {
+    const mm = sel && sel.match(/data-ov-(use|fold|final|rolls|bags)="([^"]+)"/);
+    if (mm) { const hit = this._els.find(e => e._kind === mm[1] && e._id === mm[2]); return hit || null; }
+    return null;
+  }
+  querySelectorAll(sel) {
+    const mm = sel && sel.match(/data-ov-(use|fold|final|rolls|bags)/);
+    if (mm) return this._els.filter(e => e._kind === mm[1]);
+    return [];
+  }
+}
+
 const byId = {};
 function el(id) { return (byId[id] = byId[id] || new El(id)); }
 
@@ -114,6 +167,9 @@ const panVolumeReadout = el('panVolumeReadout');
 const panTotalReadout = el('panTotalReadout');
 const panOptBeep = el('panOptBeep');
 const panOptToast = el('panOptToast');
+const panRollsDefault = el('panRollsDefault');
+const panBagsDefault = el('panBagsDefault');
+const panOptAutoReport = el('panOptAutoReport');
 const panOptTitle = el('panOptTitle');
 const panOptNav = el('panOptNav');
 const panOptVibrate = el('panOptVibrate');
@@ -137,6 +193,10 @@ byId['panOptToast'] = panOptToast;
 byId['panOptTitle'] = panOptTitle;
 byId['panOptNav'] = panOptNav;
 byId['panOptVibrate'] = panOptVibrate;
+byId['panRollsDefault'] = panRollsDefault;
+byId['panBagsDefault'] = panBagsDefault;
+byId['panOptAutoReport'] = panOptAutoReport;
+byId['panPerPanRows'] = new OvRowsEl();   // settings modal per-pan rows
 
 const docListeners = {};
 global.document = {
@@ -155,7 +215,11 @@ global.document = {
 const store = {};
 store['today'] = '2026-08-30';
 global.today = () => store['today'];
-global.saveProductionFromRun = function () { global.savedRuns = (global.savedRuns || 0) + 1; };
+global.saveProductionFromRun = function (date, pcs, bags, usage, notes, useBy, quiet) {
+  global.savedRuns = (global.savedRuns || 0) + 1;
+  global.lastRun = { date, pcs, bags, quiet };
+  return true;
+};
 global.renderAll = function () {};
 global.ingredientCostFor = function () { return 1000; };
 global.reconcileProductionInventory = function () {};
@@ -224,6 +288,7 @@ pump(21_000);   // elapsed 72 s
 check('pan 1 finished — lift lid & roll (stage 3)', PanTimers.getPans()[0].stage === 3);
 check('tab title flagged with done glyph', document.title.includes('⏰'));
 check('time reads 0:00 when done', panCard(1).querySelector('.pan-time').textContent === '0:00');
+check('finished pan auto-counted its ONE roll and reported it to Production quietly', global.lastRun && global.lastRun.pcs === 1 && global.lastRun.quiet === true);
 
 /* == shift+1 resets == */
 document.dispatch('keydown', { code: 'Digit1', key: '!', shiftKey: true, target: { tagName: 'BODY', isContentEditable: false } });
@@ -231,6 +296,13 @@ check('Shift+1 reset pan 1 back to READY', PanTimers.getPans()[0].stage === 0 &&
 check('banner cleared after reset', banner.className.includes('hidden'));
 check('tab title restored after reset', document.title === 'Daily Crispy Roll Ledger');
 check('ticker stopped when idle', intervals.length === 0);
+
+/* == repeat: every pan completion counts +1 roll into Production == */
+document.dispatch('keydown', { code: 'Digit1', key: '1', shiftKey: false, target: { tagName: 'BODY', isContentEditable: false } });
+pump(71_000);
+check('a second completion of the same pan counts +1 roll again (accumulates)', global.lastRun && global.lastRun.pcs === 1);
+document.dispatch('keydown', { code: 'Digit1', key: '!', shiftKey: true, target: { tagName: 'BODY', isContentEditable: false } });
+check('pan 1 reset after repeat test', PanTimers.getPans()[0].stage === 0 && !PanTimers.getPans()[0].running);
 
 /* == pause/resume mid-run == */
 document.dispatch('keydown', { code: 'Digit2', key: '2', shiftKey: false, target: { tagName: 'BODY', isContentEditable: false } });
@@ -278,6 +350,7 @@ durSel3.value = '120';
 card3.dispatch('change', { target: durSel3 });
 check('duration select applied 120s to pan 3', PanTimers.getPans()[2].duration === 120 && PanTimers.getPans()[2].remaining === 120 && PanTimers.getPans()[2].stage === 0);
 check('pan 1/2 durations untouched (default 70)', PanTimers.getPans()[0].duration === 70 && PanTimers.getPans()[1].duration === 70);
+check('dropdown stored a per-pan override for pan 3 (its own 120 s)', !!PanTimers.getSettings().panOverrides.pan3 && (PanTimers.getSettings().panOverrides.pan3.fold + PanTimers.getSettings().panOverrides.pan3.final) === 120 && PanTimers.getSettings().panOverrides.pan3.rolls > 0);
 
 soundBtn.dispatch('click');
 check('sound toggle switched off', soundBtn.textContent === '🔇 Sound Off');
@@ -310,7 +383,8 @@ check('settings persisted via API', PanTimers.getSettings().fold === 40 && PanTi
 check('alert toggles respected', PanTimers.getSettings().toast === false && PanTimers.getSettings().title === false && PanTimers.getSettings().beep === true);
 check('ready pans adopted the new 55 s batch', PanTimers.getPans()[0].duration === 55 && PanTimers.getPans()[1].duration === 55);
 check('customized pan 3 kept its 120 s duration', PanTimers.getPans()[2].duration === 120);
-check('stored payload is v2 with settings', JSON.parse(store['panTimers_v1']).v === 2 && !!JSON.parse(store['panTimers_v1']).settings);
+check('per-pan override survived the settings save round-trip', PanTimers.getSettings().panOverrides.pan3 && (PanTimers.getSettings().panOverrides.pan3.fold + PanTimers.getSettings().panOverrides.pan3.final) === 120);
+check('stored payload is v3 with settings', JSON.parse(store['panTimers_v1']).v === 3 && !!JSON.parse(store['panTimers_v1']).settings);
 
 /* fold now fires at 40 s elapsed on the new 55 s batch */
 document.dispatch('keydown', { code: 'Digit1', key: '1', shiftKey: false, target: { tagName: 'BODY', isContentEditable: false } });
@@ -336,10 +410,42 @@ check('Escape also closes the modal', (function () {
 /* modal still works after defaults (settings survived) */
 check('final isolation intact after settings round-trip', PanTimers.getPans().every(p => !p.running && p.stage === 0));
 
-/* == dynamic/scalable pan count (1–9) == */
-settingsBtn.dispatch('click');
-panPanCount.value = '5';
-settingsSave.dispatch('click');
+/* == per-pan rolls & bags: global defaults change flows into auto-count & report == */
+  settingsBtn.dispatch('click');
+  panRollsDefault.value = '2';
+  panBagsDefault.value = '3';
+  panOptAutoReport.checked = true;
+  settingsSave.dispatch('click');
+  check('rolls & bags defaults persisted', PanTimers.getSettings().rollsPerBatch === 2 && PanTimers.getSettings().bagsPerBatch === 3 && PanTimers.getSettings().autoReport === true);
+  document.dispatch('keydown', { code: 'Digit2', key: '2', shiftKey: false, target: { tagName: 'BODY', isContentEditable: false } });
+  pump(71_000);   // pan 2 (70 s standard) finishes
+  check('pan 2 auto-counted its 2 rolls + 3 bags and reported to Production', global.lastRun && global.lastRun.pcs === 2 && global.lastRun.bags === 3 && global.lastRun.date === '2026-08-30' && global.lastRun.quiet === true);
+  document.dispatch('keydown', { code: 'Digit2', key: '!', shiftKey: true, target: { tagName: 'BODY', isContentEditable: false } });
+
+  /* == per-pan custom rolls/bags: uncheck "Use global" for pan 3 == */
+  settingsBtn.dispatch('click');
+  settingsSave.dispatch('click'); // reopen → rows are re-rendered with defaults
+  const ovRows = byId['panPerPanRows'];
+  const pan3Use = ovRows.querySelector('[data-ov-use="pan3"]');
+  pan3Use.checked = false;                 // pan 3 no longer uses global
+  pan3Use.dispatch('change', { target: pan3Use });
+  const pan3Rolls = ovRows.querySelector('[data-ov-rolls="pan3"]');
+  pan3Rolls.value = '1';
+  pan3Rolls.dispatch('change', { target: pan3Rolls });
+  const pan3Bags = ovRows.querySelector('[data-ov-bags="pan3"]');
+  pan3Bags.value = '4';
+  pan3Bags.dispatch('change', { target: pan3Bags });
+  settingsSave.dispatch('click');
+  check('per-pan custom rolls/bags saved', PanTimers.getSettings().panOverrides.pan3 && PanTimers.getSettings().panOverrides.pan3.rolls === 1 && PanTimers.getSettings().panOverrides.pan3.bags === 4);
+  document.dispatch('keydown', { code: 'Digit3', key: '3', shiftKey: false, target: { tagName: 'BODY', isContentEditable: false } });
+  pump(71_000);   // pan 3 finishes with its own 1 roll / 4 bags
+  check('pan 3 auto-counted its own 1 roll + 4 bags to Production', global.lastRun && global.lastRun.pcs === 1 && global.lastRun.bags === 4);
+  document.dispatch('keydown', { code: 'Digit3', key: '!', shiftKey: true, target: { tagName: 'BODY', isContentEditable: false } });
+
+  /* == dynamic/scalable pan count (1–9) == */
+  settingsBtn.dispatch('click');
+  panPanCount.value = '5';
+  settingsSave.dispatch('click');
 check('setting 5 pans renders 5 cards', PanTimers.getPans().length === 5);
 check('pan 4 & 5 have their own themes/keys', PanTimers.getPans()[3].key === '4' && PanTimers.getPans()[4].key === '5' && PanTimers.getPans()[4].accent);
 document.dispatch('keydown', { code: 'Digit4', key: '4', shiftKey: false, target: { tagName: 'BODY', isContentEditable: false } });

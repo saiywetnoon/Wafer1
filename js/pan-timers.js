@@ -35,17 +35,33 @@
    5. INTEGRATION — lenient persistence (localStorage) so a refresh
       or background tab never drifts: running pans are stored as a
       wall-clock endAt and recomputed on load.
+   6. PER-PAN TIMING, ROLLS & BAGS — in ⚙ Settings each pan can keep
+      its OWN duration (fold + final), its OWN Rolls and its OWN Bags
+      via settings.panOverrides — everything is set by the user. The
+      card's duration dropdown is always anchored on that pan's own
+      total so a selection and the pan's real checkpoints never
+      disagree.
+   7. AUTOMATIC ROLL + BAG COUNT → PRODUCTION — when a timer finishes,
+      the pan counts the Rolls & Bags you set for it and (with
+      settings.autoReport, on by default) reports them straight into
+      the Production panel (quietly, merged into that day's batch,
+      once). Manually resetting a finished pan cancels its pending
+      count so nothing can ever be double-reported.
    ============================================================ */
 (function () {
   'use strict';
 
   /* ---------- Config ---------- */
   var STORAGE_KEY = 'panTimers_v1';
-  var STORAGE_VERSION = 2;
+  var STORAGE_VERSION = 3;
   var TICK_MS = 200;                  // UI refresh; accuracy from endAt, not ticks
 
   /* Default settings + live (mutable) settings object. Everything adjustable
-     from the ⚙ Fry Timer Settings panel lives here and is persisted. */
+     from the ⚙ Fry Timer Settings panel lives here and is persisted.
+     - panOverrides lets EACH pan keep its own timing (fold/final) and its own
+       rolls-per-batch. Pans with no override simply follow the global values.
+     - autoReport: when a pan finishes, its configured roll count is counted
+       automatically and reported straight into the Production panel. */
   var SETTINGS_DEFAULTS = {
     fold: 50,     // seconds of heating before "Open lid & fold margins" fires
     final: 20,    // seconds of heating after the lid is closed back
@@ -55,50 +71,94 @@
     toast: true,  // app toast messages
     title: true,  // flash the browser-tab title
     nav: true,    // flash the Fry Timers menu button
-    vibrate: true // mobile vibration on checkpoints
+    vibrate: true,             // mobile vibration on checkpoints
+    rollsPerBatch: 1,          // Rolls a finished pan counts by default — YOU set
+                               // this (global here, or per-pan in "Use global"
+                               // mode). Reported to Production as pieces.
+    bagsPerBatch: 1,           // Bags a finished pan counts by default — YOU set
+                               // this too (global, or per-pan). Reported to
+                               // Production as the bag count for that batch.
+    autoReport: true,          // finished batches auto-log to the Production panel
+    panOverrides: {}           // { panId: { fold, final, rolls, bags } } per-pan
+                               // timing, rolls AND bags, all set by you
   };
-  var settings = Object.assign({}, SETTINGS_DEFAULTS);
+  var settings = normalizeSettings(SETTINGS_DEFAULTS);
 
   // Optional pan "runs" (feature 2): after a pan finishes a batch you can log
   // it to production from the timers screen. Keyed by pan id (dynamic).
   var runPieces = {};
   var runBags = {};
+  // Pans whose finished batch was already auto-reported to Production (live
+  // session guard; persisted in each saved pan as `reported` so a refresh can
+  // never double-count a finished batch).
+  var reportedRun = {};
 
-  // Per-pan preset library (feature 1): named timing profiles. Keyed by pan id,
-  // defaults off — each pan simply uses the global settings.
-  var panPresets = { pan1: null, pan2: null, pan3: null };
-
-  // Per-pan duration presets: standard batch (fold + final) plus these extra
-  // seconds. Re-generated whenever the settings change.
+  // Extra seconds offered around a pan's own total in its duration dropdown.
+  // The dropdown is always anchored on THAT pan's effective fold + final so a
+  // selection is compatible with the pan's own timing (never a mismatch).
   var DURATION_STEPS = [0, 15, 30, 45, 60];
 
   function settingsTotal() { return settings.fold + settings.final; }
-  function presetFor(pan) { return panPresets && panPresets[pan.id] ? panPresets[pan.id] : null; }
-  function getTimeoutSettings(pan) {
-    const p = presetFor(pan);
-    if (!p) return { fold: settings.fold, final: settings.final };
-    return { fold: p.fold, final: p.final };
+
+  /* Per-pan overrides: { fold, final, rolls } or null when the pan follows the
+     global settings. */
+  function panOverride(id) {
+    return (settings.panOverrides && settings.panOverrides[id]) || null;
   }
-  function durationOptions() {
-    // Honour per-pan presets for the standard option list.
-    var base = pans.reduce(function (memo, pan) {
-      const t = getTimeoutSettings(pan);
-      memo[t.fold + t.final] = true;
-      return memo;
-    }, {});
-    var presetTotals = Object.keys(base).map(Number);
-    var list = presetTotals.length ? presetTotals
-      : DURATION_STEPS.map(function (step) { return settingsTotal() + step; });
-    // Keep the standard-step options around too:
+
+  /* Effective fold/final for a pan: its own override when set, else global. */
+  function getTimeoutSettings(pan) {
+    var o = panOverride(pan.id);
+    if (o && (o.fold > 0 || o.final > 0)) return { fold: o.fold, final: o.final };
+    return { fold: settings.fold, final: settings.final };
+  }
+  function getTimeoutSettingsForId(id) {
+    var o = panOverride(id);
+    if (o && (o.fold > 0 || o.final > 0)) return { fold: o.fold, final: o.final };
+    return { fold: settings.fold, final: settings.final };
+  }
+
+  /* Rolls this pan counts per finished batch (its own override or the global
+     default). This is what gets reported to the Production panel as pieces. */
+  function rollsFor(id) {
+    var o = panOverride(id);
+    if (o && typeof o.rolls === 'number' && o.rolls > 0) return o.rolls;
+    return settings.rollsPerBatch;
+  }
+
+  /* Bags this pan counts per finished batch (its own override or the global
+     default). Reported to Production as the bag count — so the Production bag
+     count always matches exactly what YOU set, not a fixed 6-per-bag rule. */
+  function bagsFor(id) {
+    var o = panOverride(id);
+    if (o && typeof o.bags === 'number' && o.bags > 0) return o.bags;
+    return settings.bagsPerBatch;
+  }
+
+  function setOverride(id, data) {
+    settings.panOverrides = settings.panOverrides || {};
+    settings.panOverrides[id] = Object.assign({}, settings.panOverrides[id] || {}, data);
+  }
+
+  function removeOverride(id) {
+    if (settings.panOverrides) delete settings.panOverrides[id];
+  }
+
+  /* Dropdown options for ONE pan, always anchored on that pan's own effective
+     total so the selection matches its actual timing (fold + final). */
+  function durationOptions(pan) {
+    var t = getTimeoutSettings(pan);
+    var base = t.fold + t.final;
+    var list = [base];
     DURATION_STEPS.forEach(function (step) {
-      var v = settingsTotal() + step;
-      if (list.indexOf(v) === -1) list.push(v);
+      if (step) { var v = base + step; if (list.indexOf(v) === -1) list.push(v); }
     });
+    var lower = base - 15;
+    if (lower >= 10 && list.indexOf(lower) === -1) list.push(lower);
+    // The pan's current total is always selectable so a restored pan is never
+    // left without its own value in the list.
+    if (pan.duration > 0 && list.indexOf(pan.duration) === -1) list.push(pan.duration);
     list.sort(function (a, b) { return a - b; });
-    // Keep any per-pan custom duration visible in the dropdown.
-    pans.forEach(function (pan) {
-      if (pan.duration > 0 && list.indexOf(pan.duration) === -1) list.push(pan.duration);
-    });
     return list;
   }
   function normalizeSettings(raw) {
@@ -107,6 +167,21 @@
       var n = parseInt(v, 10);
       if (isNaN(n)) return dflt;
       return Math.max(lo, Math.min(hi, n));
+    }
+    /* Per-pan overrides survive a settings save: only rows the user explicitly
+       customised are kept, each clamped to sane ranges. */
+    var overrides = {};
+    if (s.panOverrides && typeof s.panOverrides === 'object') {
+      Object.keys(s.panOverrides).forEach(function (id) {
+        var o = s.panOverrides[id] || {};
+        var fold = num(o.fold, 5, 600, SETTINGS_DEFAULTS.fold);
+        var fin = num(o.final, 1, 300, SETTINGS_DEFAULTS.final);
+        var rolls = num(o.rolls, 1, 500, (SETTINGS_DEFAULTS.rollsPerBatch != null ? SETTINGS_DEFAULTS.rollsPerBatch : 1));
+        var bags = num(o.bags, 1, 500, (SETTINGS_DEFAULTS.bagsPerBatch != null ? SETTINGS_DEFAULTS.bagsPerBatch : 1));
+        if (o && typeof o === 'object' && (o.fold !== undefined || o.final !== undefined || o.rolls !== undefined || o.bags !== undefined)) {
+          overrides[id] = { fold: fold, final: fin, rolls: rolls, bags: bags };
+        }
+      });
     }
     return {
       fold: num(s.fold, 5, 600, SETTINGS_DEFAULTS.fold),
@@ -117,7 +192,11 @@
       toast: s.toast !== false,
       title: s.title !== false,
       nav: s.nav !== false,
-      vibrate: s.vibrate !== false
+      vibrate: s.vibrate !== false,
+      rollsPerBatch: num(s.rollsPerBatch, 1, 500, (SETTINGS_DEFAULTS.rollsPerBatch != null ? SETTINGS_DEFAULTS.rollsPerBatch : 1)),
+      bagsPerBatch: num(s.bagsPerBatch, 1, 500, (SETTINGS_DEFAULTS.bagsPerBatch != null ? SETTINGS_DEFAULTS.bagsPerBatch : 1)),
+      autoReport: s.autoReport !== false,
+      panOverrides: overrides
     };
   }
 
@@ -191,6 +270,8 @@
 
   /* ---------- Factory — one fully isolated timer per pan ---------- */
   function createPan(cfg) {
+    var t = getTimeoutSettingsForId(cfg.id);
+    var dur = t.fold + t.final;
     return {
       id: cfg.id,
       name: cfg.name,
@@ -198,8 +279,8 @@
       code: cfg.code,
       theme: cfg.theme,
       accent: cfg.accent,
-      duration: settingsTotal(),
-      remaining: settingsTotal(),
+      duration: dur,
+      remaining: dur,
       running: false,
       endAt: 0,     // wall-clock ms at which this pan hits 0
       stage: 0      // 0 none · 1 fold (long batch) · 2 fold+close/prep or close/prep · 3 done
@@ -250,7 +331,7 @@
   /* ---------- Controls (each is per-pan; pans never share state) ---------- */
   function startPan(pan) {
     if (pan.running) return;
-    if (pan.stage === 3 || pan.remaining <= 0) { pan.remaining = pan.duration; pan.stage = 0; }
+    if (pan.stage === 3 || pan.remaining <= 0) { pan.remaining = pan.duration; pan.stage = 0; reportedRun[pan.id] = false; }
     if (pan.remaining == null || pan.remaining <= 0) pan.remaining = pan.duration;
     pan.running = true;
     pan.endAt = Date.now() + pan.remaining * 1000;
@@ -280,6 +361,11 @@
     pan.endAt = 0;
     pan.remaining = pan.duration;
     pan.stage = 0;
+    // Resetting a finished pan cancels its pending batch-log count so a manual
+    // reset can never double-report a batch that isn't actually being counted.
+    reportedRun[pan.id] = false;
+    runPieces[pan.id] = 0;
+    runBags[pan.id] = 0;
     save();
     paintPan(pan);
     stopTickIfIdle();
@@ -288,6 +374,15 @@
 
   function applyDuration(pan, sec) {
     if (!sec || sec <= 0 || pan.running) return;   // never change mid-batch
+    // A dropdown selection changes THIS pan's own duration. Keep the fold/final
+    // split proportional to its current timing and store it as a per-pan
+    // override so the pan card, the settings panel and the pan's checkpoints
+    // always agree (the dropdown is then fully compatible with the timing).
+    var t = getTimeoutSettings(pan);
+    var oldTotal = (t.fold + t.final) || 1;
+    var fold = Math.max(1, Math.round(t.fold * sec / oldTotal));
+    var final = Math.max(1, sec - fold);
+    setOverride(pan.id, { fold: fold, final: final, rolls: rollsFor(pan.id), bags: bagsFor(pan.id) });
     pan.duration = sec;
     pan.remaining = sec;
     pan.stage = 0;
@@ -314,7 +409,10 @@
       } else {
         paintPan(pan);
       }
-      if (!wasStage3 && pan.stage === 3 && !pan.running) markRun(pan);
+      if (!wasStage3 && pan.stage === 3 && !pan.running) {
+        markRun(pan);
+        autoReportDone(pan);   // auto-counted rolls → Production panel
+      }
     });
     renderRunSummary();
     wireRunSummary();
@@ -327,7 +425,8 @@
      70 s or less the fold happens inside the final-20s window, so the one
      alert combines both instructions. */
   function stageMessage(pan) {
-    if ((pan.stage === 1 || pan.stage === 2) && pan.duration <= settingsTotal()) {
+    var t = getTimeoutSettings(pan);
+    if ((pan.stage === 1 || pan.stage === 2) && pan.duration <= (t.fold + t.final)) {
       return MSG[1] + ' — ' + MSG[2];
     }
     return MSG[pan.stage] || '';
@@ -410,16 +509,17 @@
 
   /* ---------- Rendering ---------- */
   function cardHtml(pan) {
-    var durOpts = durationOptions().map(function (d) {
+    var durOpts = durationOptions(pan).map(function (d) {
       return '<option value="' + d + '"' + (pan.duration === d ? ' selected' : '') + '>' + fmtTime(d) + '</option>';
     }).join('');
+    var custom = !!panOverride(pan.id);
     return '' +
       '<div class="pan-card pan-theme-' + pan.theme + ' pan-ready" data-pan="' + pan.id + '" style="--pan-accent:' + pan.accent + '">' +
         '<div class="flex items-start justify-between gap-2">' +
           '<div class="flex items-center gap-2">' +
             '<span class="pan-dot"></span>' +
             '<span class="pan-name">' + pan.name + '</span>' +
-            '<span class="pan-preset-label" title="' + (presetFor(pan) ? 'Preset: ' + escapeHtml(presetFor(pan).name) : 'Uses the global settings from ⚙') + '">' + (presetFor(pan) ? escapeHtml(presetFor(pan).name || 'custom') : '⚙') + '</span>' +
+            '<span class="pan-preset-label" title="' + (custom ? 'This pan has its own timing &amp; roll count (change it in ⚙ Settings)' : 'Uses the global settings from ⚙') + '">' + (custom ? 'custom' : '⚙') + '</span>' +
           '</div>' +
           '<span class="pan-badge">READY</span>' +
         '</div>' +
@@ -436,19 +536,25 @@
   }
 
   function badgeText(pan) {
+    var t = getTimeoutSettings(pan);
     if (pan.stage === 3) return 'DONE';
     if (pan.stage === 1) return 'FOLD MARGINS';
-    if (pan.stage === 2) return pan.duration <= settingsTotal() ? 'FOLD MARGINS' : 'CLOSE & PREP';
+    if (pan.stage === 2) return pan.duration <= (t.fold + t.final) ? 'FOLD MARGINS' : 'CLOSE & PREP';
     if (pan.running) return 'HEATING';
     if (pan.remaining < pan.duration) return 'PAUSED';
     return 'READY';
   }
 
   function msgText(pan) {
-    if (pan.stage === 3) return MSG[3];
+    var t = getTimeoutSettings(pan);
+    if (pan.stage === 3) {
+      var n = rollsFor(pan.id);
+      var noun = n + ' roll' + (n === 1 ? '' : 's');
+      return MSG[3] + (settings.autoReport ? ' — ' + noun + ' counted & reported to Production' : ' — ' + noun + ' counted, log it in the batch log');
+    }
     if (pan.stage === 2) return stageMessage(pan);
     if (pan.stage === 1) return stageMessage(pan);
-    if (pan.running) return 'Heating (lid closed) — open lid & fold margins at ' + fmtTime(settings.fold);
+    if (pan.running) return 'Heating (lid closed) — open lid & fold margins at ' + fmtTime(t.fold);
     if (pan.remaining < pan.duration) return 'Paused — press Start to continue';
     return 'Press Start or press key ' + pan.key;
   }
@@ -494,11 +600,28 @@
   }
 
   /* ---------- Batch-run tracker (feature 2) ---------- */
+  /* A finished pan automatically counts its configured Rolls/batch AND
+     Bags/batch (per-pan or global defaults — both set by the user). The counts
+     stay editable in the batch log, and when autoReport is on they are reported
+     straight into the Production panel. */
   function markRun(pan) {
-    if (pan.stage === 3 && !pan.running && !runPieces[pan.id]) {
-      // Pan finished: remember pieces (user will adjust + log to Production).
-      runPieces[pan.id] = runPieces[pan.id] || 6;
-      runBags[pan.id] = runBags[pan.id] || 1;
+    if (pan.stage === 3 && !pan.running && !reportedRun[pan.id]) {
+      runPieces[pan.id] = runPieces[pan.id] || rollsFor(pan.id);
+      runBags[pan.id] = runBags[pan.id] || bagsFor(pan.id);
+    }
+  }
+  /* Auto-report a finished batch to Production (quietly — no tab jump, no
+     success toast). The run is only cleared when the report succeeded, so a
+     stock shortage never loses the count and it can be retried. Bags pass
+     through with the exact value you set so the Production bag count matches. */
+  function autoReportDone(pan) {
+    if (!settings.autoReport || reportedRun[pan.id] || !runPieces[pan.id]) return;
+    if (typeof saveProductionFromRun !== 'function') return;
+    var ok = saveProductionFromRun(today(), runPieces[pan.id], runBags[pan.id], undefined, undefined, undefined, true);
+    if (ok) {
+      runPieces[pan.id] = 0;
+      runBags[pan.id] = 0;
+      reportedRun[pan.id] = true;
     }
   }
   function renderRunSummary() {
@@ -510,10 +633,11 @@
       return '<div class="p-3 rounded-lg bg-gray-800/60 border border-gray-700">' +
         '<div class="text-xs font-bold text-gray-300">' + escapeHtml(pan.name) + '</div>' +
         '<div class="flex items-center gap-2 mt-1">' +
-        '<input type="number" min="0" step="1" value="' + pcs + '" data-run-pieces="' + pan.id + '" class="w-16 px-1.5 py-1 rounded border border-gray-700 bg-gray-800 text-xs text-right"> pcs' +
+        '<label class="text-[10px] text-gray-400">Rolls<input type="number" min="0" step="1" value="' + pcs + '" data-run-pieces="' + pan.id + '" class="pan-ov-input w-16"></label>' +
+        '<label class="text-[10px] text-gray-400">Bags<input type="number" min="0" step="1" value="' + bags + '" data-run-bags="' + pan.id + '" class="pan-ov-input w-16"></label>' +
         '</div>' +
-        '<div class="text-[10px] text-gray-500 mt-1">≈ ' + bags + ' bags at 6 pcs/bag · ' + escapeHtml(pan.name) + '</div></div>';
-    }).join('') || '<div class="text-gray-500 text-xs">No finished batches yet.</div>';
+        '<div class="text-[10px] text-gray-500 mt-1">Rolls &amp; bags you set are what get reported to Production when this batch is logged.</div></div>';
+    }).join('') || '<div class="text-gray-500 text-xs">No finished batches yet. Finished batches are auto-counted from your Rolls/bags settings and' + (settings.autoReport ? ' reported to Production.' : ' ready for the Log button below.') + '</div>';
   }
   function wireRunSummary() {
     const box = g('panRunSummary');
@@ -521,7 +645,12 @@
     Array.from(box.querySelectorAll('[data-run-pieces]')).forEach(function (inp) {
       inp.addEventListener('change', function () {
         runPieces[inp.dataset.runPieces] = Math.max(0, parseInt(inp.value, 10) || 0);
-        runBags[inp.dataset.runPieces] = Math.round(runPieces[inp.dataset.runPieces] / 6) || 0;
+        renderRunSummary();
+      });
+    });
+    Array.from(box.querySelectorAll('[data-run-bags]')).forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        runBags[inp.dataset.runBags] = Math.max(0, parseInt(inp.value, 10) || 0);
         renderRunSummary();
       });
     });
@@ -532,17 +661,23 @@
     pans.forEach(function (pan) {
       const pcs = runPieces[pan.id] || 0;
       if (!pcs) return;
-      saveProductionFromRun(today(), pcs, runBags[pan.id] || Math.round(pcs / 6), undefined, (g('logNotes') ? g('logNotes').value : ''), undefined);
-      runPieces[pan.id] = 0;
-      runBags[pan.id] = 0;
-      savedAny = true;
+      const ok = saveProductionFromRun(today(), pcs, runBags[pan.id] || bagsFor(pan.id), undefined, (g('logNotes') ? g('logNotes').value : ''), undefined);
+      if (ok) {
+        runPieces[pan.id] = 0;
+        runBags[pan.id] = 0;
+        reportedRun[pan.id] = true;
+        savedAny = true;
+      }
     });
     if (savedAny) {
       renderRunSummary();
       if (window.showToast) showToast('Finished batches logged to Production for today.', 'success');
     } else {
-      if (window.showToast) showToast('No finished batches to log yet.', 'info');
+      if (window.showToast) showToast(noFinishedRuns() ? 'No finished batches to log yet.' : 'Could not log — check ingredient stock.', 'info');
     }
+  }
+  function noFinishedRuns() {
+    return pans.every(function (pan) { return !runPieces[pan.id]; });
   }
 
   function updateSoundButton() {
@@ -628,10 +763,14 @@
       resetAllBtn.addEventListener('click', function () {
         pans.forEach(function (p) {
           p.running = false; p.endAt = 0; p.remaining = p.duration; p.stage = 0;
+          reportedRun[p.id] = false;
+          runPieces[p.id] = 0;
+          runBags[p.id] = 0;
         });
         stopTickIfIdle();
         save();
         paint();
+        renderRunSummary();
         updateGlobalBanner();
         if (window.showToast) showToast('All frying pans reset.', 'info');
       });
@@ -661,6 +800,10 @@
     g('panOptTitle').checked = settings.title;
     g('panOptNav').checked = settings.nav;
     g('panOptVibrate').checked = settings.vibrate;
+    if (g('panRollsDefault')) g('panRollsDefault').value = settings.rollsPerBatch;
+    if (g('panBagsDefault')) g('panBagsDefault').value = settings.bagsPerBatch;
+    if (g('panOptAutoReport')) g('panOptAutoReport').checked = settings.autoReport;
+    renderPanOverrideRows();
     updateTotalReadout();
     updateVolumeReadout();
     m.classList.remove('hidden');
@@ -685,6 +828,21 @@
   }
 
   function readSettingsFromForm() {
+    // Per-pan rows: only pans with "Use global" UNCHECKED get an override.
+    var overrides = {};
+    var box = g('panPerPanRows');
+    if (box && box.querySelectorAll) {
+      Array.from(box.querySelectorAll('[data-ov-use]')).forEach(function (cb) {
+        var id = cb.getAttribute && cb.getAttribute('data-ov-use');
+        if (!id || cb.checked) return;   // pan follows the global timing
+        var foldEl = box.querySelector('[data-ov-fold="' + id + '"]');
+        var finalEl = box.querySelector('[data-ov-final="' + id + '"]');
+        var rollsEl = box.querySelector('[data-ov-rolls="' + id + '"]');
+        var bagsEl = box.querySelector('[data-ov-bags="' + id + '"]');
+        if (!foldEl || !finalEl || !rollsEl || !bagsEl) return;
+        overrides[id] = { fold: foldEl.value, final: finalEl.value, rolls: rollsEl.value, bags: bagsEl.value };
+      });
+    }
     return normalizeSettings({
       fold: g('panFoldSec').value,
       final: g('panFinalSec').value,
@@ -694,23 +852,90 @@
       toast: g('panOptToast').checked,
       title: g('panOptTitle').checked,
       nav: g('panOptNav').checked,
-      vibrate: g('panOptVibrate').checked
+      vibrate: g('panOptVibrate').checked,
+      rollsPerBatch: g('panRollsDefault') ? g('panRollsDefault').value : undefined,
+      bagsPerBatch: g('panBagsDefault') ? g('panBagsDefault').value : undefined,
+      autoReport: g('panOptAutoReport') ? g('panOptAutoReport').checked : undefined,
+      panOverrides: overrides
     });
   }
 
-  /* Applying new settings: ready pans on the standard (default) batch follow
-     the new total; running / paused / customized pans keep their own duration.
-     Checkpoints (fold / close-prep) always use the new timings from here on. */
+  /* Per-pan rows in the settings modal: each pan shows its own fold/final/rolls/
+     bags with a "Use global" checkbox. Unchecking enables custom values — you
+     set the exact rolls AND bags that pan counts when it finishes a batch. */
+  function renderPanOverrideRows() {
+    var box = g('panPerPanRows');
+    if (!box) return;
+    if (!pans.length) pans = buildPanConfigs().map(createPan);
+    box.innerHTML = pans.map(function (pan) {
+      var o = panOverride(pan.id);
+      var useGlobal = !o;
+      var fold = o ? o.fold : settings.fold;
+      var fin = o ? o.final : settings.final;
+      var rolls = o ? o.rolls : settings.rollsPerBatch;
+      var bags = o ? o.bags : settings.bagsPerBatch;
+      return '<div class="rounded-lg bg-gray-800/50 border border-gray-700 p-2 pan-ov-row" data-ov-row="' + pan.id + '">' +
+        '<div class="flex items-center justify-between gap-2 mb-1.5">' +
+          '<span class="text-xs font-bold" style="color:' + pan.accent + '">' + escapeHtml(pan.name) + '</span>' +
+          '<label class="flex items-center gap-1 text-[10px] text-gray-400 cursor-pointer">' +
+            '<input type="checkbox" class="accent-amber-500" data-ov-use="' + pan.id + '"' + (useGlobal ? ' checked' : '') + '> Use global' +
+          '</label>' +
+        '</div>' +
+        '<div class="grid grid-cols-4 gap-2">' +
+          '<label class="block text-[10px] text-gray-400 font-semibold">Fold (s)<input type="number" min="5" max="600" step="5" inputmode="numeric" data-ov-fold="' + pan.id + '" value="' + fold + '"' + (useGlobal ? ' disabled' : '') + ' class="pan-ov-input"></label>' +
+          '<label class="block text-[10px] text-gray-400 font-semibold">Final (s)<input type="number" min="1" max="300" step="5" inputmode="numeric" data-ov-final="' + pan.id + '" value="' + fin + '"' + (useGlobal ? ' disabled' : '') + ' class="pan-ov-input"></label>' +
+          '<label class="block text-[10px] text-gray-400 font-semibold">Rolls<input type="number" min="1" max="500" step="1" inputmode="numeric" data-ov-rolls="' + pan.id + '" value="' + rolls + '"' + (useGlobal ? ' disabled' : '') + ' class="pan-ov-input"></label>' +
+          '<label class="block text-[10px] text-gray-400 font-semibold">Bags<input type="number" min="1" max="500" step="1" inputmode="numeric" data-ov-bags="' + pan.id + '" value="' + bags + '"' + (useGlobal ? ' disabled' : '') + ' class="pan-ov-input"></label>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    wirePanOverrideRows();
+  }
+
+  function wirePanOverrideRows() {
+    var box = g('panPerPanRows');
+    if (!box || !box.querySelectorAll) return;
+    Array.from(box.querySelectorAll('[data-ov-use]')).forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var id = cb.getAttribute && cb.getAttribute('data-ov-use');
+        if (!id) return;
+        var row = box.querySelector('[data-ov-row="' + id + '"]');
+        if (!row) return;
+        Array.from(row.querySelectorAll('[data-ov-fold], [data-ov-final], [data-ov-rolls], [data-ov-bags]')).forEach(function (inp) {
+          inp.disabled = cb.checked;
+        });
+        if (cb.checked) {
+          // Copy the current global values into the (now disabled) inputs.
+          var f = g('panFoldSec') ? g('panFoldSec').value : '';
+          var fn = g('panFinalSec') ? g('panFinalSec').value : '';
+          var rd = g('panRollsDefault') ? g('panRollsDefault').value : '';
+          var bd = g('panBagsDefault') ? g('panBagsDefault').value : '';
+          var fe = row.querySelector('[data-ov-fold="' + id + '"]');
+          if (fe) fe.value = f;
+          var fne = row.querySelector('[data-ov-final="' + id + '"]');
+          if (fne) fne.value = fn;
+          var re = row.querySelector('[data-ov-rolls="' + id + '"]');
+          if (re) re.value = rd;
+          var be = row.querySelector('[data-ov-bags="' + id + '"]');
+          if (be) be.value = bd;
+        }
+      });
+    });
+  }
+
+  /* Applying new settings: every READY pan picks up its OWN effective duration
+     (per-pan override when set, otherwise the new global fold + final).
+     Running / paused / done pans keep their current countdown untouched.
+     Checkpoints (fold / close-prep) always use each pan's own timings. */
   function applySettings(next) {
-    var prevTotal = settingsTotal();
     var prevCount = settings.panCount;
     settings = normalizeSettings(next);
-    var newTotal = settingsTotal();
     if (prevCount !== settings.panCount) rebuildPans();   // scale the production line
     pans.forEach(function (pan) {
-      if (!pan.running && pan.stage === 0 && pan.remaining === pan.duration && pan.duration === prevTotal && !(prevCount !== settings.panCount)) {
-        pan.duration = newTotal;
-        pan.remaining = newTotal;
+      if (!pan.running && pan.stage === 0 && pan.remaining === pan.duration) {
+        var t = getTimeoutSettings(pan);
+        pan.duration = t.fold + t.final;
+        pan.remaining = pan.duration;
       }
     });
     save();
@@ -725,7 +950,15 @@
     var byId = {};
     pans.forEach(function (p) { byId[p.id] = p; });
     var next = configs.map(function (cfg) {
-      return byId[cfg.id] ? Object.assign(byId[cfg.id], { theme: cfg.theme, accent: cfg.accent, key: cfg.key, code: cfg.code, name: cfg.name }) : createPan(cfg);
+      var preserved = byId[cfg.id];
+      if (preserved) {
+        // Keep the auto-report guard for pans that are carried over, so a
+        // pan-count change can never cause a finished batch to be logged twice.
+        if (reportedRun[preserved.id]) reportedRun[cfg.id] = true;
+        Object.assign(preserved, { theme: cfg.theme, accent: cfg.accent, key: cfg.key, code: cfg.code, name: cfg.name });
+        return preserved;
+      }
+      return createPan(cfg);
     });
     pans = next;
     runPieces = {};
@@ -762,6 +995,13 @@
       showSettings();   // refresh the form with the defaults
       if (window.showToast) showToast('Fry timer settings reset to defaults.', 'info');
     });
+
+    var useGlobalAll = g('panUseGlobalBtn');
+    if (useGlobalAll) useGlobalAll.addEventListener('click', function () {
+      // Clear every pan's own timing so all pans follow the global settings.
+      pans.forEach(function (pan) { removeOverride(pan.id); });
+      renderPanOverrideRows();
+    });
   }
 
   /* ---------- Persistence (timestamp-based → refresh-safe timers) ---------- */
@@ -771,7 +1011,7 @@
         v: STORAGE_VERSION,
         settings: settings,
         pans: pans.map(function (p) {
-          return { id: p.id, duration: p.duration, remaining: p.remaining, running: p.running, endAt: p.endAt, stage: p.stage };
+          return { id: p.id, duration: p.duration, remaining: p.remaining, running: p.running, endAt: p.endAt, stage: p.stage, reported: !!reportedRun[p.id] };
         })
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -794,7 +1034,9 @@
     data.pans.forEach(function (saved) {
       var pan = findPan(saved.id);
       if (!pan) return;
-      pan.duration = (saved.duration > 0) ? saved.duration : settingsTotal();
+      if (saved.reported) reportedRun[saved.id] = true;
+      var eff = getTimeoutSettingsForId(pan.id);
+      pan.duration = (saved.duration > 0) ? saved.duration : (eff.fold + eff.final);
       pan.stage = saved.stage || 0;
       if (saved.running && saved.endAt) {
         pan.running = true;

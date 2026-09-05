@@ -885,7 +885,7 @@ tailwind.config = {
           </div>
           <div>
             <h3 class="font-bold text-base">Frying Pan Timers</h3>
-            <p class="text-xs text-gray-400">Scalable independent pans — heat <b class="text-amber-400">fold</b> seconds, open lid &amp; fold margins, close back, then heat <b class="text-amber-400">final</b> seconds before <b class="text-red-400">lift lid &amp; roll!</b> Add/remove pans in ⚙ Settings.</p>
+            <p class="text-xs text-gray-400">Independent pans, each with its own timing — heat <b class="text-amber-400">fold</b> seconds, open lid &amp; fold margins, close back, then heat <b class="text-amber-400">final</b> seconds before <b class="text-red-400">lift lid &amp; roll!</b> Each finished pan counts its <b class="text-emerald-400">Rolls &amp; Bags</b> (you set them) and reports them to the Production panel. Set each pan's own timing, rolls &amp; bags in ⚙ Settings.</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -909,7 +909,7 @@ tailwind.config = {
         <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="list-checks" class="w-5 h-5 text-emerald-400"></i> Today's Batch Log</h3>
         <button id="panSaveRunBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition">Log finished batch → Production</button>
       </div>
-      <p class="text-xs text-gray-400 mb-2">When a pan finishes, its pieces are remembered here. Adjust and click the button to record the batch straight into Production (usage uses the current form's usage).</p>
+      <p class="text-xs text-gray-400 mb-2">Each time a pan finishes it counts the <b class="text-emerald-400">Rolls &amp; Bags</b> you set for it (⚙ Settings). With <b>auto-report</b> on, those exact counts go straight into Production — Pieces and Bags Prod. grow automatically. Off, they stay here where you can adjust Rolls &amp; Bags before clicking the button to record them (usage uses the current form's usage).</p>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="panRunSummary"></div>
     </div>
   </section>
@@ -940,6 +940,36 @@ tailwind.config = {
             <input id="panPanCount" type="number" min="1" max="9" step="1" inputmode="numeric" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500">
             <span class="font-normal normal-case text-[10px] text-gray-500">Add/remove pans to match your production line. Each pan keeps its own shortcut key (1–9).</span>
           </label>
+          <!-- Per-pan timings & rolls: each pan can run its OWN duration and
+               count its OWN rolls + bags per batch. Rows are rendered by pan-timers.js. -->
+          <div class="mt-4 pt-3 border-t border-gray-800">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <div class="text-xs font-bold text-gray-300">Per-pan timings, rolls &amp; bags</div>
+              <button id="panUseGlobalBtn" type="button" class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-[10px] font-bold transition whitespace-nowrap">Use global for all</button>
+            </div>
+            <div id="panPerPanRows" class="space-y-2"></div>
+            <p class="text-[10px] text-gray-500 mt-1.5">Each pan can run its own heat timing and count its own Rolls and Bags when a batch finishes. Uncheck "Use global" to customise that pan.</p>
+          </div>
+          <!-- Rolls & bags & reporting -->
+          <div class="mt-4 pt-3 border-t border-gray-800">
+            <div class="text-xs font-bold text-gray-300 mb-2">Rolls, bags &amp; reporting</div>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="block text-[11px] text-gray-400 font-semibold">
+                Rolls per finished batch (default)
+                <input id="panRollsDefault" type="number" min="1" max="500" step="1" inputmode="numeric" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500">
+              </label>
+              <label class="block text-[11px] text-gray-400 font-semibold">
+                Bags per finished batch (default)
+                <input id="panBagsDefault" type="number" min="1" max="500" step="1" inputmode="numeric" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500">
+              </label>
+            </div>
+            <span class="font-normal normal-case text-[10px] text-gray-500">These are <b>your</b> numbers for one pan completion — the exact Rolls and Bags that get added to the Production panel each time a pan finishes.</span>
+            <label class="flex items-center gap-2 cursor-pointer mt-2 text-sm text-gray-200">
+              <input id="panOptAutoReport" type="checkbox" class="accent-amber-500 w-4 h-4">
+              Automatically report finished batches to Production
+              <span class="text-[10px] text-gray-500">— each finished pan's Rolls &amp; Bags are added to the Production panel right away.</span>
+            </label>
+          </div>
         </div>
         <div>
           <div class="text-xs font-bold text-gray-300 mb-2">Sounds &amp; alerts</div>

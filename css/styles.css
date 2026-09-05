@@ -81,6 +81,10 @@
 .pan-btn-primary:hover { background: #047857; }
 .pan-running .pan-btn-primary { background: #B45309; border-color: #F59E0B; }
 .pan-dur { padding: 6px 8px; border-radius: 8px; background: #1F2937; border: 1px solid #374151; color: #E5E7EB; font-size: 12px; margin-left: auto; }
+/* Per-pan override inputs (settings modal rows). Compact so several pans fit. */
+.pan-ov-input { margin-top: 2px; width: 100%; padding: 5px 6px; border-radius: 6px; background: #1F2937; border: 1px solid #374151; color: #E5E7EB; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pan-ov-input:disabled { opacity: .45; cursor: not-allowed; }
+.pan-ov-input:focus { outline: none; border-color: #F59E0B; box-shadow: 0 0 0 2px rgba(245, 158, 11, .3); }
 .pan-hint { margin-top: .6rem; font-size: 10px; color: #6B7280; }
 .pan-card kbd { background: #1F2937; border: 1px solid #374151; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-family: inherit; font-size: 10px; font-weight: 700; color: #D1D5DB; }
 #panAlertBanner kbd, .pan-hint kbd { background: rgba(31, 41, 55, .8); }
