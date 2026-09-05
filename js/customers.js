@@ -19,7 +19,14 @@ function renderCustomers() {
   const customers = state.customers || [];
   const listBody = $('customerListBody');
   if (listBody) {
-    listBody.innerHTML = customers.length ? customers.map(function (c) {
+    const query = (($('customerFilter') || {}).value || '').trim().toLowerCase();
+    const visible = query
+      ? customers.filter(function (c) {
+          return String(c.name).toLowerCase().indexOf(query) !== -1
+            || String(c.phone || '').toLowerCase().indexOf(query) !== -1;
+        })
+      : customers;
+    listBody.innerHTML = visible.length ? visible.map(function (c) {
       const debt = toFinite(c.debt);
       return '<tr class="border-b border-gray-800">' +
         '<td class="py-1.5 pr-2 font-medium">' + esc(c.name) + (c.phone ? ' <span class="text-gray-500">(' + esc(c.phone) + ')</span>' : '') + '</td>' +
@@ -27,7 +34,7 @@ function renderCustomers() {
         '<td class="py-1.5 pr-2 ' + (debt > 0 ? 'text-red-400' : 'text-emerald-400') + ' font-semibold">' + fmtKs(debt) + '</td>' +
         '<td class="py-1.5"><button onclick="deleteCustomer(\'' + c.id + '\')" class="text-red-500 hover:text-red-400" title="Remove customer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></td>' +
         '</tr>';
-    }).join('') : '<tr><td colspan="4" class="py-4 text-center text-gray-500">No customers yet. Add your first regular customer above.</td></tr>';
+    }).join('') : '<tr><td colspan="4" class="py-4 text-center text-gray-500">' + (query ? 'No customers match "' + esc(query) + '".' : 'No customers yet. Add your first regular customer above.') + '</td></tr>';
   }
 
   refillCustomerSelect($('paymentCustomer'), customers, 'Select customer...');
@@ -45,14 +52,15 @@ function renderCustomers() {
   lucide.createIcons();
 }
 
-function deleteCustomer(id) {
+async function deleteCustomer(id) {
   const customer = (state.customers || []).find(function (c) { return c.id === id; });
   const hasSales = (state.sales || []).some(function (sale) { return sale.customerId === id; });
   if ((customer && toFinite(customer.debt) > 0) || hasSales) {
     showToast('Keep this customer because they have a sale or an outstanding balance.', 'error');
     return;
   }
-  if (!confirm('Remove this customer?')) return;
+  const ok = await Modal.confirm({ title: 'Remove customer?', message: 'Remove this customer from the list?', danger: true, okLabel: 'Remove' });
+  if (!ok) return;
   state.customers = (state.customers || []).filter(function (c) { return c.id !== id; });
   saveState();
   renderCustomers();
@@ -100,6 +108,7 @@ function renderCustomerStatement() {
 }
 
 if ($('statementCustomer')) $('statementCustomer').addEventListener('change', renderCustomerStatement);
+if ($('customerFilter')) $('customerFilter').addEventListener('input', function () { renderCustomers(); });
 
 $('addCustomerBtn').addEventListener('click', function () {
   const name = validateText($('custName'));

@@ -4,7 +4,8 @@
    (The auth screen's `login`/`signup` buttons are excluded — they use a
    different `auth-tab-btn` switcher, not the nav tabs.) */
 const fs = require('fs');
-const h = fs.readFileSync('d:\\wafer\\Wafer_documentary\\dail-ledger v1.5\\index.html', 'utf8');
+const path = require('path');
+const h = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 let pass = 0, fail = 0;
 function ok(cond, msg) { if (cond) { pass++; console.log('PASS ' + msg); } else { fail++; console.log('FAIL ' + msg); } }
 

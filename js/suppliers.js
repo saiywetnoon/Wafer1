@@ -100,8 +100,9 @@ $('addSupplierBtn').addEventListener('click', function () {
   showToast('Supplier "' + name + '" added.');
 });
 
-function deleteSupplier(id) {
-  if (!confirm('Remove this supplier? Their purchases and payables stay in history.')) return;
+async function deleteSupplier(id) {
+  const ok = await Modal.confirm({ title: 'Remove supplier?', message: 'Their purchases and payables stay in history.', danger: true, okLabel: 'Remove' });
+  if (!ok) return;
   state.suppliers = (state.suppliers || []).filter(function (s) { return s.id !== id; });
   saveState();
   renderSuppliers();
@@ -175,7 +176,7 @@ $('addPurchaseItemBtn').addEventListener('click', function () {
   recalcPurchaseTotal();
 });
 /* ---------- Save purchase (adds to inventory) ---------- */
-$('savePurchaseBtn').addEventListener('click', function () {
+$('savePurchaseBtn').addEventListener('click', async function () {
   var supplierId = $('purchaseSupplier').value;
   var date = $('purchaseDate').value || today();
   if (!supplierId) { showToast('Select a shop for this purchase.', 'error'); return; }
@@ -228,7 +229,8 @@ $('savePurchaseBtn').addEventListener('click', function () {
   });
   if (updated.length) {
     var names = updated.map(function (u) { return u.name; }).join(', ');
-    if (confirm('The purchase price for ' + names + ' differs from your price list. Update the price list to the actual purchased price?')) {
+    const updatePrices = await Modal.confirm({ title: 'Update price list?', message: 'The purchase price for ' + names + ' differs from your price list. Update the price list to the actual purchased price?' });
+    if (updatePrices) {
       updated.forEach(function (u) {
         var ing = priceItemByName(u.name);
         if (!ing) return;

@@ -1,0 +1,7 @@
+/* Tailwind v3 build input. Generated file: css/tailwind.css (do not edit that
+   file by hand). Build with:
+     npx tailwindcss@3.4.17 -i css/tailwind-input.css -o css/tailwind.css
+*/
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

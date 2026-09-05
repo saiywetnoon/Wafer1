@@ -1,0 +1,16 @@
+{
+  "name": "daily-crispy-roll-ledger",
+  "version": "1.11.0",
+  "description": "Daily business operating system for a crispy-roll food vendor — production, sales, inventory, cash, customers, suppliers, PWA.",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i css/tailwind-input.css -o css/tailwind.css",
+    "test:syntax": "node _check_syntax.js",
+    "verify:classes": "node _verify_classes.js css/tailwind.css",
+    "test:verify": "node _verify_sync.js && node _verify_refactor.js && node _verify_inventory.js && node _verify_draft_recovery.js && node _verify_ai.js && node _verify_pan_timers.js && node _smoke_pan_timers.js && node _verify_layout.js",
+    "test": "npm run test:syntax && npm run test:verify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

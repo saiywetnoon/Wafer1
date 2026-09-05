@@ -113,6 +113,13 @@ async function authBootstrap() {
     if (u && u.email) {
       if (u.status === 'approved') {
         renderAuthBadge();
+        // Coming from a password-reset link (recovery session): keep the auth
+        // screen in front so the "set new password" pane is actually visible.
+        if (__authRecovery) {
+          showAuthScreen('Set a new password to continue.');
+          showNewPasswordPane();
+          return false;
+        }
         hideAuthScreen();
         return true;
       }
@@ -169,6 +176,8 @@ function switchAuthTab(mode) {
   });
   const login = $('loginPane'); if (login) login.classList.toggle('hidden', mode !== 'login');
   const signup = $('signupPane'); if (signup) signup.classList.toggle('hidden', mode !== 'signup');
+  const reset = $('resetPane'); if (reset) reset.classList.add('hidden');
+  const newPw = $('newPasswordPane'); if (newPw) newPw.classList.add('hidden');
   setAuthMsg('');
 }
 
@@ -189,6 +198,55 @@ async function doAuthLogin() {
   const r = await authLogin(inp.email, inp.password);
   if (r && r.ok) { location.reload(); return; }
   setAuthMsg((r && (r.message || r.error)) || 'Login failed.', 'error');
+}
+
+/* ---------- Password reset ---------- */
+function hidePanes(except) {
+  ['loginPane', 'signupPane', 'resetPane', 'newPasswordPane'].forEach(function (id) {
+    if (id === except) return;
+    const el = $(id);
+    if (el) el.classList.add('hidden');
+  });
+}
+function showResetPane() {
+  hidePanes('resetPane');
+  const p = $('resetPane'); if (p) p.classList.remove('hidden');
+  setAuthMsg('');
+  const email = $('resetEmail'); if (email) setTimeout(function () { email.focus(); }, 20);
+}
+function showNewPasswordPane() {
+  hidePanes('newPasswordPane');
+  const p = $('newPasswordPane'); if (p) p.classList.remove('hidden');
+  setAuthMsg('');
+  const pw = $('newPassword'); if (pw) setTimeout(function () { pw.focus(); }, 20);
+}
+async function doAuthReset() {
+  if (!SUPA.configured()) { setAuthMsg('Password reset requires the Supabase account backend.', 'error'); return; }
+  const email = (($('resetEmail') || {}).value || '').trim();
+  if (!email) { setAuthMsg('Enter your email address.', 'error'); return; }
+  setAuthMsg('Sending reset link…', 'info');
+  const r = await SUPA.resetPassword(email);
+  if (r && r.ok) {
+    setAuthMsg('Reset link sent. Check your email inbox (and spam) and click the link to set a new password.', 'success');
+    $('resetEmail').value = '';
+  } else {
+    setAuthMsg((r && r.error) || 'Could not send the reset link — try again.', 'error');
+  }
+}
+async function doUpdatePassword() {
+  const pw = (($('newPassword') || {}).value || '');
+  if (pw.length < 6) { setAuthMsg('Password must be at least 6 characters.', 'error'); return; }
+  setAuthMsg('Updating…', 'info');
+  const r = await SUPA.updatePassword(pw);
+  if (r && r.ok) {
+    setAuthMsg('Password updated. Log in with your new password.', 'success');
+    await SUPA.signOut();          // clear the recovery session
+    switchAuthTab('login');
+    $('newPassword').value = '';
+    const s = $('authScreen'); if (s) s.classList.remove('hidden');
+  } else {
+    setAuthMsg((r && r.error) || 'Could not update the password — the reset link may have expired.', 'error');
+  }
 }
 async function doAuthSignup() {
   setAuthMsg('Creating account…', 'info');
@@ -277,14 +335,15 @@ async function adminAct(action, id, email) {
 /* ============================================================
    LEGACY DATA IMPORT — bring old browser ledger into the account
    ============================================================ */
-function maybeImportLegacy() {
+async function maybeImportLegacy() {
   try {
     if (!authEmail()) return;
     const oldRaw = localStorage.getItem(STORAGE_KEY);
     if (!oldRaw) return;
     const newKey = companyStateKey();
     if (localStorage.getItem(newKey)) return;
-    if (confirm('Found old browser ledger data. Import it into this account now?')) {
+    const ok = await Modal.confirm({ title: 'Import old data?', message: 'Found old browser ledger data. Import it into this account now?', okLabel: 'Import' });
+    if (ok) {
       localStorage.setItem(newKey, oldRaw);
       showToast('Your previous data was imported into this account.', 'success');
     }
@@ -307,4 +366,20 @@ if ($('authPassword')) $('authPassword').addEventListener('keydown', function (e
   if ($('signupPane') && !$('signupPane').classList.contains('hidden')) doAuthSignup();
   else doAuthLogin();
 });
+/* Password reset UI */
+if ($('forgotPwLink')) $('forgotPwLink').addEventListener('click', showResetPane);
+if ($('authResetBtn')) $('authResetBtn').addEventListener('click', doAuthReset);
+if ($('resetBackLink')) $('resetBackLink').addEventListener('click', function () { switchAuthTab('login'); });
+if ($('resetEmail')) $('resetEmail').addEventListener('keydown', function (e) { if (e.key === 'Enter') doAuthReset(); });
+if ($('authUpdatePwBtn')) $('authUpdatePwBtn').addEventListener('click', doUpdatePassword);
+if ($('newPassword')) $('newPassword').addEventListener('keydown', function (e) { if (e.key === 'Enter') doUpdatePassword(); });
+/* When the user follows a password-reset email, Supabase starts a "recovery"
+   session; this app's copy opens showing a "set new password" pane — and keeps
+   the auth screen in front of the app until the new password is saved. */
+let __authRecovery = false;
+if (SUPA.configured()) {
+  SUPA.onAuthState(function (event) {
+    if (event === 'PASSWORD_RECOVERY') __authRecovery = true;
+  });
+}
 switchAuthTab('login');

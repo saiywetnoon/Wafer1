@@ -287,14 +287,17 @@ function clearDraftLocalMirror() {
 /* A draft from a previous day is real, unsent work. Prompt once so it can be
    reviewed and saved as a normal batch. Declining keeps the draft in the synced
    state and the mirror — nothing is deleted by ignoring the prompt. */
-function applyStaleDraftRecovery(d) {
+async function applyStaleDraftRecovery(d) {
   if (olderDraftPrompted) return;
   olderDraftPrompted = true;
-  const ok = confirm(
-    'You have a production draft from ' + d.date +
-    ' (numbers typed but never added to stock).\n\n' +
-    'Load it into the form now? (It has already auto-saved to this device and will sync to your account.)'
-  );
+  const ok = await Modal.confirm({
+    title: 'Stale draft found',
+    message: 'You have a production draft from ' + d.date +
+      ' (numbers typed but never added to stock).\n\n' +
+      'Load it into the form now? (It has already auto-saved to this device and will sync to your account.)',
+    okLabel: 'Load Draft',
+    cancelLabel: 'Ignore'
+  });
   if (!ok) return;
   restoreDraftToForm(d);
   if (typeof updateDraftHint === 'function') { try { updateDraftHint(); } catch (e) {} }

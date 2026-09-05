@@ -24,9 +24,23 @@ function renderDashboardAlerts() {
 }
 function getExpiringBatches(days) {
   days = days || 3;
-  const soonStr = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  const soonStr = daysFromToday(days);
   return (state.production || []).filter(function (p) { return p.useBy && p.useBy <= soonStr; });
 }
+
+function renderOnboarding() {
+  const el = $('onboardingCard');
+  if (!el) return;
+  const hasData = (state.production && state.production.length) || (state.sales && state.sales.length);
+  let onboarded = false;
+  try { onboarded = localStorage.getItem(companyStateKey() + '_onboarded') === '1'; } catch (e) {}
+  el.classList.toggle('hidden', onboarded || hasData);
+}
+if ($('onboardingDismiss')) $('onboardingDismiss').addEventListener('click', function () {
+  try { localStorage.setItem(companyStateKey() + '_onboarded', '1'); } catch (e) {}
+  const el = $('onboardingCard');
+  if (el) el.classList.add('hidden');
+});
 
 function renderDashboard() {
   const todayStr = today();
@@ -56,6 +70,7 @@ function renderDashboard() {
   renderSummary(entriesProdSales());
   renderMonthlyReport();
   renderDashboardAlerts();
+  renderOnboarding();
 }
 // @@DASH2@@
 
@@ -149,29 +164,45 @@ function renderCharts() {
   const labels = recent.map(function (e) { return e.date.slice(5); });
   const gains = recent.map(function (e) { return e.net; });
   const volumes = recent.map(function (e) { return e.prodBags; });
+  const salesBags = recent.map(function (e) { return e.soldBags || 0; });
+  const revenues = recent.map(function (e) { return e.revenue || 0; });
   if (gainChart) gainChart.destroy();
   gainChart = new Chart($('gainChart'), {
     type: 'line',
-    data: { labels: labels, datasets: [{ label: 'Daily Profit (Ks, on sold)', data: gains, borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.15)', fill: true, tension: 0.4, pointRadius: 3 }] },
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Daily Profit (Ks, on sold)', data: gains, borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.15)', fill: true, tension: 0.4, pointRadius: 3, yAxisID: 'y' },
+        { label: 'Bags Sold', data: salesBags, borderColor: '#D97706', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2, tension: 0.4, yAxisID: 'y1' }
+      ]
+    },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { labels: { color: tickColor } } },
       scales: {
         x: { ticks: { color: tickColor, maxRotation: 45 }, grid: { color: gridColor } },
-        y: { ticks: { color: tickColor }, grid: { color: gridColor } }
+        y: { position: 'left', ticks: { color: tickColor }, grid: { color: gridColor }, title: { display: true, text: 'profit (Ks)', color: '#10B981' } },
+        y1: { position: 'right', ticks: { color: tickColor }, grid: { drawOnChartArea: false }, title: { display: true, text: 'bags sold', color: '#D97706' } }
       }
     }
   });
   if (volumeChart) volumeChart.destroy();
   volumeChart = new Chart($('volumeChart'), {
     type: 'bar',
-    data: { labels: labels, datasets: [{ label: 'Bags Produced (rolled)', data: volumes, backgroundColor: volumes.map(function (v) { return v > 0 ? '#D97706' : 'rgba(75,85,99,0.4)'; }), borderRadius: 4 }] },
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Bags Produced (rolled)', data: volumes, backgroundColor: volumes.map(function (v) { return v > 0 ? '#D97706' : 'rgba(75,85,99,0.4)'; }), borderRadius: 4, yAxisID: 'y' },
+        { label: 'Revenue (Ks)', data: revenues, type: 'line', borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.12)', borderWidth: 2, pointRadius: 2, fill: false, tension: 0.4, yAxisID: 'y1' }
+      ]
+    },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { labels: { color: tickColor } } },
       scales: {
         x: { ticks: { color: tickColor, maxRotation: 45 }, grid: { color: gridColor } },
-        y: { ticks: { color: tickColor }, grid: { color: gridColor } }
+        y: { position: 'left', ticks: { color: tickColor }, grid: { color: gridColor }, title: { display: true, text: 'bags', color: '#D97706' } },
+        y1: { position: 'right', ticks: { color: tickColor }, grid: { drawOnChartArea: false }, title: { display: true, text: 'revenue', color: '#10B981' } }
       }
     }
   });

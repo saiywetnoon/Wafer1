@@ -6,6 +6,7 @@
    ready-to-sell stock and records revenue + inventory cost (COGS).
    ============================================================ */
 $('addSaleBtn').addEventListener('click', saveSale);
+if ($('salesFilter')) $('salesFilter').addEventListener('input', function () { renderSalesTab(); });
 
 function saleCustomer(id) {
   return (state.customers || []).find(function (customer) { return customer.id === id; }) || null;
@@ -152,8 +153,9 @@ function selectSaleToEdit(id) {
   showToast('Editing sale from ' + s.date + ' — adjust then click Update Sale.', 'info');
 }
 
-function removeSale(id) {
-  if (!confirm('Delete this sale?')) return;
+async function removeSale(id) {
+  const ok = await Modal.confirm({ title: 'Delete this sale?', message: 'The sale is removed and its pieces return to ready-to-sell stock.', danger: true, okLabel: 'Delete' });
+  if (!ok) return;
   const sale = state.sales.find(function (item) { return item.id === id; });
   if (sale) applySaleCreditChange(sale, null);
   state.sales = state.sales.filter(function (s) { return s.id !== id; });
@@ -162,6 +164,87 @@ function removeSale(id) {
   renderAll();
   triggerGoogleSync();
   showToast('Sale deleted — pieces returned to ready-to-sell stock.');
+}
+
+/* ---------- Share a receipt on WhatsApp ---------- */
+function shareSaleWhatsApp(id) {
+  const sale = (state.sales || []).find(function (item) { return item.id === id; });
+  if (!sale) return;
+  const customer = saleCustomer(sale.customerId);
+  const paid = sale.paidAmount === undefined ? sale.amount : sale.paidAmount;
+  const credit = saleCreditAmount(sale);
+  const text = [
+    'Daily Crispy Roll — Receipt ' + (sale.receiptNo || sale.id),
+    'Date: ' + sale.date,
+    'Customer: ' + (customer ? customer.name : 'Walk-in'),
+    sale.bags + ' bag(s) · ' + sale.pieces + ' pcs',
+    'Amount: ' + fmtKs(sale.amount),
+    'Paid: ' + fmtKs(paid),
+    'Balance due: ' + fmtKs(credit),
+    'Thank you!'
+  ].join('\n');
+  const phone = customer && customer.phone ? String(customer.phone).replace(/[^\d]/g, '') : '';
+  const url = 'https://wa.me/' + (phone || '') + '?text=' + encodeURIComponent(text);
+  window.open(url, '_blank', 'noopener');
+}
+/* ---------- Return / refund a sale ----------
+   The returned pieces go back into ready-to-sell stock (the sale is shrunk in
+   place and rebuildStockAndCogs() recomputes what remains unsold); the refunded
+   amount reduces the customer's paid/credit and is NOT put back into Cash, so
+   the drawer reflects the actual money in it. */
+async function returnSale(id) {
+  const sale = (state.sales || []).find(function (item) { return item.id === id; });
+  if (!sale) return;
+  if (!(sale.pieces > 0)) { showToast('This sale has no pieces to return.', 'info'); return; }
+  const piecesStr = await Modal.prompt({
+    title: 'Return / refund',
+    message: 'How many pieces are being returned? (max ' + fmt(sale.pieces) + ')',
+    inputType: 'number',
+    validate: function (v) {
+      const n = Math.floor(toFinite(v));
+      return (n >= 1 && n <= sale.pieces) ? '' : 'Enter between 1 and ' + fmt(sale.pieces) + ' pieces.';
+    }
+  });
+  if (piecesStr === null) return;
+  const returnPieces = Math.floor(toFinite(piecesStr));
+  const paidMax = isNaN(sale.paidAmount) ? sale.amount : sale.paidAmount;
+  const defaultRefund = Math.round((returnPieces / sale.pieces) * (sale.amount || 0));
+  const refundStr = await Modal.prompt({
+    title: 'Refund amount',
+    message: 'How much cash is being refunded? (max ' + fmtKs(paidMax) + ')',
+    value: String(defaultRefund),
+    inputType: 'number',
+    validate: function (v) {
+      const n = toFinite(v);
+      return (n >= 0 && n <= paidMax + 0.01) ? '' : 'Refund cannot exceed ' + fmtKs(paidMax) + '.';
+    }
+  });
+  if (refundStr === null) return;
+  const refund = Math.min(Math.round(toFinite(refundStr)), paidMax);
+
+  // Shrink the sale in place.
+  const oldCredit = saleCreditAmount(sale);
+  sale.pieces -= returnPieces;
+  sale.bags = sale.bags > 0 ? Math.max(0, Math.round((sale.pieces / (sale.pieces + returnPieces)) * sale.bags)) : 0;
+  sale.amount = Math.max(0, sale.amount - defaultRefund);
+  sale.paidAmount = Math.max(0, (isNaN(sale.paidAmount) ? sale.amount : sale.paidAmount) - refund);
+  // Adjust the customer's credit ledger for the refunded portion.
+  const newCredit = saleCreditAmount(sale);
+  const creditDelta = newCredit - oldCredit;
+  if (creditDelta && sale.customerId) {
+    const customer = saleCustomer(sale.customerId);
+    if (customer) customer.debt = Math.max(0, toFinite(customer.debt) + creditDelta);
+  }
+  if (sale.pieces <= 0) {
+    // Everything was returned — remove the empty sale entirely.
+    state.sales = state.sales.filter(function (s) { return s.id !== sale.id; });
+  }
+  rebuildStockAndCogs();
+  saveState();
+  renderAll();
+  triggerGoogleSync();
+  showToast((sale.pieces > 0 ? 'Returned ' + fmt(returnPieces) + ' pcs' : 'Sale fully returned') +
+    (refund > 0 ? ' · refunded ' + fmtKs(refund) + ' (kept out of cash drawer)' : '') + '.', sale.pieces > 0 ? 'info' : 'success');
 }
 // @@SALES2@@
 
@@ -187,9 +270,18 @@ function renderSalesTab() {
   // Recent sales table
   const tbody = $('salesBody');
   if (!tbody) return;
-  const list = salesList().slice().reverse();
+  let list = salesList().slice().reverse();
+  const query = (($('salesFilter') || {}).value || '').trim().toLowerCase();
+  if (query) {
+    list = list.filter(function (s) {
+      const customer = saleCustomer(s.customerId);
+      return String(s.date).toLowerCase().indexOf(query) !== -1
+        || String(customer ? customer.name : 'walk-in').toLowerCase().indexOf(query) !== -1
+        || String(s.receiptNo || s.id).toLowerCase().indexOf(query) !== -1;
+    });
+  }
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-gray-500">No sales logged yet. Record a bag sale here — it deducts from ready-to-sell stock.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-gray-500">' + (query ? 'No sales match "' + esc(query) + '".' : 'No sales logged yet. Record a bag sale here — it deducts from ready-to-sell stock.') + '</td></tr>';
     return;
   }
   tbody.innerHTML = list.map(function (s) {
@@ -206,7 +298,9 @@ function renderSalesTab() {
       '<td class="py-2 pr-2 text-xs"><span class="text-emerald-400">' + fmtKs(paid) + '</span>' + (credit ? ' <span class="text-red-400">/ ' + fmtKs(credit) + '</span>' : '') + '</td>' +
       '<td class="py-2 pr-2 ' + ((saleProfit(s) >= 0) ? 'text-emerald-400' : 'text-red-400') + ' font-bold">' + fmtKs(saleProfit(s)) + '</td>' +
       '<td class="py-2"><div class="flex gap-2">' +
+      '<button onclick="shareSaleWhatsApp(\'' + s.id + '\')" class="text-emerald-500 hover:text-emerald-400 transition" title="Share on WhatsApp"><i data-lucide="message-circle" class="w-4 h-4"></i></button>' +
       '<button onclick="printSaleReceipt(\'' + s.id + '\')" class="text-emerald-400 hover:text-emerald-300 transition" title="Print receipt"><i data-lucide="receipt" class="w-4 h-4"></i></button>' +
+      '<button onclick="returnSale(\'' + s.id + '\')" class="text-sky-400 hover:text-sky-300 transition" title="Return / refund"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>' +
       '<button onclick="selectSaleToEdit(\'' + s.id + '\')" class="text-amber-400 hover:text-amber-300 transition" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>' +
       '<button onclick="removeSale(\'' + s.id + '\')" class="text-red-400 hover:text-red-300 transition" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
       '</div></td></tr>';
@@ -223,14 +317,37 @@ function printSaleReceipt(id) {
   const credit = saleCreditAmount(sale);
   const win = window.open('', '_blank', 'width=480,height=700');
   if (!win) { showToast('Allow pop-ups to print this receipt.', 'error'); return; }
-  win.document.write('<!doctype html><html><head><title>Receipt ' + esc(sale.receiptNo || sale.id) + '</title><style>body{font-family:Arial,sans-serif;max-width:360px;margin:24px auto;color:#111}h1{font-size:20px;margin-bottom:4px}.muted{color:#555;font-size:12px}.line{display:flex;justify-content:space-between;border-bottom:1px solid #ddd;padding:8px 0}.total{font-weight:bold;font-size:17px}@media print{body{margin:0}}</style></head><body>' +
-    '<h1>Daily Crispy Roll Ledger</h1><div class="muted">Receipt ' + esc(sale.receiptNo || sale.id) + ' · ' + esc(sale.date) + '</div><div class="muted">Customer: ' + esc(customer ? customer.name : 'Walk-in') + '</div>' +
-    '<div class="line"><span>' + fmt(sale.bags) + ' bag(s) · ' + fmt(sale.pieces) + ' pcs</span><span>' + fmtKs(sale.amount) + '</span></div>' +
-    '<div class="line"><span>Paid now</span><span>' + fmtKs(paid) + '</span></div>' +
-    '<div class="line total"><span>Balance due</span><span>' + fmtKs(credit) + '</span></div>' +
-    (credit && sale.dueDate ? '<div class="line"><span>Due date</span><span>' + esc(sale.dueDate) + '</span></div>' : '') +
-    '<p class="muted">Thank you.</p><script>window.onload=function(){window.print();}</script></body></html>');
-  win.document.close();
+  // Build the receipt with DOM APIs so customer/notes text is never parsed as HTML.
+  const doc = win.document;
+  doc.open();
+  doc.write('<!doctype html><html><head><meta charset="utf-8"><title>Receipt ' +
+    String(sale.receiptNo || sale.id).replace(/[<>&"']/g, '') +
+    '</title><style>body{font-family:Arial,sans-serif;max-width:360px;margin:24px auto;color:#111}h1{font-size:20px;margin:4px 0}.muted{color:#555;font-size:12px}.line{display:flex;justify-content:space-between;border-bottom:1px solid #ddd;padding:8px 0}.total{font-weight:bold;font-size:17px;border-bottom:none}@media print{body{margin:0}}</style></head><body></body></html>');
+  doc.close();
+  const body = doc.body;
+  function line(left, right, cls) {
+    const d = doc.createElement('div');
+    d.className = 'line' + (cls ? ' ' + cls : '');
+    const l = doc.createElement('span'); l.textContent = left;
+    const r = doc.createElement('span'); r.textContent = right;
+    d.appendChild(l); d.appendChild(r);
+    body.appendChild(d);
+  }
+  const h1 = doc.createElement('h1'); h1.textContent = 'Daily Crispy Roll Ledger';
+  body.appendChild(h1);
+  const sub = doc.createElement('div'); sub.className = 'muted';
+  sub.textContent = 'Receipt ' + (sale.receiptNo || sale.id) + ' · ' + sale.date;
+  body.appendChild(sub);
+  const cust = doc.createElement('div'); cust.className = 'muted';
+  cust.textContent = 'Customer: ' + (customer ? customer.name : 'Walk-in');
+  body.appendChild(cust);
+  line(fmt(sale.bags) + ' bag(s) · ' + fmt(sale.pieces) + ' pcs', fmtKs(sale.amount));
+  line('Paid now', fmtKs(paid));
+  line('Balance due', fmtKs(credit), 'total');
+  if (credit && sale.dueDate) line('Due date', sale.dueDate);
+  const thanks = doc.createElement('p'); thanks.className = 'muted'; thanks.textContent = 'Thank you.';
+  body.appendChild(thanks);
+  setTimeout(function () { try { win.focus(); win.print(); } catch (e) { /* popup blocked or closed */ } }, 100);
 }
 
 /* Export sales to CSV */

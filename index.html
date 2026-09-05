@@ -1,17 +1,24 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" data-build="v1.10.2">
+<html lang="en" class="dark" data-build="v1.11.0">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Daily Crispy Roll Ledger — Cloud-Synced Daily Record-Keeping</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://unpkg.com/lucide@1.34.0"></script>
-<script src="https://accounts.google.com/gsi/client"></script>
-    <!-- Supabase client: primary CDN + automatic fallback so the real (URL-free) backend
-         never silently disappears when one CDN is blocked/slow. If both fail the app will
-         say so honestly instead of demanding a script URL. -->
+  <meta name="theme-color" content="#111827">
+  <meta name="description" content="Daily Crispy Roll Ledger — production, sales, inventory, cash and profit tracking, cloud-synced across devices.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="hkop_kop_favicon.ico">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png">
+  <link rel="stylesheet" href="css/tailwind.css?v=20260906">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/lucide@1.34.0/dist/umd/lucide.min.js" integrity="sha384-TkyaYJPudUfB9a60ZTQjPXXxBGD4UjxQYJf/6fECpLjyqL7zL+aWxDqK/H7Ec1bWy" crossorigin="anonymous"></script>
+    <!-- Supabase client: primary CDN + automatic fallback (SRI-pinned) so the real
+         (URL-free) backend never silently disappears when one CDN is blocked/slow.
+         If both fail the app will say so honestly instead of demanding a script URL. -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"
+            integrity="sha384-EyR2P0dlmjnEGcm9xcjdAn0VedZpRHEwDLP9oSS6wYMvzHBHkUrvgonveazJ/sSx"
+            crossorigin="anonymous"
             onload="window.__supaSrc='jsdelivr';"
             onerror="
               if (!window.supabase) {
@@ -21,24 +28,10 @@
                 s.onerror = function(){ window.__supaSrc = 'FAILED'; };
                 document.head.appendChild(s);
               }"></script>
-<script>
-tailwind.config = {
-  darkMode: 'class',
-  theme: {
-    extend: {
-      colors: {
-        cream: { 50:'#FFFDF5', 100:'#FFF8E7', 200:'#F7EED8', 300:'#EFE3C3' },
-        amberdeep: { 400:'#D97706', 500:'#B45309', 600:'#92400E', 700:'#78350F', 800:'#5B2A0A' },
-        emeraldx: { 400:'#34D399', 500:'#10B981', 600:'#059669', 700:'#047857' }
-      }
-    }
-  }
-}
-</script>
+  <!-- Tailwind is compiled at build time (css/tailwind.css, see tailwind.config.js)
+       instead of running the Play CDN runtime compiler on every page load. -->
 
 <link rel="stylesheet" href="css/styles.css">
-  <link rel="icon" href="hkop_kop_favicon.ico">
-  <link rel="apple-touch-icon" href="hkop_kop_favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -428,7 +421,10 @@ tailwind.config = {
     </div>
 
     <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 mt-4">
-      <h3 class="font-bold text-base mb-3 flex items-center gap-2"><i data-lucide="receipt" class="w-5 h-5 text-emerald-400"></i> Recent Sales</h3>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="receipt" class="w-5 h-5 text-emerald-400"></i> Recent Sales</h3>
+        <input id="salesFilter" type="search" placeholder="Search date, customer, receipt…" class="w-full sm:w-64 px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500">
+      </div>
       <div class="overflow-x-auto scrollbar-thin">
         <table class="w-full text-sm responsive-table">
           <thead>
@@ -445,6 +441,20 @@ tailwind.config = {
 
   <!-- ===================== DASHBOARD ===================== -->
   <section id="tab-dashboard" class="tab-panel hidden">
+    <div id="onboardingCard" class="hidden mb-4 p-4 rounded-xl border border-amber-700/40 bg-amber-500/10">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="font-bold text-sm text-amber-300 flex items-center gap-2"><i data-lucide="rocket" class="w-4 h-4"></i> Welcome — set up in 2 minutes</div>
+          <ol class="list-decimal list-inside text-xs text-gray-300 mt-2 space-y-1">
+            <li>Open <b>Business Tools</b> → set your hourly wage &amp; currency.</li>
+            <li>Open <b>Cash Drawer</b> → enter your opening cash, then close each day.</li>
+            <li>Review the <b>Price List</b> (ingredients &amp; costs) on the Production tab.</li>
+            <li>Record your first production mix, then add sales after packaging.</li>
+          </ol>
+        </div>
+        <button id="onboardingDismiss" title="Dismiss" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition">Got it</button>
+      </div>
+    </div>
     <div id="dashboardAlerts" class="mb-4 space-y-2"></div>
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
       <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
@@ -738,11 +748,14 @@ tailwind.config = {
         <button id="addCustomerBtn" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition flex items-center justify-center gap-2">
           <i data-lucide="plus-circle" class="w-4 h-4"></i> Add Customer
         </button>
-        <div class="mt-4 max-h-80 overflow-y-auto scrollbar-thin">
+        <div class="mt-4">
+          <input id="customerFilter" type="search" placeholder="Search customers…" class="w-full px-3 py-1.5 mb-2 rounded-lg border border-gray-700 bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <div class="max-h-72 overflow-y-auto scrollbar-thin">
           <table class="w-full text-xs">
             <thead><tr class="text-left text-gray-400 border-b border-gray-700"><th class="py-1.5 pr-2">Name</th><th class="py-1.5 pr-2">Order</th><th class="py-1.5 pr-2">Debt (Ks)</th><th class="py-1.5"></th></tr></thead>
             <tbody id="customerListBody"></tbody>
           </table>
+          </div>
         </div>
       </div>
       <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
@@ -1001,6 +1014,28 @@ tailwind.config = {
 
   <section id="tab-tools" class="tab-panel hidden">
     <div class="grid lg:grid-cols-2 gap-4">
+      <!-- Preferences -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 lg:col-span-2">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5 text-amber-400"></i> Preferences</h3>
+        <p class="text-xs text-gray-400 mb-3">App-wide display settings. These are saved with your ledger and sync to your account.</p>
+        <div class="grid sm:grid-cols-3 gap-3 items-end">
+          <div>
+            <label class="text-xs text-gray-400 font-semibold block mb-1" for="prefCurrencySymbol">Currency symbol</label>
+            <input id="prefCurrencySymbol" type="text" maxlength="5" placeholder="Ks" class="w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          </div>
+          <div>
+            <label class="text-xs text-gray-400 font-semibold block mb-1" for="prefLanguage">Language</label>
+            <select id="prefLanguage" class="w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+              <option value="en">English (current)</option>
+              <option value="my" disabled>မြန်မာ (coming soon)</option>
+            </select>
+          </div>
+          <div>
+            <button id="savePrefsBtn" class="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">Save Preferences</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Recipes -->
       <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
         <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="book-open" class="w-5 h-5 text-amber-400"></i> Recipes / Variants</h3>
@@ -1096,7 +1131,8 @@ tailwind.config = {
         </div>
         <div class="flex flex-wrap gap-2">
           <button id="printReportBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">🖨 Print Report</button>
-          <button id="exportMonthlyCsvBtn" class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold">Export Monthly CSV</button>
+          <button id="exportMonthlyCsvBtn" class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold">Export CSV</button>
+          <button id="exportMonthlyXlsBtn" class="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm font-bold">Export Excel (.xls)</button>
         </div>
       </div>
 
@@ -1283,7 +1319,8 @@ tailwind.config = {
         <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="badge-check" class="w-5 h-5 text-emerald-400"></i> Daily Cash Count / Close</h3>
         <span class="text-[10px] text-gray-500">automated expected vs counted</span>
       </div>
-      <p class="text-xs text-gray-400 mb-3">Expected cash from today's sales + customer payments is calculated automatically. Count the drawer, and any variance is computed for you — you can post it as an adjustment with one click.</p>
+      <p class="text-xs text-gray-400 mb-3">Expected cash from today's sales + customer payments is calculated automatically. Count the drawer, and any variance is computed for you — you can post it as an adjustment with one click. Closing the day locks its count and stores the record.</p>
+      <div id="cashCloseBanner" class="hidden mb-3"></div>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
         <div>
           <div class="text-xs text-gray-400 font-semibold mb-1">Expected cash today (auto)</div>
@@ -1298,9 +1335,18 @@ tailwind.config = {
           <div id="cashVariance" class="font-extrabold text-lg text-gray-400">0 Ks</div>
         </div>
       </div>
-      <button id="cashPostVarianceBtn" class="mt-3 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5">
-        <i data-lucide="check" class="w-4 h-4"></i> Post variance as adjustment
-      </button>
+      <div class="flex flex-wrap gap-2 mt-3">
+        <button id="cashPostVarianceBtn" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i> Post variance as adjustment
+        </button>
+        <button id="cashCloseBtn" class="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-gray-900 text-xs font-bold transition flex items-center gap-1.5">
+          <i data-lucide="lock" class="w-4 h-4"></i> Close Today's Cash
+        </button>
+        <button id="cashReopenBtn" class="hidden px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-xs font-bold transition flex items-center gap-1.5">
+          <i data-lucide="unlock" class="w-4 h-4"></i> Reopen Today
+        </button>
+      </div>
+      <div id="cashCloseHistory" class="mt-4 text-xs text-gray-500 max-h-32 overflow-y-auto scrollbar-thin"></div>
     </div>
 
     <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
@@ -1359,10 +1405,26 @@ tailwind.config = {
 
         <div id="loginPane" class="mt-5">
           <button id="authLoginBtn" class="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition">Log In</button>
+          <button id="forgotPwLink" class="w-full mt-2 text-center text-xs text-amber-400 hover:text-amber-300 font-semibold transition">Forgot password?</button>
         </div>
         <div id="signupPane" class="hidden mt-5">
           <button id="authSignupBtn" class="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-gray-900 text-sm font-bold transition">Request Account</button>
           <p class="text-[10px] text-gray-500 mt-2">After signing up, the owner must approve your account before you can log in.</p>
+        </div>
+        <div id="resetPane" class="hidden mt-5">
+          <p class="text-xs text-gray-400 mb-3">Enter the email you signed up with. We'll send you a link to set a new password. (Only available when the account backend — Supabase — has email sending enabled.)</p>
+          <label for="resetEmail" class="text-xs font-semibold text-gray-400 block mb-1">Email address</label>
+          <input id="resetEmail" type="email" placeholder="you@example.com" autocomplete="email"
+                 class="w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <button id="authResetBtn" class="w-full py-2.5 mt-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-gray-900 text-sm font-bold transition">Send Reset Link</button>
+          <button id="resetBackLink" class="w-full mt-2 text-center text-xs text-gray-500 hover:text-gray-400 font-semibold transition">← Back to login</button>
+        </div>
+        <div id="newPasswordPane" class="hidden mt-5">
+          <p class="text-xs text-gray-400 mb-3">Choose your new password (at least 6 characters), then log in with it.</p>
+          <label for="newPassword" class="text-xs font-semibold text-gray-400 block mb-1">New password</label>
+          <input id="newPassword" type="password" placeholder="At least 6 characters" autocomplete="new-password"
+                 class="w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <button id="authUpdatePwBtn" class="w-full py-2.5 mt-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold transition">Set New Password</button>
         </div>
         <div id="authMsg" class="hidden"></div>
       </div>
@@ -1423,31 +1485,32 @@ tailwind.config = {
 </div>
 
 
-    <script src="js/config.js?v=20260903"></script>
-    <script src="js/supabase.js?v=20260903"></script>
-    <script src="js/storage.js?v=20260903"></script>
-    <script src="js/google.js?v=20260903"></script>
-    <script src="js/helpers.js?v=20260903"></script>
-    <script src="js/pricing.js?v=20260903"></script>
-    <script src="js/usage.js?v=20260903"></script>
-    <script src="js/ledger.js?v=20260903"></script>
-    <script src="js/sales.js?v=20260903"></script>
-    <script src="js/dashboard.js?v=20260903"></script>
-    <script src="js/calendar.js?v=20260903"></script>
-    <script src="js/csv.js?v=20260903"></script>
-    <script src="js/sync-ui.js?v=20260903"></script>
-    <script src="js/sample-data.js?v=20260903"></script>
-    <script src="js/inventory.js?v=20260903"></script>
-    <script src="js/customers.js?v=20260903"></script>
-    <script src="js/suppliers.js?v=20260903"></script>
-    <script src="js/tools.js?v=20260903"></script>
-    <script src="js/pan-timers.js?v=20260903"></script>
-    <script src="js/cash.js?v=20260903"></script>
-    <script src="js/companies.js?v=20260903"></script>
-    <script src="js/auth.js?v=20260903"></script>
-    <script src="js/cloud.js?v=20260903"></script>
-    <script src="js/ai.js?v=20260903"></script>
-    <script src="js/init.js?v=20260903"></script>
+    <script src="js/config.js?v=20260906"></script>
+    <script src="js/supabase.js?v=20260906"></script>
+    <script src="js/storage.js?v=20260906"></script>
+    <script src="js/google.js?v=20260906"></script>
+    <script src="js/helpers.js?v=20260906"></script>
+<script src="js/modal.js?v=20260906"></script>
+    <script src="js/pricing.js?v=20260906"></script>
+    <script src="js/usage.js?v=20260906"></script>
+    <script src="js/ledger.js?v=20260906"></script>
+    <script src="js/sales.js?v=20260906"></script>
+    <script src="js/dashboard.js?v=20260906"></script>
+    <script src="js/calendar.js?v=20260906"></script>
+    <script src="js/csv.js?v=20260906"></script>
+    <script src="js/sync-ui.js?v=20260906"></script>
+    <script src="js/sample-data.js?v=20260906"></script>
+    <script src="js/inventory.js?v=20260906"></script>
+    <script src="js/customers.js?v=20260906"></script>
+    <script src="js/suppliers.js?v=20260906"></script>
+    <script src="js/tools.js?v=20260906"></script>
+    <script src="js/pan-timers.js?v=20260906"></script>
+    <script src="js/cash.js?v=20260906"></script>
+    <script src="js/companies.js?v=20260906"></script>
+    <script src="js/auth.js?v=20260906"></script>
+    <script src="js/cloud.js?v=20260906"></script>
+    <script src="js/ai.js?v=20260906"></script>
+    <script src="js/init.js?v=20260906"></script>
 
 </body>
 </html>

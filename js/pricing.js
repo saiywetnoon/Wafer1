@@ -51,15 +51,20 @@ wireResponsiveTables();
 }
 
 /* ---------- Add / Remove Ingredient ---------- */
-function addIngredientRow() {
-  const name = prompt('New ingredient name:', '');
+async function addIngredientRow() {
+  const name = await Modal.prompt({ title: 'New ingredient', message: 'New ingredient name:', placeholder: 'e.g. Salt' });
   if (!name || !name.trim()) return;
   const trimmed = name.trim();
   if (state.prices.some(function (p) { return p.name.toLowerCase() === trimmed.toLowerCase(); })) {
     showToast('Ingredient "' + trimmed + '" already exists.', 'error');
     return;
   }
-  const unitPrompt = confirm('Is "' + trimmed + '" counted by unit (e.g. eggs, bags)? Click OK for unit-based. Cancel for gram-based (per kg).');
+  const unitPrompt = await Modal.confirm({
+    title: 'Unit type',
+    message: 'Is "' + trimmed + '" counted by unit (e.g. eggs, bags)?\n\nOK = unit-based · Cancel = gram-based (per kg).',
+    okLabel: 'Unit-based',
+    cancelLabel: 'Gram-based'
+  });
   const ing = {
     name: trimmed,
     unit: unitPrompt ? 'unit' : 'g',
@@ -75,10 +80,11 @@ function addIngredientRow() {
   triggerGoogleSync();
   showToast('Added ingredient "' + trimmed + '".');
 }
-function removeIngredientAt(idx) {
+async function removeIngredientAt(idx) {
   const ing = state.prices[idx];
   if (!ing) return;
-  if (!confirm('Remove ingredient "' + ing.name + '"? Past entries keep their historical usage data.')) return;
+  const ok = await Modal.confirm({ title: 'Remove ingredient?', message: 'Remove ingredient "' + ing.name + '"? Past entries keep their historical usage data.', danger: true, okLabel: 'Remove' });
+  if (!ok) return;
   state.prices.splice(idx, 1);
   saveState();
   renderPriceTable();
@@ -90,8 +96,9 @@ function removeIngredientAt(idx) {
 
 $('addIngredientBtn').addEventListener('click', addIngredientRow);
 
-$('resetPricesBtn').addEventListener('click', function () {
-  if (!confirm('Reset all ingredient prices to Phase 10 defaults?')) return;
+$('resetPricesBtn').addEventListener('click', async function () {
+  const ok = await Modal.confirm({ title: 'Reset prices?', message: 'Reset all ingredient prices to the default list?', danger: true, okLabel: 'Reset' });
+  if (!ok) return;
   state.prices = JSON.parse(JSON.stringify(DEFAULT_PRICES));
   saveState();
   renderPriceTable();

@@ -75,10 +75,11 @@ $('demoBtn').addEventListener('click', function () {
 /* ============================================================
    CLEAR ALL
    ============================================================ */
-$('clearBtn').addEventListener('click', function () {
+$('clearBtn').addEventListener('click', async function () {
   const hasAny = Object.keys(state.entries).length || (state.production && state.production.length) || (state.sales && state.sales.length);
   if (!hasAny) { showToast('No data to clear.', 'info'); return; }
-  if (!confirm('Clear ALL production, sales and stock? This cannot be undone.')) return;
+  const ok = await Modal.confirm({ title: 'Clear all data?', message: 'Clear ALL production, sales and stock? This cannot be undone.', danger: true, okLabel: 'Clear All' });
+  if (!ok) return;
   state.entries = {};
   state.production = [];
   state.sales = [];

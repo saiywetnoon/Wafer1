@@ -1,8 +1,11 @@
 # Daily Crispy Roll Ledger — Modular Layout
 
-This project was split from the original single-file `daily-ledger-1.1.html`
-into a modular HTML/CSS/JS structure. The **original file is preserved** as
-`daily-ledger-1.1.html` (a full backup) so nothing is lost.
+This is a modular HTML/CSS/JS build. The original pre-account single-file app
+(`daily-ledger-1.1.html`) was split and then heavily upgraded; that legacy
+backup file and the split script (`_split.ps1`) were removed because they were
+a maintenance hazard: the script would have overwritten this current build
+with the outdated v1.1 content. **`index.html` is the only entry point** and
+contains every current feature.
 
 ## Entry point
 
@@ -11,39 +14,73 @@ e.g. `npx serve` or VS Code Live Server). Google OAuth/Sync requires the app to
 run from a real origin (e.g. `http://localhost:5500`), and you must paste your
 Google Client ID in `js/config.js`.
 
+## How it's hosted — GitHub + Vercel + Supabase
+
+| Piece | What it does here |
+|---|---|
+| **GitHub** | Source of truth (`git push origin main`); GitHub Actions runs `npm test` (syntax + behaviour verifiers) on every push. |
+| **Vercel** | Static hosting for the whole folder. Because it's a plain static build (no framework), import the repo with **Framework Preset: Other** and **Build Command: none** (or `npm run build:css` if you want Vercel to compile Tailwind instead of committing `css/tailwind.css`). `vercel.json` pins PWA-friendly cache headers. |
+| **Supabase** | Auth (email/password + password reset) and the `profiles` / `ledgers` database with RLS. The URL + anon key live in `js/config.js`, and the SQL setup is in `_supabase-setup.sql`. |
+
+**Deploy flow:** `git push` → Vercel re-deploys automatically → users get the
+new service worker on next load (navigations are network-first so the shell is
+never stale).
+
+**One-time Supabase config for your Vercel domain:**
+1. Run `_supabase-setup.sql` once in the Supabase SQL editor.
+2. Under **Authentication → URL Configuration**, add your Vercel domain
+   (e.g. `https://your-app.vercel.app`) to **Site URL** and **Allowed Redirect
+   URLs** (add e.g. `https://your-app.vercel.app/index.html`).
+3. Under **Authentication → Email Templates → Reset Password**, update the link
+   to `{{ .ConfirmationURL }}` pointing back to your Vercel URL so opening it
+   shows the app's "set new password" pane.
+4. Enable **CAPTCHA protection** on sign-ups so strangers can't claim an
+   account before you do (the first account ever becomes admin).
+
 ## File layout
 
 ```
 dail-ledger v1.1/
-├── index.html              HTML markup (head + body) — links css + js
+├── index.html                  HTML markup (head + body) — links css + js
+├── vercel.json                 PWA-friendly cache headers for Vercel hosting
+├── manifest.webmanifest        PWA manifest (icons, standalone display)
+├── sw.js                       Service worker — offline shell + CDN caching
+├── icon-192.png / icon-512.png PWA install icons
 ├── css/
-│   └── styles.css          Custom styles (moved out of the old <style> block)
-├── js/                     Modular classic scripts (shared globals), loaded in order:
-│   ├── config.js           Storage keys, Google OAuth constants, default price/usage data
-│   ├── storage.js          App state object, draft state, persistence (load/save/draft)
-│   ├── google.js           Google Sync core + global render orchestration (syncToGoogle,
-│   │                       toGooglePayload, backups, renderAll, triggerGoogleSync)
-│   ├── helpers.js          Utilities ($, fmt, today, uid, esc), cost/weight calc,
-│   │                       toast, validation, tab switching
-│   ├── pricing.js          Price List tab
-│   ├── usage.js            Today's Usage + Live Calculation
-│   ├── ledger.js           Save Daily Entry + Recent Entries
-│   ├── dashboard.js        Dashboard
-│   ├── calendar.js         Calendar & Audit
-│   ├── csv.js              CSV export
-│   ├── sync-ui.js          Google Sync tab UI bindings
-│   ├── sample-data.js      Sample data + Clear All
-│   ├── inventory.js        Inventory
-│   ├── customers.js        Customers (what customers owe you)
-│   ├── suppliers.js        Suppliers (shops), stock purchases, payables/debt you owe
-│   ├── tools.js            Business Tools
-│   ├── pan-timers.js       Frying Pan Timers (3 isolated pans, 50s/20s alerts)
-│   ├── cash.js             Cash Drawer / cash-flow + manual adjustments
-│   ├── companies.js        Multi-company workspaces, login/switch screen + boot gating
-│   ├── cloud.js            Online / cloud abstraction layer (provider-agnostic)
-│   ├── ai.js               AI Root Cause (local rules engine + optional ChatGPT/DeepSeek)
-│   └── init.js             INIT + Google account sign-in + app bootstrap (loads last)
-└── google-sync.gs          Google Apps Script backend (deploy to a Sheet)
+│   ├── tailwind.css            Compiled Tailwind (built by _build-tailwind.ps1)
+│   ├── tailwind-input.css      Tailwind @tailwind directives (build input)
+│   └── styles.css              Custom styles
+├── js/                         Modular classic scripts (shared globals), loaded in order:
+│   ├── config.js               Storage keys, Supabase URL/anon key, default price/usage data
+│   ├── supabase.js             Supabase adapter (auth + ledger + realtime + admin)
+│   ├── storage.js              App state object, draft state, persistence (load/save/draft)
+│   ├── google.js               Legacy Google Sync core (Apps Script fallback)
+│   ├── helpers.js              Utilities ($, fmt, today, uid, esc), cost/weight calc,
+│   │                           toast, validation, tab switching
+│   ├── modal.js                In-app modal dialogs (replaces confirm/prompt/alert)
+│   ├── pricing.js              Price List tab
+│   ├── usage.js                Today's Usage + Live Calculation
+│   ├── ledger.js               Save Daily Entry + Recent Entries
+│   ├── sales.js                Sales, receipts, WhatsApp share, returns/refunds
+│   ├── dashboard.js            Dashboard, charts, monthly report, onboarding
+│   ├── calendar.js             Calendar & Audit
+│   ├── csv.js                  CSV export
+│   ├── sync-ui.js              Sync & Backup tab bindings
+│   ├── sample-data.js          Sample data + Clear All
+│   ├── inventory.js            Inventory
+│   ├── customers.js            Customers (what customers owe you)
+│   ├── suppliers.js            Suppliers (shops), stock purchases, payables/debt you owe
+│   ├── tools.js                Business Tools + Preferences (currency symbol)
+│   ├── pan-timers.js           Frying Pan Timers (3 isolated pans, 50s/20s alerts)
+│   ├── cash.js                 Cash Drawer + daily cash close/reopen
+│   ├── companies.js            Multi-company workspaces, login/switch screen + boot gating
+│   ├── cloud.js                Online / cloud abstraction layer (provider-agnostic)
+│   ├── ai.js                   AI Root Cause (local rules engine + optional ChatGPT/DeepSeek)
+│   └── init.js                 INIT + Google account sign-in + app bootstrap (loads last)
+├── tailwind.config.js          Tailwind build config (colors: cream/amberdeep/emeraldx)
+├── package.json                npm scripts (test, build:css) + dev tooling
+├── _build-tailwind.ps1         Rebuilds css/tailwind.css locally (PowerShell)
+└── google-sync.gs              Legacy Google Apps Script backend (optional fallback)
 ```
 
 ## Important
@@ -58,7 +95,8 @@ dail-ledger v1.1/
 - The split was validated to be byte-for-byte identical (JS + CSS) to the
   original content.
 
-To regenerate the split from the original, run `_split.ps1` (PowerShell).
+The split script and the original legacy file were removed in v1.11.0 (they
+could have overwritten this build with outdated content).
 
 ### Frying Pan Timers
 
@@ -565,12 +603,62 @@ finish syncing so the opening-balance migration is saved to Supabase.
 The acceptance checks in `ROADMAP.md` remain the completion gate: run the
 listed manual workflows before treating this release as complete.
 
-> ⚠️ `daily-ledger-1.1.html` is a byte-for-byte backup of the ORIGINAL app and
-> does **not** contain these upgrades. Always open **index.html**. `_split.ps1`
-> regenerates only the original content — the new `auth.js` module and HTML
-> upgrades are additive and not part of that script.
+> There is no separate `daily-ledger-1.1.html` anymore — that legacy single-file
+> backup and its `_split.ps1` regenerator were removed in v1.11.0. Always open
+> **index.html**; it contains every upgrade, including the `auth.js` and
+> `modal.js` modules, the compiled Tailwind build, the PWA service worker, and
+> the daily cash close.
 
 ## Changelog
+
+### v1.11.0 — reliability + user-facing upgrades
+- **Compiled Tailwind, no more runtime compiler.** `css/tailwind.css` is built
+  at build time (see `tailwind.config.js` + `_build-tailwind.ps1`); the Play CDN
+  script that compiled classes in-browser and needed internet on every load is
+  gone. The app now paints styled immediately and offline-first.
+- **PWA installable + offline shell.** `manifest.webmanifest`, `sw.js`, and
+  `registerServiceWorker()` cache the app shell and the CDN libraries
+  (stale-while-revalidate) so the app opens with no connection. Ledger DATA is
+  never touched by the worker — it stays in your browser + Supabase.
+- **SRI-pinned libraries.** Chart.js, lucide, and Supabase now load with
+  `integrity` hashes. Google Identity SDK is no longer downloaded on every page
+  load — it loads only on demand if a `GOOGLE_CLIENT_ID` is configured (and the
+  config is empty by default).
+- **Password reset.** "Forgot password?" on the login screen mails a Supabase
+  reset link; opening it shows an in-app "set new password" pane. (Requires the
+  Supabase email template to point back at the app URL.)
+- **In-app modal dialogs.** New `js/modal.js` replaces every native
+  `confirm()` / `prompt()` / `alert()`: destructive actions are theme-consistent,
+  validate inline, and never block the page (so pan timers keep running).
+- **Daily cash close (lock + reopen).** Close a day with expected/counted/
+  variance + optional note; a closed day blocks new manual adjustments, and
+  reopening requires a typed reason. Close history lives on the Cash tab.
+- **Sale returns/refunds.** Return pieces (restocks them) with an optional cash
+  refund that stays out of the Cash Drawer, keeping the drawer honest.
+- **WhatsApp receipt sharing.** Each sale row can open a pre-filled WhatsApp
+  message (customer's phone, amount, balance due).
+- **Currency symbol preference.** Business Tools → Preferences lets you change
+  the displayed symbol (default `Ks`); a Burmese language option is shown but
+  not yet implemented.
+- **Search/filter.** Sales (date/customer/receipt) and Customers now have live
+  search boxes.
+- **Excel-format export.** Business Tools → "Export Excel (.xls)" writes the same
+  report as a zero-dependency HTML-table `.xls` that opens directly in Excel.
+- **Charts improved.** Dashboard volume chart shows bags produced + revenue
+  (dual axis); the profit chart adds bags sold.
+- **Onboarding card.** First-run Dashboard shows a 2-minute setup checklist;
+  it disappears once data exists or is dismissed.
+- **Pan-timer browser notifications.** When the tab is backgrounded, timer
+  alerts now fire a local Notification (lazily permission-requested).
+- **Bug fixes.** `getExpiringBatches` used a UTC window (off by a day in
+  Myanmar); now local. `supabase.js` profile assignment typo fixed. `toFinite`
+  guards applied to cash/inventory/recipe inputs. Receipt + print report built
+  with DOM APIs instead of `document.write` (safer, works with popup blockers).
+- **Dead tooling removed.** `_split.ps1` (referenced a deleted legacy file and
+  would have overwritten this build) is gone; `_verify_layout.js` now reads the
+  current `index.html` instead of a stale `v1.5` path.
+- **CI + tooling.** `package.json`, `npm test` (syntax + behaviour verifiers),
+  `_check_syntax.js`, and a GitHub Actions workflow keep regressions out.
 
 ### v1.9.3 — professional UI & navigation polish
 - **Grouped tab navigation.** Tabs are now organized into labelled sections

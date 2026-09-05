@@ -289,10 +289,11 @@ function editProduction(id) {
   showToast('Editing production for ' + p.date + ' — adjust then click Update Production.', 'info');
 }
 
-function deleteProduction(id) {
+async function deleteProduction(id) {
   const p = state.production.find(function (x) { return x.id === id; });
   if (!p) return;
-  if (!confirm('Delete this production batch?')) return;
+  const ok = await Modal.confirm({ title: 'Delete production batch?', message: 'Delete this production batch? Stock and inventory movements will be restored.', danger: true, okLabel: 'Delete' });
+  if (!ok) return;
   if (p.usage) reconcileProductionInventory(p.usage, {}, p.date, p.id);
   state.production = state.production.filter(function (x) { return x.id !== id; });
   rebuildStockAndCogs();

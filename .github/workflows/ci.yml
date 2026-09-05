@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install build tools
+        run: npm install
+
+      - name: Syntax-check every app JS file
+        run: npm run test:syntax
+
+      - name: Run behaviour verifiers
+        run: npm run test:verify
+
+      - name: Build compiled Tailwind CSS
+        run: npm run build:css
+
+      - name: Verify no utility class is missing from the compiled CSS
+        run: npm run verify:classes

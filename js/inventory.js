@@ -69,14 +69,19 @@ function renderInventory() {
       '</tr>';
   }).join('');
   document.querySelectorAll('.stock-input').forEach(function (inp) {
-    inp.addEventListener('change', function () {
+    inp.addEventListener('change', async function () {
       const name = inp.dataset.name;
       const target = parseFloat(inp.value);
       if (isNaN(target) || target < 0) { renderInventory(); return; }
       const current = inventoryStockFor(name);
       const difference = target - current;
       if (!difference) return;
-      const reason = prompt('Reason for changing ' + name + ' stock:', 'Stock count correction');
+      const reason = await Modal.prompt({
+        title: 'Stock adjustment',
+        message: 'Reason for changing ' + name + ' stock?',
+        value: 'Stock count correction',
+        validate: function (v) { return (v || '').trim() ? '' : 'A reason is required.'; }
+      });
       if (reason === null || !reason.trim()) { renderInventory(); return; }
       recordInventoryMovement({ ingredientName: name, qty: difference, type: 'adjustment', reason: reason.trim() });
       saveState();
@@ -109,16 +114,26 @@ function renderInventory() {
   lucide.createIcons();
 }
 
-function addStockFor(name) {
+async function addStockFor(name) {
   if (!priceItemByName(name)) { showToast('Choose an ingredient from the Price List first.', 'error'); return; }
   // Re-adding stock brings an item (previously removed) back into stock tracking.
   const ing = priceItemByName(name);
   if (ing && ing.stock === false) ing.stock = true;
-  const qty = prompt('Add stock for "' + name + '":', '');
+  const qty = await Modal.prompt({
+    title: 'Add stock',
+    message: 'Add stock for "' + name + '":',
+    inputType: 'number',
+    validate: function (v) { return toFinite(v) > 0 ? '' : 'Enter a valid positive number.'; }
+  });
   if (qty === null || qty === '') return;
-  const value = parseFloat(qty);
-  if (isNaN(value) || value <= 0) { showToast('Enter a valid positive number.', 'error'); return; }
-  const reason = prompt('Reason for this stock addition:', 'Manual stock addition');
+  const value = toFinite(qty);
+  if (value <= 0) { showToast('Enter a valid positive number.', 'error'); return; }
+  const reason = await Modal.prompt({
+    title: 'Reason',
+    message: 'Reason for this stock addition:',
+    value: 'Manual stock addition',
+    validate: function (v) { return (v || '').trim() ? '' : 'A reason is required.'; }
+  });
   if (reason === null || !reason.trim()) return;
   recordInventoryMovement({ ingredientName: name, qty: value, type: 'adjustment', reason: reason.trim() });
   saveState();
@@ -126,10 +141,16 @@ function addStockFor(name) {
   showToast('Added ' + fmt(value) + ' to ' + name + ' stock.');
 }
 
-function removeStockItem(name) {
+async function removeStockItem(name) {
   const ing = priceItemByName(name);
   const label = ing ? ing.name : name;
-  if (!confirm('Remove "' + label + '" from stock?\n\nIts stock history (movements) will be cleared and it will be treated as a daily-usage item (like water / electricity). It stays in your Price List and Usage table, and you can bring it back later with "Add Stock".')) return;
+  const ok = await Modal.confirm({
+    title: 'Remove from stock?',
+    message: 'Remove "' + label + '" from stock?\n\nIts stock history (movements) will be cleared and it will be treated as a daily-usage item (like water / electricity). It stays in your Price List and Usage table, and you can bring it back later with "Add Stock".',
+    danger: true,
+    okLabel: 'Remove'
+  });
+  if (!ok) return;
   if (state.inventory) delete state.inventory[name];
   state.inventoryMovements = (state.inventoryMovements || []).filter(function (m) { return m.ingredientName !== name; });
   if (ing) ing.stock = false;
@@ -138,8 +159,8 @@ function removeStockItem(name) {
   showToast('"' + label + '" removed from stock (kept as daily usage). Use Add Stock to restore it.');
 }
 
-$('addStockBtn').addEventListener('click', function () {
-  const name = prompt('Which ingredient to add stock for?', '');
+$('addStockBtn').addEventListener('click', async function () {
+  const name = await Modal.prompt({ title: 'Add stock', message: 'Which ingredient to add stock for?' });
   if (!name) return;
   addStockFor(name.trim());
 });

@@ -55,12 +55,13 @@ $('restoreFileInput').addEventListener('change', function () {
   const file = this.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = function () {
+  reader.onload = async function () {
     try {
       const parsed = JSON.parse(reader.result);
       const remoteState = parsed.state ? parsed.state : parsed;
       if (!remoteState || !remoteState.entries) { showToast('Invalid backup file.', 'error'); return; }
-      if (!confirm('Restore full backup? This will REPLACE all local data.')) return;
+      const ok = await Modal.confirm({ title: 'Restore full backup?', message: 'This will REPLACE all local data.', danger: true, okLabel: 'Restore' });
+      if (!ok) return;
       if (remoteState.prices && Array.isArray(remoteState.prices)) state.prices = remoteState.prices;
       if (remoteState.entries) state.entries = remoteState.entries;
       if (Array.isArray(remoteState.production)) state.production = remoteState.production;
@@ -143,7 +144,8 @@ async function listDriveBackups() {
 async function restoreDriveBackup(fileName) {
   const config = getGoogleSyncConfig();
   if (!config.sheetUrl) { showToast('Apps Script URL not configured.', 'error'); return; }
-  if (!confirm('Restore backup "' + fileName + '"? This will REPLACE all local data.')) return;
+  const ok = await Modal.confirm({ title: 'Restore backup?', message: 'Restore backup "' + fileName + '"? This will REPLACE all local data.', danger: true, okLabel: 'Restore' });
+  if (!ok) return;
   try {
     const response = await fetch(config.sheetUrl, {
       method: 'POST',
@@ -314,7 +316,8 @@ async function cloudListBackups() {
 }
 
 async function restoreCloudBackup(fileName) {
-  if (!confirm('Restore cloud backup "' + fileName + '"? This replaces ALL local data for this workspace.')) return;
+  const ok = await Modal.confirm({ title: 'Restore cloud backup?', message: 'Restore cloud backup "' + fileName + '"? This replaces ALL local data for this workspace.', danger: true, okLabel: 'Restore' });
+  if (!ok) return;
   const res = await cloudRestore(fileName);
   const remote = res && res.ok ? res.payload : null;
   if (!remote || !remote.state) { showToast('Could not read that backup.', 'error'); return; }

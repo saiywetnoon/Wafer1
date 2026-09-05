@@ -122,11 +122,12 @@ function loginCompany(id) {
   try { localStorage.setItem(ACTIVE_COMPANY_KEY, id); } catch (e) {}
   location.reload();
 }
-function deleteCompany(id) {
+async function deleteCompany(id) {
   if (id === 'default') { showToast('The main workspace cannot be deleted.', 'info'); return; }
   const c = companies.find(function (x) { return x.id === id; });
   if (!c) return;
-  if (!confirm('Delete "' + c.name + '" and ALL its data from this browser? This cannot be undone.')) return;
+  const ok = await Modal.confirm({ title: 'Delete workspace?', message: 'Delete "' + c.name + '" and ALL its data from this browser? This cannot be undone.', danger: true, okLabel: 'Delete' });
+  if (!ok) return;
   const wasActive = getActiveCompanyId() === id;
   try { localStorage.removeItem(STORAGE_KEY + '_' + id); } catch (e) {}
   try { localStorage.removeItem(DRAFT_STORAGE_KEY + '_' + id); } catch (e) {}

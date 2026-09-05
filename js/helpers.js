@@ -1,7 +1,10 @@
 /* ---------- Helpers ---------- */
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => Number(n).toLocaleString('en-US');
-const fmtKs = (n) => fmt(Math.round(n)) + ' Ks';
+function currencySymbol() {
+  return ((state && state.settings && state.settings.currencySymbol) || 'Ks');
+}
+const fmtKs = (n) => fmt(Math.round(n)) + ' ' + currencySymbol();
 const today = () => {
   const d = new Date();
   const off = d.getTimezoneOffset();
@@ -16,6 +19,15 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
   if (c === '"') return '&' + 'quot;';
   return '&' + '#39;';
 });
+/* Date n days from now, in the DEVICE's local timezone (same convention as
+   today()). Used for expiry/low-stock windows so "expiring in 3 days" is
+   never off by a day because of toISOString()'s UTC conversion. */
+function daysFromToday(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + (n || 0));
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
 
 function entriesSorted() {
   return Object.keys(state.entries).sort().map(function (d) {

@@ -36,18 +36,36 @@ function renderAll() {
 let googleSignInInitialized = false;
 let googleTokenClient = null;
 
+/* The Google Identity script is no longer loaded unconditionally in <head>.
+   Load it on demand — and only when the app is configured with a Client ID. */
+function loadGoogleIdentityScript(onReady) {
+  if (window.google && window.google.accounts) { onReady(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://accounts.google.com/gsi/client';
+  s.onload = onReady;
+  s.onerror = function () {
+    console.warn('Google identity script could not load — Google sync unavailable.');
+    showToast('Google sign-in could not load. Check your connection.', 'error');
+  };
+  document.head.appendChild(s);
+}
+
 function initGoogleSignIn() {
-  if (!GOOGLE_CLIENT_ID || !window.google || googleSignInInitialized) return;
+  if (!GOOGLE_CLIENT_ID || googleSignInInitialized) return;
   googleSignInInitialized = true;
   const btn = $('googleSignInDiv');
+  if (!btn) return;
   btn.classList.remove('hidden');
-
-  google.accounts.id.initialize({
-    client_id: GOOGLE_CLIENT_ID,
-    callback: handleGoogleCredential,
-    auto_select: false
+  loadGoogleIdentityScript(function () {
+    if (!window.google || !window.google.accounts) return;
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredential,
+      auto_select: false
+    });
+    try { google.accounts.id.renderButton(btn, { theme: 'outline', size: 'medium', width: 220, text: 'signin_with', shape: 'pill' }); }
+    catch (e) { console.warn('Google button render failed', e); }
   });
-  google.accounts.id.renderButton(btn, { theme: 'outline', size: 'medium', width: 220, text: 'signin_with', shape: 'pill' });
 }
 
 function handleGoogleCredential(response) {
@@ -120,17 +138,17 @@ async function loadFromGoogleAccount() {
     googleSheetsId = cfg.sheetId;
     await loadFromSheetsApi();
   } else {
-    setupGSheetIdInput();
+    await setupGSheetIdInput();
   }
 }
 
-function setupGSheetIdInput() {
-  const sheetId = prompt(
-    'Paste your Google Sheet ID (the long string from your sheet URL) to sync this ledger to your Google account.\n' +
-    'Open your Google Sheet → look at the URL: docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit\n\n' +
-    'Leave empty to skip and use local-only mode for now.',
-    ''
-  );
+async function setupGSheetIdInput() {
+  const sheetId = await Modal.prompt({
+    title: 'Google Sheet ID',
+    message: 'Paste your Google Sheet ID (the long string from your sheet URL) to sync this ledger to your Google account.\n\n' +
+      'Open your Google Sheet → look at the URL: docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit\n\n' +
+      'Leave empty to skip and use local-only mode for now.'
+  });
   if (!sheetId) return;
   googleSheetsId = sheetId;
   const cfg = getGoogleSyncConfig();
@@ -304,13 +322,16 @@ async function appStart() {
   if (!companyBooted) { showAuthScreen('Please sign in to use this app.'); return; }
 
   // 3) One-time import of pre-account browser data (owner's device).
-  maybeImportLegacy();
+  await maybeImportLegacy();
 
   // 4) Load, render, then reconcile with the account's cloud copy.
   loadState();
   loadDraftIfNewer();
   renderAll();
   initGoogleSignIn();
+  // Offline-first installable app: register the service worker (caches the app
+  // shell + CDN libraries so the next open works even with no connection).
+  registerServiceWorker();
   // Supabase: subscribe to live updates so other devices appear automatically.
   if (SUPA.configured() && SUPA.user && SUPA.user.id) {
     try { supabaseWatch(SUPA.user.id); } catch (e) { console.warn('realtime not available', e); }
@@ -331,6 +352,18 @@ async function appStart() {
     window.addEventListener('online', updateAppStatus);
     window.addEventListener('offline', updateAppStatus);
   } catch (e) { /* listeners are best-effort */ }
+}
+
+/* Offline-first installable app: cache the app shell + CDN libraries so the app
+   opens even with no connection. The service worker only enhances loading — if
+   SW registration fails for any reason the app keeps working exactly as before. */
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').catch(function (err) {
+      console.warn('Service worker registration failed (offline caching disabled):', err);
+    });
+  });
 }
 
 appStart();

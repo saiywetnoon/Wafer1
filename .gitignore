@@ -1,0 +1,11 @@
+# Build artifacts
+tailwind-build.log
+tailwind-build.err
+node_modules/
+*.log
+
+# Windows / Editor
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/

@@ -12,7 +12,25 @@ function renderTools() {
   renderTargetProfit();
   renderPurchaseList();
   renderPurchaseDays();
+  renderPreferences();
 }
+
+/* ---------- Preferences (currency symbol, language) ---------- */
+function renderPreferences() {
+  const sym = $('prefCurrencySymbol');
+  if (sym) sym.value = currencySymbol();
+  const lang = $('prefLanguage');
+  if (lang) lang.value = 'en';
+}
+$('savePrefsBtn').addEventListener('click', function () {
+  if (!state.settings) state.settings = { hourlyWage: 1500 };
+  const sym = ($('prefCurrencySymbol') || {}).value || '';
+  state.settings.currencySymbol = sym.trim() || 'Ks';
+  saveState();
+  renderTools();
+  renderAll();
+  showToast('Preferences saved — all money figures now use "' + currencySymbol() + '".', 'success');
+});
 
 /* ---------- Recipes ---------- */
 function renderRecipes() {
@@ -50,15 +68,21 @@ function recipeTotalPieces(usage) {
     return sum + (ing.unit === 'g' ? qty : qty * (parseFloat(ing.weightPerUnit) || 0));
   }, 0);
 }
-function scaleRecipe(idx) {
+async function scaleRecipe(idx) {
   const r = (state.recipes || [])[idx];
   if (!r) return;
   const baseMix = recipeTotalPieces(r.usage);
   if (baseMix <= 0) { showToast('Recipe has no measurable ingredients.', 'error'); return; }
-  const target = prompt('Target finished pieces for "' + r.name + '"?', String(Math.round(baseMix / 6) * 6));
+  const target = await Modal.prompt({
+    title: 'Scale recipe',
+    message: 'Target finished pieces for "' + r.name + '"?',
+    value: String(Math.round(baseMix / 6) * 6),
+    inputType: 'number',
+    validate: function (v) { return (toFinite(v) > 0) ? '' : 'Enter a valid positive number.'; }
+  });
   if (target === null) return;
-  const pieces = parseFloat(target);
-  if (isNaN(pieces) || pieces <= 0) { showToast('Enter a valid number of pieces.', 'error'); return; }
+  const pieces = toFinite(target);
+  if (pieces <= 0) { showToast('Enter a valid number of pieces.', 'error'); return; }
   const factor = pieces / baseMix;
   const scaled = {};
   (state.prices || []).forEach(function (ing) {
@@ -88,8 +112,9 @@ function applyRecipe(idx) {
   showToast('Recipe "' + r.name + '" applied to the form.');
 }
 
-function deleteRecipe(idx) {
-  if (!confirm('Delete this recipe?')) return;
+async function deleteRecipe(idx) {
+  const ok = await Modal.confirm({ title: 'Delete this recipe?', message: 'Delete this saved recipe?', danger: true, okLabel: 'Delete' });
+  if (!ok) return;
   state.recipes.splice(idx, 1);
   saveState();
   renderRecipes();
@@ -206,8 +231,9 @@ $('addRecurringBtn').addEventListener('click', function () {
   showToast('Recurring expense "' + name + '" added.');
 });
 
-function removeRecurring(id) {
-  if (!confirm('Remove this recurring expense?')) return;
+async function removeRecurring(id) {
+  const ok = await Modal.confirm({ title: 'Remove recurring expense?', message: 'Remove this recurring expense from the fixed costs?', danger: true, okLabel: 'Remove' });
+  if (!ok) return;
   state.recurringExpenses = (state.recurringExpenses || []).filter(function (r) { return r.id !== id; });
   saveState();
   renderRecurring();
@@ -336,16 +362,38 @@ $('printReportBtn').addEventListener('click', function () {
   const entries = entriesProdSales();
   if (!f.revenue && !f.capital && !entries.length) { showToast('No data to print.', 'info'); return; }
   const w = window.open('', '_blank');
-  w.document.write('<html><head><title>Crispy Roll Ledger Report</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#111}h1{color:#B45309}table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:12px}th{background:#f5f5f5}.pos{color:#059669;font-weight:bold}.neg{color:#dc2626;font-weight:bold}</style></head><body>');
-  w.document.write('<h1>Daily Crispy Roll Ledger Report</h1>');
-  w.document.write('<p>Generated: ' + new Date().toLocaleString() + '</p>');
-  w.document.write('<table><tr><th>Date</th><th>Capital</th><th>Rolled (bags)</th><th>Rolled (pcs)</th><th>Expected</th><th>Sold (bags)</th><th>Revenue</th><th>Net (sold)</th><th>Notes</th></tr>');
-  entries.forEach(function (e) {
-    w.document.write('<tr><td>' + e.date + '</td><td>' + fmtKs(e.capital) + '</td><td>' + fmt(e.prodBags) + '</td><td>' + fmt(e.prodPieces) + '</td>' + (e.expectedRolls ? '<td>' + fmt(e.expectedRolls) + '</td>' : '<td>—</td>') + '<td>' + fmt(e.soldBags) + '</td><td>' + fmtKs(e.revenue) + '</td><td class="' + (e.net >= 0 ? 'pos' : 'neg') + '">' + fmtKs(e.net) + '</td>' + (e.notes ? '<td>' + esc(e.notes) + '</td>' : '<td>—</td>') + '</tr>');
+  if (!w) { showToast('Allow pop-ups to print this report.', 'error'); return; }
+  const doc = w.document;
+  doc.open();
+  doc.write('<!doctype html><html><head><meta charset="utf-8"><title>Daily Crispy Roll Ledger Report</title>' +
+    '<style>body{font-family:Arial,sans-serif;padding:20px;color:#111}h1{color:#B45309}table{width:100%;border-collapse:collapse;margin-top:10px}' +
+    'th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:12px}th{background:#f5f5f5}.pos{color:#059669;font-weight:bold}.neg{color:#dc2626;font-weight:bold}</style>' +
+    '</head><body></body></html>');
+  doc.close();
+  const body = doc.body;
+  const h1 = doc.createElement('h1'); h1.textContent = 'Daily Crispy Roll Ledger Report';
+  body.appendChild(h1);
+  const gen = doc.createElement('p'); gen.textContent = 'Generated: ' + new Date().toLocaleString();
+  body.appendChild(gen);
+  const table = doc.createElement('table');
+  const headRow = doc.createElement('tr');
+  ['Date', 'Capital', 'Rolled (bags)', 'Rolled (pcs)', 'Expected', 'Sold (bags)', 'Revenue', 'Net (sold)', 'Notes'].forEach(function (h) {
+    const th = doc.createElement('th'); th.textContent = h; headRow.appendChild(th);
   });
-  w.document.write('</table></body></html>');
-  w.document.close();
-  w.print();
+  table.appendChild(headRow);
+  entries.forEach(function (e) {
+    const tr = doc.createElement('tr');
+    [e.date, fmtKs(e.capital), fmt(e.prodBags), fmt(e.prodPieces), e.expectedRolls ? fmt(e.expectedRolls) : '—',
+     fmt(e.soldBags), fmtKs(e.revenue), fmtKs(e.net), e.notes || '—'].forEach(function (v, i) {
+      const td = doc.createElement('td');
+      td.textContent = v;
+      if (i === 7) td.className = (e.net >= 0) ? 'pos' : 'neg';
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+  body.appendChild(table);
+  setTimeout(function () { try { w.focus(); w.print(); } catch (e) { /* popup blocked or closed */ } }, 100);
 });
 
 $('exportMonthlyCsvBtn').addEventListener('click', function () {
@@ -363,5 +411,32 @@ $('exportMonthlyCsvBtn').addEventListener('click', function () {
   a.click();
   URL.revokeObjectURL(a.href);
   showToast('Report exported to CSV.');
+});
+
+/* Zero-dependency Excel export: an HTML <table> saved as .xls opens directly
+   in Excel. Keeps the same numbers as the CSV export without a library. */
+$('exportMonthlyXlsBtn').addEventListener('click', function () {
+  const entries = entriesProdSales();
+  if (!entries.length) { showToast('No data to export.', 'info'); return; }
+  const header = ['Date', 'Capital (Ks)', 'Bags Rolled', 'Pieces Rolled', 'Expected', 'Bags Sold', 'Revenue (Ks)', 'Labor Hrs', 'Net (Ks)'];
+  const rows = entries.map(function (e) {
+    return [e.date, e.capital, e.prodBags, e.prodPieces, e.expectedRolls || '', e.soldBags, e.revenue, ((e.laborMin || 0) / 60).toFixed(2), e.net];
+  });
+  let html = '<table border="1"><thead><tr>';
+  header.forEach(function (h) { html += '<th>' + String(h).replace(/[<>&"]/g, '') + '</th>'; });
+  html += '</tr></thead><tbody>';
+  rows.forEach(function (r) {
+    html += '<tr>' + r.map(function (v) {
+      return '<td style="mso-number-format:\\@;">' + String(v == null ? '' : v).replace(/[<>&"]/g, '') + '</td>';
+    }).join('') + '</tr>';
+  });
+  html += '</tbody></table>';
+  const blob = new Blob(['\uFEFF<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>' + html + '</body></html>'], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'crispy-roll-report-' + today() + '.xls';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('Excel-format report downloaded (.xls) — open it in Excel.', 'success');
 });
 

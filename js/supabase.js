@@ -73,6 +73,20 @@ const SUPA = {
     const sb = this.init(); if (!sb) return { error: 'SUPABASE_NOT_CONFIGURED' };
     return sb.auth.signInWithPassword({ email: email, password: password });
   },
+  async resetPassword(email) {
+    const sb = this.init(); if (!sb) return { error: 'Not configured' };
+    // Sends a "Reset Your Password" email (requires the Supabase email template
+    // to point back at this app's URL, e.g. http://localhost:5500/index.html).
+    const { error } = await sb.auth.resetPasswordForEmail(email);
+    return error ? { error: error.message } : { ok: true };
+  },
+  async updatePassword(newPassword) {
+    const sb = this.init(); if (!sb) return { error: 'Not configured' };
+    // Called after the user follows the reset link: the recovery session is
+    // already active, so we can set the new password immediately.
+    const { error } = await sb.auth.updateUser({ password: newPassword });
+    return error ? { error: error.message } : { ok: true };
+  },
   async signOut() {
     const sb = this.init(); if (!sb) return;
     try { await sb.auth.signOut(); } catch (e) { console.warn(e); }
@@ -85,7 +99,7 @@ const SUPA = {
     if (!sb || !u) return null;
     const { data, error } = await sb
       .from('profiles').select('role,status').eq('id', u.id).maybeSingle();
-    if (!error && data) this.profile = this.profile = Object.assign(this.profile, data);
+    if (!error && data) this.profile = Object.assign(this.profile, data);
     return data && !error ? data : null;
   },
   /* On first sign-up the auth trigger creates a pending profile; here we

@@ -14,7 +14,7 @@ approved account's data kept private.
 
 | Area | Status | What is complete |
 |---|---|---|
-| Email/password accounts | ✅ | Supabase Auth gate, approved/pending/rejected account states, first account becomes admin. |
+| Email/password accounts | ✅ | Supabase Auth gate, approved/pending/rejected account states, first account becomes admin, **password reset (v1.11)**. |
 | Database privacy | ✅ | RLS restricts profiles and ledger access; pending users cannot access ledgers. |
 | Multi-device sync | ✅ with limitation | Supabase Realtime receives inserts and updates. Whole-ledger writes are last-save-wins during simultaneous edits. |
 | Production and sales | ✅ | Production adds finished goods; sales use weighted-average COGS. |
@@ -22,11 +22,11 @@ approved account's data kept private.
 | Ingredient inventory | 🟡 | Dated opening, purchase, production, reversal, and manual-adjustment movements now calculate stock; live acceptance testing remains. |
 | Customers and debt | 🟡 | Customer records, standing orders, debt, and capped repayments exist; sales are not yet linked to customers. |
 | Suppliers and purchases | 🟡 | Supplier records, purchases, and payments exist; inventory movements are not fully unified. |
-| Cash drawer | ✅ | Opening cash, adjustments, debt repayments, expenses, and supplier payments feed cash reporting. |
+| Cash drawer | ✅ | Opening cash, adjustments, debt repayments, expenses, supplier payments, and **daily cash close / reopen with close history (v1.11)** feed cash reporting. |
 | Production workflow | ✅ | Mix-first recording: ingredients saved before packaging, expected rolls estimated, actual bags/pieces updated in place after packing (no double deduction). |
 | AI root cause | ✅ | On-device diagnostic engine (yield, weight, labor, cost, waste, recipe, notes) + optional ChatGPT/DeepSeek narrative. |
 | Backups | 🟡 | Download/restore backup exists; automatic server-side version history does not. |
-| Offline installable app | ⬜ | Not yet a PWA. |
+| Offline installable app | 🟡 | **PWA (v1.11):** manifest + service worker cache the app shell and CDN libs so the app opens offline; background-sync queue for writes while offline remains TODO. |
 | Team workspaces | ⬜ | Not yet supported; each account currently owns one private ledger. |
 
 Legend: ✅ complete · 🟡 usable but incomplete · ⬜ not started

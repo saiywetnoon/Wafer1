@@ -72,6 +72,7 @@
     title: true,  // flash the browser-tab title
     nav: true,    // flash the Fry Timers menu button
     vibrate: true,             // mobile vibration on checkpoints
+    notify: true,              // local browser Notification when the tab is backgrounded
     rollsPerBatch: 1,          // Rolls a finished pan counts by default — YOU set
                                // this (global here, or per-pan in "Use global"
                                // mode). Reported to Production as pieces.
@@ -83,6 +84,35 @@
                                // timing, rolls AND bags, all set by you
   };
   var settings = normalizeSettings(SETTINGS_DEFAULTS);
+
+  /* Optional local Notification when a pan alerts while the tab is hidden/backgrounded.
+     Requested lazily (on first timer use) so a new user isn't pestered up front. */
+  var notifyPermissionAsked = false;
+  function notifyFor(pan, stage) {
+    try {
+      if (!settings.notify) return;
+      if (typeof Notification === 'undefined') return;
+      if (document.visibilityState === 'visible' && document.hasFocus && document.hasFocus()) return; // tab is in front — toast/banner are enough
+      if (Notification.permission === 'denied') return;
+      if (Notification.permission === 'default') {
+        if (notifyPermissionAsked) return;
+        notifyPermissionAsked = true;
+        Notification.requestPermission().then(function (p) {
+          if (p === 'granted') notifyFor(pan, stage);
+        }).catch(function () { /* best-effort */ });
+        return;
+      }
+      var n = new Notification(pan.name + ' — ' + (stage === 3 ? 'Rolls ready!' : 'Check the pan'), {
+        body: stageMessage(pan),
+        tag: 'pan-' + pan.id + '-' + stage + '-' + pan.batch,
+        renotify: true
+      });
+      n.onclick = function () {
+        try { window.focus(); n.close(); } catch (e) { /* ignore */ }
+      };
+      setTimeout(function () { try { n.close(); } catch (e) { /* ignore */ } }, 15000);
+    } catch (e) { /* notifications are best-effort */ }
+  }
 
   // Optional pan "runs" (feature 2): after a pan finishes a batch you can log
   // it to production from the timers screen. Keyed by pan id (dynamic).
@@ -435,6 +465,7 @@
   function triggerAlert(pan, stage) {
     paintPan(pan);
     updateGlobalBanner();
+    notifyFor(pan, stage);
     if (settings.toast && window.showToast) {
       var type = stage === 3 ? 'error' : 'info';
       showToast(pan.name + ' · ' + stageMessage(pan), type);

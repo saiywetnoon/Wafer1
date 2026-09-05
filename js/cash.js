@@ -21,6 +21,8 @@ function cashAdjustments() {
 function addCashAdjustment(amount, label) {
   if (isNaN(amount) || amount === 0) { showToast('Enter a valid non-zero amount.', 'error'); return; }
   if (!label) { showToast('Add a short description (e.g. petrol, draw, deposit).', 'error'); return; }
+  // A closed day is locked: no new manual cash events for that date without reopening.
+  if (isDayClosed(today())) { showToast('Today\'s cash is closed — reopen the day to post adjustments.', 'error'); return; }
   if (!state.cash) state.cash = { opening: 0, adjustments: [] };
   if (!Array.isArray(state.cash.adjustments)) state.cash.adjustments = [];
   state.cash.adjustments.push({ id: uid(), date: today(), amount: amount, label: label });
@@ -29,8 +31,9 @@ function addCashAdjustment(amount, label) {
   showToast(amount > 0 ? 'Cash added to drawer.' : 'Cash removed from drawer.');
 }
 
-function removeCashAdjustment(id) {
-  if (!confirm('Delete this cash adjustment?')) return;
+async function removeCashAdjustment(id) {
+  const ok = await Modal.confirm({ title: 'Delete cash adjustment?', message: 'This removes the adjustment from the cash drawer history.', danger: true, okLabel: 'Delete' });
+  if (!ok) return;
   if (!state.cash) return;
   state.cash.adjustments = (state.cash.adjustments || []).filter(function (a) { return a.id !== id; });
   saveState();
@@ -125,31 +128,131 @@ function renderCashCount() {
   var exp = cashExpectedToday();
   var expEl = $('cashExpectedToday');
   if (expEl) expEl.textContent = fmtKs(exp);
-  var counted = parseFloat(($('cashCounted') || {}).value) || 0;
+  var counted = toFinite(($('cashCounted') || {}).value);
   var varEl = $('cashVariance');
   if (varEl) {
     var variance = counted - exp;
     varEl.textContent = (variance >= 0 ? '+' : '') + fmtKs(variance);
-    varEl.className = 'font-extrabold text-lg ' + (Math.abs(variance) < 1 ? 'text-gray-400' : variance > 0 ? 'text-emerald-400' : 'text-red-400');
+    varEl.className = 'font-extrabold text-lg ' + (Math.abs(variance) < 0.005 ? 'text-gray-400' : variance > 0 ? 'text-emerald-400' : 'text-red-400');
+  }
+  renderCashCloseUI();
+}
+
+/* ---------- Daily Cash Close / Reopen ----------
+   A close record freezes one day's expected-vs-counted cash. Once closed, the
+   day shows a closed banner, new manual adjustments for that day are blocked,
+   and reopening requires a typed reason (kept in the record as an audit trail). */
+function cashCloses() {
+  return (state.cash && Array.isArray(state.cash.closes)) ? state.cash.closes : [];
+}
+function cashCloseOn(date) {
+  var d = date || today();
+  return cashCloses().find(function (c) { return c.date === d; }) || null;
+}
+function isDayClosed(date) {
+  var c = cashCloseOn(date);
+  return !!(c && !c.reopenedAt);
+}
+function postCashVariance(counted) {
+  var exp = cashExpectedToday();
+  var variance = Math.round(toFinite(counted) - exp);
+  if (Math.abs(variance) < 1) return 0;
+  addCashAdjustment(variance, 'Daily count variance (' + fmt(counted) + ' counted vs ' + fmt(exp) + ' expected)');
+  return variance;
+}
+async function closeCashDay() {
+  if (!state.cash) state.cash = { opening: 0, adjustments: [] };
+  if (!Array.isArray(state.cash.closes)) state.cash.closes = [];
+  if (isDayClosed(today())) { showToast('Today is already closed.', 'info'); renderCashCloseUI(); return; }
+  var expected = cashExpectedToday();
+  var counted = toFinite(($('cashCounted') || {}).value);
+  if (counted <= 0 && expected > 0) { showToast('Enter the counted cash first.', 'error'); return; }
+  var note = await Modal.prompt({
+    title: 'Close today\'s cash',
+    message: 'Expected ' + fmtKs(expected) + ' · counted ' + fmtKs(counted) + ' · variance ' + fmtKs(Math.round(counted - expected)) + '.\n\nOptional note (shortage / overage explanation):'
+  });
+  if (note === null) return; // cancelled
+  // Post any variance to the drawer so the books match the count.
+  var variance = postCashVariance(counted);
+  state.cash.closes.push({
+    id: uid(),
+    date: today(),
+    expected: Math.round(expected),
+    counted: Math.round(counted),
+    variance: Math.round(counted - expected),
+    note: (note || '').trim(),
+    closedBy: authEmail() || '',
+    closedAt: new Date().toISOString(),
+    reopenedAt: null,
+    reopenedBy: null,
+    reopenReason: ''
+  });
+  saveState();
+  $('cashCounted').value = '';
+  renderCash();
+  showToast(variance ? 'Day closed — variance ' + (variance > 0 ? '+' : '') + fmtKs(variance) + ' posted.' : 'Day closed — counted matches expected.', 'success');
+}
+async function reopenCashDay() {
+  var c = cashCloseOn(today());
+  if (!c || c.reopenedAt) { showToast('Today is not closed.', 'info'); return; }
+  var reason = await Modal.prompt({
+    title: 'Reopen today',
+    message: 'Reopening a closed day lets you record missing cash events.\n\nReason for reopening (required for the audit record):',
+    validate: function (v) { return (v || '').trim() ? '' : 'A reason is required to reopen a closed day.'; }
+  });
+  if (reason === null) return;
+  c.reopenedAt = new Date().toISOString();
+  c.reopenedBy = authEmail() || '';
+  c.reopenReason = reason.trim();
+  saveState();
+  renderCash();
+  showToast('Today reopened: ' + reason.trim(), 'info');
+}
+function renderCashCloseUI() {
+  var banner = $('cashCloseBanner');
+  var closeBtn = $('cashCloseBtn');
+  var reopenBtn = $('cashReopenBtn');
+  var closed = isDayClosed(today());
+  if (banner) {
+    banner.innerHTML = closed
+      ? '<div class="p-3 rounded-lg bg-amber-900/30 border border-amber-700/50 text-xs text-amber-200"><b>Today\'s cash is closed.</b> Manual adjustments for today are blocked. Reopen if you need to record a missed event.</div>'
+      : '<div class="p-3 rounded-lg bg-gray-800/60 border border-gray-700 text-xs text-gray-400"><b>Awaiting close.</b> Count the drawer, then press "Close Today\'s Cash" to lock the day and store the record.</div>';
+    banner.classList.remove('hidden');
+  }
+  if (closeBtn) closeBtn.classList.toggle('hidden', closed);
+  if (reopenBtn) reopenBtn.classList.toggle('hidden', !closed);
+  var hist = $('cashCloseHistory');
+  if (hist) {
+    var closes = cashCloses().slice().reverse();
+    hist.innerHTML = closes.length
+      ? '<div class="font-semibold text-gray-400 mb-1">Close history</div>' +
+        closes.map(function (c) {
+          var stateTxt = (c.reopenedAt ? ' <span class="text-gray-500">· reopened</span>' : ' <span class="text-emerald-400">closed</span>');
+          var re = c.reopenReason ? '<div class="text-gray-600">reopen: ' + esc(c.reopenReason) + '</div>' : '';
+          return '<div class="py-1 border-b border-gray-800 last:border-0">' + esc(c.date) +
+            ' · exp ' + fmtKs(c.expected) + ' · counted ' + fmtKs(c.counted) +
+            ' · var ' + ((c.variance >= 0 ? '+' : '') + fmtKs(c.variance)) + stateTxt + re + '</div>';
+        }).join('')
+      : '<div class="text-gray-500">No cash days closed yet.</div>';
   }
 }
 
 $('cashOpening').addEventListener('change', function () {
-  var v = parseFloat($('cashOpening').value);
+  var v = toFinite($('cashOpening').value);
   if (!state.cash) state.cash = { opening: 0, adjustments: [] };
-  state.cash.opening = !isNaN(v) ? v : 0;
+  state.cash.opening = v;
   saveState();
   renderCash();
   showToast('Opening cash balance saved.');
 });
 
 $('cashAdjustInBtn').addEventListener('click', function () {
-  addCashAdjustment(Math.abs(parseFloat($('cashAdjustAmount').value) || 0), $('cashAdjustLabel').value.trim());
+  addCashAdjustment(Math.abs(toFinite($('cashAdjustAmount').value)), $('cashAdjustLabel').value.trim());
   $('cashAdjustAmount').value = '';
   $('cashAdjustLabel').value = '';
 });
 $('cashAdjustOutBtn').addEventListener('click', function () {
-  addCashAdjustment(-Math.abs(parseFloat($('cashAdjustAmount').value) || 0), $('cashAdjustLabel').value.trim());
+  addCashAdjustment(-Math.abs(toFinite($('cashAdjustAmount').value)), $('cashAdjustLabel').value.trim());
   $('cashAdjustAmount').value = '';
   $('cashAdjustLabel').value = '';
 });
@@ -157,14 +260,16 @@ $('cashAdjustOutBtn').addEventListener('click', function () {
 $('cashCounted').addEventListener('input', renderCashCount);
 $('cashPostVarianceBtn').addEventListener('click', function () {
   var exp = cashExpectedToday();
-  var counted = parseFloat($('cashCounted').value) || 0;
+  var counted = toFinite($('cashCounted').value);
   var variance = Math.round(counted - exp);
   if (Math.abs(variance) < 1) { showToast('Counting matches expected — no adjustment needed.', 'info'); return; }
-  addCashAdjustment(variance, 'Daily count variance (' + fmt(counted) + ' counted vs ' + fmt(exp) + ' expected)');
+  postCashVariance(counted);
   $('cashCounted').value = '';
   renderCashCount();
   showToast('Variance ' + (variance > 0 ? '+' : '') + fmtKs(variance) + ' posted to the cash drawer.');
 });
+$('cashCloseBtn').addEventListener('click', closeCashDay);
+$('cashReopenBtn').addEventListener('click', reopenCashDay);
 
 /* ---------- CashHooks API (hardware / external integration) ----------
    A tiny, stable interface so a barcode scanner, POS hardware hook, or a future
