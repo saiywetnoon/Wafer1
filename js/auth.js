@@ -149,10 +149,24 @@ async function authBootstrap() {
 function showAuthScreen(msg) {
   const s = $('authScreen'); if (s) s.classList.remove('hidden');
   const app = $('appContainer'); if (app) app.classList.add('hidden');
-  // In Supabase mode hide the legacy "deployment URL / server settings" block.
-  if (SUPA.configured()) {
-    const det = document.querySelector('#authScreen details');
-    if (det) det.classList.add('hidden');
+  // The legacy "Apps Script Web App URL" block is ONLY for installations that
+  // deliberately left the Supabase keys empty. If Supabase is configured
+  // (URL + anon key present) this app is on the real backend, so that field
+  // must NEVER appear — even if the Supabase library is still loading or a
+  // CDN was blocked. Hiding is keyed to the CONFIG, not to window.supabase.
+  const legacy = !!(SUPABASE_URL_wafer && SUPABASE_ANON_KEY_wafer);
+  const det = document.querySelector('#authScreen details');
+  if (det) det.classList.toggle('hidden', legacy);
+  // If Supabase is configured but its library failed to load, say so honestly
+  // instead of silently offering the legacy backend.
+  const warn = $('authBackendWarn');
+  if (warn) {
+    if (legacy && !window.supabase) {
+      warn.textContent = '⚠ The Supabase connection couldn\u2019t load (network or ad-blocker?). Check your internet and reload. You won\u2019t be able to sign in until it loads.';
+      warn.classList.remove('hidden');
+    } else {
+      warn.classList.add('hidden');
+    }
   }
   if (msg) setAuthMsg(msg, 'info');
 }

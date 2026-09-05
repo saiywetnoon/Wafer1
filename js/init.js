@@ -284,7 +284,7 @@ function reportBackendMode() {
     st.textContent = 'Backend: legacy Apps-Script mode. Configure a server URL, or add Supabase keys to enable one-click sync.';
     st.className = 'text-xs text-amber-400 mt-2';
   } else if (keys && !lib) {
-    st.textContent = 'Sync engine failed to load (network/CDN blocked). You are being shown the old mode — check your internet or blocker, then reload.';
+    st.textContent = 'Supabase is configured but its library failed to load (network/CDN blocked or ad-blocker). The login screen now explains this instead of offering the legacy field.';
     st.className = 'text-xs text-red-400 mt-2';
   }
 }

@@ -620,10 +620,17 @@ listed manual workflows before treating this release as complete.
   `registerServiceWorker()` cache the app shell and the CDN libraries
   (stale-while-revalidate) so the app opens with no connection. Ledger DATA is
   never touched by the worker — it stays in your browser + Supabase.
-- **SRI-pinned libraries.** Chart.js, lucide, and Supabase now load with
-  `integrity` hashes. Google Identity SDK is no longer downloaded on every page
+- **SRI-pinned libraries.** Chart.js, lucide, and Supabase load with
+  `integrity` hashes; supabase-js is pinned to an exact version (`2.115.0`) so
+  the hash can never drift when the `@2` tag moves — so the legacy
+  "Apps Script Web App URL" field can no longer be triggered by a CDN hiccup.
+  Google Identity SDK is no longer downloaded on every page
   load — it loads only on demand if a `GOOGLE_CLIENT_ID` is configured (and the
   config is empty by default).
+- **Legacy field never shown on Supabase.** The login screen's "Server settings"
+  (Apps Script URL) is now hidden whenever Supabase keys are present — even if
+  the CDN library is still loading. If Supabase fails to load entirely, the
+  login screen says so honestly instead of showing a confusing URL field.
 - **Password reset.** "Forgot password?" on the login screen mails a Supabase
   reset link; opening it shows an in-app "set new password" pane. (Requires the
   Supabase email template to point back at the app URL.)

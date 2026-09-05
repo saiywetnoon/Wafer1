@@ -4,7 +4,8 @@ const crypto = require('crypto');
 const urls = [
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
   'https://unpkg.com/lucide@1.34.0/dist/umd/lucide.min.js',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js'
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/dist/umd/supabase.min.js',
+  'https://unpkg.com/@supabase/supabase-js@2.115.0/dist/umd/supabase.min.js'
 ];
 let i = 0;
 function next() {

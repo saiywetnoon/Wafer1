@@ -17,6 +17,8 @@ check('no Play CDN tailwind', !html.includes('cdn.tailwindcss.com'));
 check('no inline tailwind.config', !html.includes('tailwind.config ='));
 check('no gsi/client script', !html.includes('accounts.google.com/gsi/client'));
 check('supabase SRI present', html.includes('integrity="sha384-EyR2P0'));
+check('supabase version pinned (not floating @2)', !/supabase-js@2\/dist/.test(html) && html.includes('@supabase/supabase-js@2.115.0'));
+check('auth backend-warning element', html.includes('authBackendWarn'));
 
 const css = fs.readFileSync(path.join(__dirname, 'css', 'tailwind.css'), 'utf8');
 ['sm:w-64', 'lg:grid-cols-5', 'max-h-32', 'text-sky-400', 'hover:text-sky-300', 'sm:col-span-3'].forEach(function (c) {
