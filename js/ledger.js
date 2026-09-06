@@ -28,10 +28,18 @@ function saveProduction() {
     showToast('Bags, pieces and labor must be zero or valid numbers.', 'error');
     return;
   }
+  // The production form now carries the "Rolls per bag" packing rule; commit it
+  // to the shared setting (in case the user changed it and saved without blur).
+  try {
+    const localRpb = parseInt($('logRollsPerBag').value, 10);
+    if (localRpb > 0 && localRpb <= 100 && state.settings.rollsPerBag !== localRpb) {
+      state.settings.rollsPerBag = localRpb;
+    }
+  } catch (e) { /* best-effort */ }
   // Real packing rule: when the bag field is left EMPTY but pieces were entered,
   // derive bags as FULL sets only — floor(pieces ÷ rollsPerBag). 16 rolls at
   // 5/bag = 3 bags. If the user typed a bag count, always respect it.
-  const bagsFieldRaw = ($('logBagsProduced').value || '').trim();
+  const bagsFieldRaw = String($('logBagsProduced').value || '').trim();
   const bagsEntered = bagsFieldRaw !== '';
   const usage = currentUsage();
   const ingCost = ingredientCostFor(usage);

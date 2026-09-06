@@ -34,10 +34,22 @@ function renderSaleCustomerOptions(selected) {
 
 function saveSale() {
   const date = validateText($('saleDate'));
-  const bags = validateNum($('saleBags'));
   const pieces = validateNum($('salePieces'));
   const price = validateNum($('salePrice'));
-  if (date === null || bags === null || pieces === null || price === null) {
+  // Bags may be left empty: they are auto-counted from the pieces using the
+  // full-set packing rule (floor ÷ rollsPerBag) — 16 pieces at 5/bag = 3 bags.
+  const bagsRaw = String($('saleBags').value || '').trim();
+  let bags;
+  if (bagsRaw === '') {
+    if (pieces === null) { showToast('Enter pieces (or bags) and price per bag.', 'error'); return; }
+    const rpb = parseInt((state.settings && state.settings.rollsPerBag) != null ? state.settings.rollsPerBag : 0, 10);
+    bags = Math.floor(pieces / (rpb > 0 ? rpb : (typeof DEFAULT_ROLLS_PER_BAG !== 'undefined' ? DEFAULT_ROLLS_PER_BAG : 5)));
+  } else {
+    const parsedBags = validateNum($('saleBags'));
+    if (parsedBags === null) { showToast('Enter a valid bag count.', 'error'); return; }
+    bags = parsedBags;
+  }
+  if (date === null || pieces === null || price === null) {
     showToast('Enter date, bags, pieces and price per bag.', 'error');
     return;
   }
@@ -107,10 +119,23 @@ function saveSale() {
 
 /* Live mini-calc on the sale form. */
 function updateSaleLive() {
-  const bags = parseFloat($('saleBags').value) || 0;
+  const bagsRaw = String($('saleBags').value || '');
+  const bagsTyped = bagsRaw.trim() !== '';
+  const bags = parseFloat(bagsRaw) || 0;
   const price = parseFloat($('salePrice').value) || 0;
   const pieces = parseFloat($('salePieces').value) || 0;
-  const amount = bags * price;
+  // Auto-bags from pieces with the full-set packing rule (floor ÷ rollsPerBag).
+  const rpb = parseInt((state.settings && state.settings.rollsPerBag) != null ? state.settings.rollsPerBag : 0, 10);
+  const effectiveRpb = rpb > 0 ? rpb : (typeof DEFAULT_ROLLS_PER_BAG !== 'undefined' ? DEFAULT_ROLLS_PER_BAG : 5);
+  const derivBags = (!bagsTyped && pieces > 0) ? Math.floor(pieces / effectiveRpb) : 0;
+  const bagsShown = bagsTyped ? bags : derivBags;
+  const hintEl = $('saleBagsHint');
+  if (hintEl) {
+    hintEl.textContent = derivBags > 0
+      ? 'Auto: ' + fmt(pieces) + ' pieces ÷ ' + effectiveRpb + ' = <b class="text-emerald-400">' + derivBags + ' bag' + (derivBags === 1 ? '' : 's') + '</b> (full sets only)'
+      : (pieces > 0 && !bagsTyped ? '' : '');
+  }
+  const amount = bagsShown * price;
   const status = $('salePaymentStatus') ? $('salePaymentStatus').value : 'paid';
   let paid = parseFloat($('salePaidNow') ? $('salePaidNow').value : '');
   if (status === 'paid' || isNaN(paid)) paid = status === 'credit' ? 0 : amount;
@@ -126,11 +151,19 @@ function updateSaleLive() {
   if ($('saleCogsLive')) $('saleCogsLive').textContent = fmtKs(cogs) + ' @ ' + (dayProd.pieces > 0 ? Math.round(dayProd.capital / dayProd.pieces) : 0) + '/pc';
   if ($('saleProfitLive')) { $('saleProfitLive').textContent = fmtKs(profit); $('saleProfitLive').className = 'font-bold ' + (profit >= 0 ? 'text-emerald-400' : 'text-red-400'); }
   if ($('saleStockLive')) $('saleStockLive').textContent = fmt(onHand) + ' pieces ready';
-  if ($('salePiecesBag')) $('salePiecesBag').textContent = bags > 0 ? (pieces / bags).toFixed(1) : '—';
+  if ($('salePiecesBag')) $('salePiecesBag').textContent = bagsShown > 0 ? (pieces / bagsShown).toFixed(1) : '—';
   if ($('saleCreditLive')) $('saleCreditLive').textContent = 'Credit: ' + fmtKs(Math.max(0, amount - paid));
 }
-['saleBags', 'salePieces', 'salePrice', 'salePaidNow', 'salePaymentStatus'].forEach(function (id) {
+['saleBags', 'salePieces', 'salePrice', 'salePaidNow', 'salePaymentStatus', 'saleRollsPerBag'].forEach(function (id) {
   $(id).addEventListener('input', updateSaleLive);
+});
+$('saleRollsPerBag').addEventListener('change', function () {
+  const rpb = parseInt($('saleRollsPerBag').value, 10);
+  if (rpb > 0 && rpb <= 100) {
+    state.settings.rollsPerBag = rpb;
+    persistState();
+  }
+  updateSaleLive();
 });
 
 function selectSaleToEdit(id) {
@@ -170,6 +203,11 @@ function removeSale(id) {
    ============================================================ */
 function renderSalesTab() {
   renderSaleCustomerOptions();
+  // Keep the sales-form packing rule in sync with the shared setting.
+  if ($('saleRollsPerBag')) {
+    const curRpb = parseInt((state.settings && state.settings.rollsPerBag) != null ? state.settings.rollsPerBag : 0, 10);
+    $('saleRollsPerBag').value = curRpb > 0 ? curRpb : (typeof DEFAULT_ROLLS_PER_BAG !== 'undefined' ? DEFAULT_ROLLS_PER_BAG : 5);
+  }
   // Stock card
   const onHand = (state.stock && state.stock.pieces) || 0;
   const avgCost = stockAvgCostPerPiece();

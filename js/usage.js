@@ -101,6 +101,8 @@ let populatedProductionDate = null;
 function populateProductionForm(date) {
   if (populatedProductionDate === date) return false;
   populatedProductionDate = date;
+  // Keep the packing rule (rolls per bag) in sync with the form setting.
+  if ($('logRollsPerBag')) $('logRollsPerBag').value = (state.settings && state.settings.rollsPerBag) || DEFAULT_ROLLS_PER_BAG;
   const batch = (state.production || []).find(function (production) { return production.date === date; }) || null;
   if (batch) {
     draftUsage = Object.assign({}, batch.usage || {});
@@ -257,6 +259,19 @@ function updateLive() {
   const capital = ingCost + extra;
   const parts = parseFloat($('logPieces').value) || 0;
   const bags = parseFloat($('logBagsProduced').value) || 0;
+  // Full-set packing rule: when no bag count was typed, bags = floor(pieces ÷ rollsPerBag).
+  const rpb = parseInt((state.settings && state.settings.rollsPerBag) != null ? state.settings.rollsPerBag : 0, 10);
+  const effectiveRpb = rpb > 0 ? rpb : (typeof DEFAULT_ROLLS_PER_BAG !== 'undefined' ? DEFAULT_ROLLS_PER_BAG : 5);
+  const bagsFieldRaw = String($('logBagsProduced').value || '').trim();
+  const bagsEntered = bagsFieldRaw !== '';
+  const bagsDerived = (!bagsEntered && parts > 0) ? Math.floor(parts / effectiveRpb) : 0;
+  const bagsShown = bagsEntered ? bags : bagsDerived;
+  const bagsHintEl = $('logBagsHint');
+  if (bagsHintEl) {
+    bagsHintEl.textContent = bagsDerived > 0
+      ? 'Auto: ' + fmt(parts) + ' pieces ÷ ' + effectiveRpb + ' = <b class="text-emerald-400">' + bagsDerived + ' bag' + (bagsDerived === 1 ? '' : 's') + '</b> (full sets only)'
+      : '';
+  }
   const laborMin = parseFloat($('logLabor').value) || 0;
   const wage = parseFloat($('hourlyWage').value) || state.settings.hourlyWage || 0;
   const laborHrs = laborMin / 60;
@@ -278,16 +293,16 @@ function updateLive() {
   $('liveRollDiff').textContent = (expectedRolls > 0 && parts > 0) ? (parts - expectedRolls >= 0 ? '+' : '') + fmt(parts - expectedRolls) : (expectedRolls > 0 ? 'add after packing' : '—');
   $('liveRollDiff').className = 'font-bold text-[11px] ' + (expectedRolls > 0 ? (parts > 0 ? (parts >= expectedRolls ? 'text-emerald-400' : 'text-amber-400') : 'text-gray-500') : 'text-gray-500');
   $('liveCostPiece').textContent = parts > 0 ? fmtKs(Math.round((capital / parts) * 100) / 100) : '—';
-  $('liveCostBag').textContent = bags > 0 ? fmtKs(Math.round((capital / bags) * 100) / 100) : '—';
+  $('liveCostBag').textContent = bagsShown > 0 ? fmtKs(Math.round((capital / bagsShown) * 100) / 100) : '—';
   const pcsBagEl = $('livePcsBag');
   if (pcsBagEl) {
-    pcsBagEl.textContent = (parts > 0 && bags > 0) ? fmt(Math.round(parts / bags * 10) / 10) + ' pcs/bag' : '—';
-    pcsBagEl.className = 'font-bold ' + (parts > 0 && bags > 0 ? 'text-emerald-400' : 'text-gray-500');
+    pcsBagEl.textContent = (parts > 0 && bagsShown > 0) ? fmt(Math.round(parts / bagsShown * 10) / 10) + ' pcs/bag' : '—';
+    pcsBagEl.className = 'font-bold ' + (parts > 0 && bagsShown > 0 ? 'text-emerald-400' : 'text-gray-500');
   }
   const onHand = (state.stock && state.stock.pieces) || 0;
   $('liveStockAfter').textContent = fmt(onHand + parts) + ' ready';
 }
-['logBagsProduced', 'logPieces', 'logWeightPerRoll', 'logNotes', 'logLabor', 'hourlyWage', 'additionalCost'].forEach(function (id) {
+['logBagsProduced', 'logPieces', 'logWeightPerRoll', 'logNotes', 'logLabor', 'hourlyWage', 'additionalCost', 'logRollsPerBag'].forEach(function (id) {
   const el = $(id);
   if (el) el.addEventListener('input', function () {
     updateUsageCosts();
@@ -297,6 +312,15 @@ function updateLive() {
   });
 });
 $('logDate').addEventListener('change', persistDraft);
+$('logRollsPerBag').addEventListener('change', function () {
+  const rpb = parseInt($('logRollsPerBag').value, 10);
+  if (rpb > 0 && rpb <= 100) {
+    state.settings.rollsPerBag = rpb;
+    persistState();
+    updateUsageCosts();
+  }
+  persistDraft();
+});
 $('hourlyWage').addEventListener('change', function () {
   const w = parseFloat($('hourlyWage').value);
   if (!isNaN(w) && w >= 0) {

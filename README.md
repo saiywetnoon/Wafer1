@@ -574,6 +574,20 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
+### v1.11.7 — Rolls-per-bag setting on Production + Sales/Stock forms
+- **Set the packing rule where you work.** Both the **Production** form and the
+  **Sales & Stock** form now have a **"Rolls per bag (full sets only)"** field —
+  it drives the bag count in real time.
+- **Production:** leave "Total Bags (Packed)" empty and bags are auto-derived
+  from the pieces you entered as **full sets only** (16 pieces at 5/bag → 3
+  bags, live hint shown under the field). A typed bag count always wins.
+- **Sales & Stock:** leave "Bags Sold" empty and it auto-counts from the pieces
+  at your rolls-per-bag rate (live hint shown). The "≈ Bags on hand" stock card
+  now shows **full bags only** using the same rule.
+- **One setting everywhere:** it's persisted in the ledger (`state.settings.
+  rollsPerBag`), so Fry Timer Settings, Production and Sales all share it and it
+  syncs across all devices. Edit it in any of the three, and the others follow.
+
 ### v1.11.6 — bags are NEVER per-round (removed the setting completely)
 - **"Bags per round" is gone.** Each pan counts **Rolls only** per round (1 round
   = the Rolls you set). No bag is ever produced or recorded per round.

@@ -171,6 +171,41 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
   saveProductionFromRun('2026-09-04', 16, null);
   ok(state.production[0].bags === 4, '16 rolls at 4/bag => 4 bags');
 
+  // ---- H) deriveBagsFromPieces (used by BOTH production form + sale auto-count) ----
+  state.settings.rollsPerBag = 5;
+  ok(deriveBagsFromPieces(16) === 3, 'derive: 16 rolls at 5/bag => 3 bags (full sets only)');
+  ok(deriveBagsFromPieces(17) === 3, 'derive: 17 rolls at 5/bag => still 3 bags');
+  ok(deriveBagsFromPieces(20) === 4, 'derive: 20 rolls at 5/bag => 4 bags');
+  state.settings.rollsPerBag = 4;
+  ok(deriveBagsFromPieces(16) === 4, 'derive: 16 rolls at 4/bag => 4 bags');
+  state.settings.rollsPerBag = 5;
+
+  // ---- I) Save sale with Bags left EMPTY -> auto-counted from pieces ----
+  reset();
+  recordInventoryMovement({ ingredientName: 'Flour', qty: 5000, type: 'opening' });
+  refreshInputs(60, 360, 90, 0, 40);
+  draftUsage = Object.assign({}, DEFAULT_USAGE); draftUsage.Flour = 120; draftUsage.Egg = 2;
+  // produce 16 rolls for the sale to consume
+  saveProductionFromRun('2026-09-05', 16, 3);
+  state.settings.rollsPerBag = 5;
+  // simulate the sale form: Bags field empty + 16 pieces
+  storeEl('saleDate', { value: '2026-09-05' });
+  storeEl('saleBags', { value: '' });
+  storeEl('salePieces', { value: '16' });
+  storeEl('salePrice', { value: '1000' });
+  storeEl('salePaymentStatus', { value: 'paid' });
+  storeEl('saleCustomer', { value: '' });
+  storeEl('salePaidNow', { value: '' });
+  storeEl('editSaleId', { value: '' });
+  storeEl('saleDueDate', { value: '' });
+  // capture the auto-derived bags
+  const saleBagsValue = (function () {
+    const rpb = parseInt((state.settings && state.settings.rollsPerBag) != null ? state.settings.rollsPerBag : 0, 10);
+    const pieces = parseFloat($('salePieces').value) || 0;
+    return Math.floor(pieces / (rpb > 0 ? rpb : 5));
+  })();
+  ok(saleBagsValue === 3, 'sale with empty Bags auto-counts 16 pieces at 5/bag => 3 bags');
+
   console.log(fail === 0 ? 'ALL INVENTORY TRACE CHECKS PASSED' : (fail + ' FAILED'));
 })();
 `;

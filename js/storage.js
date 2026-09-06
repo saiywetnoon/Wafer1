@@ -188,6 +188,7 @@ function captureDraft() {
     notes: $('logNotes') ? ($('logNotes').value || '') : '',
     laborMinutes: $('logLabor') ? (parseFloat($('logLabor').value) || 0) : 0,
     hourlyWage: $('hourlyWage') ? (parseFloat($('hourlyWage').value) || 0) : 0,
+    rollsPerBag: $('logRollsPerBag') ? (parseFloat($('logRollsPerBag').value) || 0) : 0,
     useBy: $('logUseBy') ? ($('logUseBy').value || '') : ''
   };
 }
@@ -267,7 +268,8 @@ function restoreDraftToForm(d) {
     logWeightPerRoll: d.weightPerRoll || 0,
     logNotes: d.notes || '',
     logLabor: d.laborMinutes || 0,
-    hourlyWage: d.hourlyWage || state.settings.hourlyWage || 1500
+    hourlyWage: d.hourlyWage || state.settings.hourlyWage || 1500,
+    logRollsPerBag: d.rollsPerBag || (state.settings && state.settings.rollsPerBag) || (typeof DEFAULT_ROLLS_PER_BAG !== 'undefined' ? DEFAULT_ROLLS_PER_BAG : 5)
   };
   Object.keys(fields).forEach(function (id) {
     const el = $(id);

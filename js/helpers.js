@@ -154,9 +154,14 @@ function canRecordWaste(record) {
   return finishedGoodsShortage(state.production, state.sales, (state.waste || []).concat([record]));
 }
 
-/* Number of ready-to-sell bags (using the most recent sale's pieces-per-bag
-   as a hint, defaulting to the last production's average — just a guide). */
+/* Number of FULL bags you could pack from the ready-to-sell stock, using the
+   "Rolls per bag" packing rule (floor — only full sets count). Falls back to
+   the most recent sale's pieces-per-bag when rollsPerBag isn't set yet. */
 function stockBagsHint() {
+  var pieces = (state.stock && state.stock.pieces > 0) ? state.stock.pieces : 0;
+  if (pieces <= 0) return 0;
+  var rpb = parseInt((state.settings && state.settings.rollsPerBag) != null ? state.settings.rollsPerBag : 0, 10);
+  if (rpb > 0) return Math.floor(pieces / rpb);   // full sets only
   var perBag = 6;
   var sales = salesList();
   if (sales.length) {
@@ -165,7 +170,7 @@ function stockBagsHint() {
   }
   var avg = stockAvgPiecesPerBag();
   if (avg > 0) perBag = Math.round(avg);
-  return (state.stock && state.stock.pieces > 0) ? Math.max(0, Math.round((state.stock.pieces || 0) / perBag)) : 0;
+  return Math.max(0, Math.round(pieces / perBag));
 }
 function stockAvgPiecesPerBag() {
   var p = prodList();
