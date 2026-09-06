@@ -165,6 +165,10 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
   saveProductionFromRun('2026-09-03', 16, 9);
   const typedRow = (state.production || []).find(function (p) { return p.date === '2026-09-03'; });
   ok(!!typedRow && typedRow.bags === 9, 'typed bag count overrides the derived rule');
+  // AUTO recompute on merge: add 4 more rolls (no bags) -> the day is manual so it stays 9.
+  saveProductionFromRun('2026-09-03', 4, null);
+  const autoRow = (state.production || []).find(function (p) { return p.date === '2026-09-03'; });
+  ok(!!autoRow && autoRow.pieces === 20 && autoRow.bags === 9, 'manual bag count preserved when adding rolls (20 rolls still 9 bags)');
   // Change the rule to 4/bag -> 16 rolls = 4 bags.
   reset();
   state.settings.rollsPerBag = 4;

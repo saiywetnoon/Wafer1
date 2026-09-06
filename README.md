@@ -574,11 +574,23 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
-### v1.11.8 — update bags right in Production
-- **Quick "Update bags" button on every production row.** In Recent Production,
-  click the box icon (✎/box) next to a day to set its packed bag count directly —
-  no need to open the edit form. It shows you the full-set rule for that day's
-  pieces and lets you enter the actual packed count (or 0 = let it re-derive).
+### v1.11.9 — bags are FULLY AUTOMATIC (no manual bag entry, no button)
+- **Bags are always counted for you** from the full-set rule
+  (`floor(pieces ÷ rolls per bag)`). There is no "update bags" button and no
+  manual prompt — you never have to enter a bag count by hand.
+- **Recent Production** shows each day's bundles, with the bag count
+  auto-derived live from that day's pieces (marked "auto"). If you ever type a
+  specific bag count in the Production form, that exact value is kept — but the
+  default is fully automatic.
+- **Works across the whole flow consistently:**
+  - Pan finishes → its **rolls** are added to the day; **bags update
+    automatically** from the new total.
+  - Production form → type **pieces**, the Bags field fills itself; save
+    records pieces + auto bags.
+  - Sales & Stock → leave "Bags Sold" empty and it's auto-counted from pieces;
+    "≈ Bags on hand" shows full bags only.
+
+### v1.11.8 — Production form auto-fills the derived bag count
 - **Production form auto-fills the derived bag count live.** Type your Actual
   Pieces and the Bags field fills itself with `floor(pieces ÷ rolls per bag)`
   (a real, visible, editable number) so you can adjust it before you save.

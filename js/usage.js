@@ -108,7 +108,10 @@ function populateProductionForm(date) {
     draftUsage = Object.assign({}, batch.usage || {});
     $('additionalCost').value = batch.additionalCost || 0;
     $('logBagsProduced').value = batch.bags || 0;
-    if (typeof $('logBagsProduced').setAttribute === 'function') $('logBagsProduced').setAttribute('data-calc', '0');   // stored value is authoritative, not auto
+    // Auto batches keep auto-filling as pieces change; only a manual override is locked.
+    if ($('logBagsProduced') && typeof $('logBagsProduced').setAttribute === 'function') {
+      $('logBagsProduced').setAttribute('data-calc', (batch.bagsAuto === false) ? '0' : '1');
+    }
     $('logPieces').value = batch.pieces || 0;
     $('logLabor').value = batch.laborMinutes || 0;
     $('logWeightPerRoll').value = batch.weightPerRoll || 0;
@@ -118,7 +121,7 @@ function populateProductionForm(date) {
     // No saved batch: use the default/previous usage but NEVER touch the
     // quantities/labor/notes the user is editing.
     setDefaultProductionUsage(date);
-    if ($('logBagsProduced') && typeof $('logBagsProduced').setAttribute === 'function') $('logBagsProduced').setAttribute('data-calc', '0');   // fresh form = no auto-fill yet
+    if ($('logBagsProduced') && typeof $('logBagsProduced').setAttribute === 'function') $('logBagsProduced').setAttribute('data-calc', '1');   // fresh form = auto mode
   }
   renderUsageTable(true);   // rebuild usage rows (this IS the date change)
   updateUsageCosts();

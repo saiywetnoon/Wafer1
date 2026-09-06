@@ -84,6 +84,7 @@ function saveProduction() {
     pieces: Math.round(pieces),
     // Bags: what was typed, or if left empty then derived from full sets only.
     bags: bagsEntered ? Math.round(bags) : (pieces > 0 ? deriveBagsFromPieces(pieces) : 0),
+    bagsAuto: bagsEntered ? false : true,
     weightPerRoll: wPerRoll,
     mixWeight: Math.round(mixWeight),
     expectedRolls: expectedRolls,
@@ -188,13 +189,17 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
   if (existing) {
     existing.pieces = (existing.pieces || 0) + Math.round(pieces);
     if (explicitBags) {
+      // An explicit bag count came with this report — add to the day's bags.
       existing.bags = (existing.bags || 0) + Math.round(bags);
       existing.bagsAuto = false;
-    } else if (existing.bagsAuto) {
-      // Auto-derived mode stays derived from the running total.
+    } else if (existing.bagsAuto === false) {
+      // Manual override stays — new rolls do NOT overwrite a physically counted
+      // bag value (the user packed that many bags).
+    } else {
+      // Automatic mode: derive bags live from the NEW total (full sets only).
       existing.bags = deriveBagsFromPieces(existing.pieces);
+      existing.bagsAuto = true;
     }
-    // (if bags were typed manually earlier, leave that manual count alone)
     existing.notes = (existing.notes || '') + (notes ? (existing.notes ? ' · ' : '') + notes : '');
     if (useBy && !existing.useBy) existing.useBy = useBy;
     if (!existing.usage || !Object.keys(existing.usage).length) existing.usage = Object.assign({}, runUsage);
@@ -278,6 +283,9 @@ function renderProduction() {
   }
   tbody.innerHTML = list.map(function (p) {
     const pendingPack = !(p.pieces > 0);
+    // Bags are AUTOMATIC: unless the record was explicitly overridden to a manual
+    // count (bagsAuto === false), the full-set rule derives it from pieces live.
+    const bagsShown = (p.bagsAuto === false) ? (p.bags || 0) : deriveBagsFromPieces(p.pieces);
     const exp = p.expectedRolls > 0 ? fmt(p.expectedRolls) : '—';
     const diff = (p.pieces > 0 && p.expectedRolls > 0)
       ? ((p.pieces - p.expectedRolls >= 0 ? '+' : '') + fmt(p.pieces - p.expectedRolls))
@@ -288,13 +296,12 @@ function renderProduction() {
     return '<tr class="border-b border-gray-800">' +
       '<td class="py-2 pr-2 whitespace-nowrap">' + esc(p.date) + '</td>' +
       '<td class="py-2 pr-2 text-amber-400 font-semibold">' + fmtKs(p.capital) + '</td>' +
-      '<td class="py-2 pr-2">' + fmt(p.bags) + '</td>' +
+      '<td class="py-2 pr-2">' + fmt(bagsShown) + (p.bagsAuto === false ? '' : '<span class="text-[10px] text-gray-500 ml-0.5" title="auto from full sets">auto</span>') + '</td>' +
       '<td class="py-2 pr-2">' + fmt(p.pieces) + '</td>' +
       '<td class="py-2 pr-2">' + exp + ' / <span class="text-gray-500">' + (p.weightPerRoll ? fmt(p.weightPerRoll) + 'g' : '—') + '</span></td>' +
       '<td class="py-2 pr-2">' + diff + '</td>' +
       '<td class="py-2 pr-2">' + note + useBy + '</td>' +
       '<td class="py-2"><div class="flex gap-2">' +
-      '<button onclick="updateProductionBags(\'' + p.id + '\')" class="text-emerald-400 hover:text-emerald-300 transition" title="Update bags for this date"><i data-lucide="box" class="w-4 h-4"></i></button>' +
       '<button onclick="editProduction(\'' + p.id + '\')" class="text-amber-400 hover:text-amber-300 transition" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>' +
       '<button onclick="deleteProduction(\'' + p.id + '\')" class="text-red-400 hover:text-red-300 transition" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
       '</div></td></tr>';
@@ -315,7 +322,8 @@ function editProduction(id) {
   });
   $('additionalCost').value = p.additionalCost || 0;
   $('logBagsProduced').value = p.bags || 0;
-  if (typeof $('logBagsProduced').setAttribute === 'function') $('logBagsProduced').setAttribute('data-calc', '0');   // loaded batch = manual
+  // Auto batches keep auto-filling as pieces change; only a manual override is locked.
+  if (typeof $('logBagsProduced').setAttribute === 'function') $('logBagsProduced').setAttribute('data-calc', (p.bagsAuto === false) ? '0' : '1');
   $('logPieces').value = p.pieces || 0;
   $('logLabor').value = p.laborMinutes || 0;
   $('logWeightPerRoll').value = p.weightPerRoll || 0;
@@ -339,30 +347,6 @@ function deleteProduction(id) {
   renderAll();
   triggerGoogleSync();
   showToast('Production batch deleted. Stock and inventory restored.');
-}
-
-/* Quick "update bags" straight from the Recent Production list — without opening
-   the full form. Accepts the number of FULL bags packed for that date. */
-function updateProductionBags(id) {
-  const p = state.production.find(function (x) { return x.id === id; });
-  if (!p) return;
-  const rpb = parseInt((state.settings && state.settings.rollsPerBag) != null ? state.settings.rollsPerBag : 0, 10);
-  const effRpb = rpb > 0 ? rpb : (typeof DEFAULT_ROLLS_PER_BAG !== 'undefined' ? DEFAULT_ROLLS_PER_BAG : 5);
-  const current = (typeof p.bags === 'number' && p.bags > 0) ? p.bags : '';
-  const message = 'Update bags for ' + p.date + ' (' + fmt(p.pieces) + ' pieces):\n\n' +
-    'Full-set rule: floor(' + p.pieces + ' ÷ ' + effRpb + ') = ' + deriveBagsFromPieces(p.pieces) +
-    ' bags. Enter the actual packed bag count.';
-  const input = prompt(message, String(current));
-  if (input === null) return;                       // cancelled
-  const val = parseInt(input, 10);
-  if (isNaN(val) || val < 0) { showToast('Enter a valid non-negative bag count.', 'error'); return; }
-  p.bags = val;
-  p.bagsAuto = false;                               // manual override now wins
-  saveState();
-  renderProduction();
-  renderAll();
-  triggerGoogleSync();
-  showToast('Bags updated to ' + fmt(val) + ' for ' + p.date + (val > 0 ? '.' : ' — full bags will be derived from rolls.'));
 }
 
 /* ============================================================
