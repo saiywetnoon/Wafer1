@@ -168,7 +168,6 @@ const panTotalReadout = el('panTotalReadout');
 const panOptBeep = el('panOptBeep');
 const panOptToast = el('panOptToast');
 const panRollsDefault = el('panRollsDefault');
-const panBagsDefault = el('panBagsDefault');
 const panRollsPerBag = el('panRollsPerBag');
 const panOptAutoReport = el('panOptAutoReport');
 const panOptTitle = el('panOptTitle');
@@ -195,7 +194,6 @@ byId['panOptTitle'] = panOptTitle;
 byId['panOptNav'] = panOptNav;
 byId['panOptVibrate'] = panOptVibrate;
 byId['panRollsDefault'] = panRollsDefault;
-byId['panBagsDefault'] = panBagsDefault;
 byId['panRollsPerBag'] = panRollsPerBag;
 byId['panOptAutoReport'] = panOptAutoReport;
 byId['panPerPanRows'] = new OvRowsEl();   // settings modal per-pan rows
@@ -412,19 +410,20 @@ check('Escape also closes the modal', (function () {
 /* modal still works after defaults (settings survived) */
 check('final isolation intact after settings round-trip', PanTimers.getPans().every(p => !p.running && p.stage === 0));
 
-/* == per-pan rolls & bags: global defaults change flows into auto-count & report == */
+/* == per-pan rolls & packing rule: global rolls default flows into auto-count & report == */
   settingsBtn.dispatch('click');
   panRollsDefault.value = '2';
-  panBagsDefault.value = '3';
+  panRollsPerBag.value = '5';
   panOptAutoReport.checked = true;
   settingsSave.dispatch('click');
-  check('rolls & bags defaults persisted', PanTimers.getSettings().rollsPerBatch === 2 && PanTimers.getSettings().bagsPerBatch === 3 && PanTimers.getSettings().autoReport === true);
+  check('rolls default + rolls-per-bag persisted', PanTimers.getSettings().rollsPerBatch === 2 && PanTimers.getSettings().rollsPerBag === 5 && PanTimers.getSettings().autoReport === true);
+  check('no per-round bags setting exists anymore', !('bagsPerBatch' in PanTimers.getSettings()));
   document.dispatch('keydown', { code: 'Digit2', key: '2', shiftKey: false, target: { tagName: 'BODY', isContentEditable: false } });
   pump(71_000);   // pan 2 (70 s standard) finishes
-  check('pan 2 auto-counted its 2 rolls + 3 bags and reported to Production', global.lastRun && global.lastRun.pcs === 2 && global.lastRun.bags === 3 && global.lastRun.date === '2026-08-30' && global.lastRun.quiet === true);
+  check('pan 2 auto-counted its 2 ROLLS (no per-round bags) and reported to Production', global.lastRun && global.lastRun.pcs === 2 && global.lastRun.bags == null && global.lastRun.date === '2026-08-30' && global.lastRun.quiet === true);
   document.dispatch('keydown', { code: 'Digit2', key: '!', shiftKey: true, target: { tagName: 'BODY', isContentEditable: false } });
 
-  /* == per-pan custom rolls/bags: uncheck "Use global" for pan 3 == */
+  /* == per-pan custom rolls: uncheck "Use global" for pan 3 == */
   settingsBtn.dispatch('click');
   settingsSave.dispatch('click'); // reopen → rows are re-rendered with defaults
   const ovRows = byId['panPerPanRows'];
@@ -434,14 +433,11 @@ check('final isolation intact after settings round-trip', PanTimers.getPans().ev
   const pan3Rolls = ovRows.querySelector('[data-ov-rolls="pan3"]');
   pan3Rolls.value = '1';
   pan3Rolls.dispatch('change', { target: pan3Rolls });
-  const pan3Bags = ovRows.querySelector('[data-ov-bags="pan3"]');
-  pan3Bags.value = '4';
-  pan3Bags.dispatch('change', { target: pan3Bags });
   settingsSave.dispatch('click');
-  check('per-pan custom rolls/bags saved', PanTimers.getSettings().panOverrides.pan3 && PanTimers.getSettings().panOverrides.pan3.rolls === 1 && PanTimers.getSettings().panOverrides.pan3.bags === 4);
+  check('per-pan custom rolls saved (no bags field)', PanTimers.getSettings().panOverrides.pan3 && PanTimers.getSettings().panOverrides.pan3.rolls === 1 && !('bags' in PanTimers.getSettings().panOverrides.pan3));
   document.dispatch('keydown', { code: 'Digit3', key: '3', shiftKey: false, target: { tagName: 'BODY', isContentEditable: false } });
-  pump(71_000);   // pan 3 finishes with its own 1 roll / 4 bags
-  check('pan 3 auto-counted its own 1 roll + 4 bags to Production', global.lastRun && global.lastRun.pcs === 1 && global.lastRun.bags === 4);
+  pump(71_000);   // pan 3 finishes with its own 1 roll (no bags)
+  check('pan 3 auto-counted its own 1 ROLL (no bags) to Production', global.lastRun && global.lastRun.pcs === 1 && global.lastRun.bags == null);
   document.dispatch('keydown', { code: 'Digit3', key: '!', shiftKey: true, target: { tagName: 'BODY', isContentEditable: false } });
 
   /* == dynamic/scalable pan count (1–9) == */

@@ -35,17 +35,19 @@
    5. INTEGRATION — lenient persistence (localStorage) so a refresh
       or background tab never drifts: running pans are stored as a
       wall-clock endAt and recomputed on load.
-   6. PER-PAN TIMING, ROLLS & BAGS — in ⚙ Settings each pan can keep
-      its OWN duration (fold + final), its OWN Rolls and its OWN Bags
+   6. PER-PAN TIMING & ROLLS — in ⚙ Settings each pan can keep
+      its OWN duration (fold + final) and its OWN Rolls
       via settings.panOverrides — everything is set by the user. The
       card's duration dropdown is always anchored on that pan's own
       total so a selection and the pan's real checkpoints never
       disagree.
-   7. AUTOMATIC ROLL + BAG COUNT → PRODUCTION — when a timer finishes,
-      the pan counts the Rolls & Bags you set for it and (with
+   7. AUTOMATIC ROLL COUNT → PRODUCTION — when a timer finishes,
+      the pan counts the Rolls you set for it and (with
       settings.autoReport, on by default) reports them straight into
       the Production panel (quietly, merged into that day's batch,
-      once). Manually resetting a finished pan cancels its pending
+      once). Bags are NEVER per-round: they are counted from packs of
+      FULL SETS of rolls (rolls ÷ "Rolls per bag", floor) in the
+      ledger. Manually resetting a finished pan cancels its pending
       count so nothing can ever be double-reported.
    ============================================================ */
 (function () {
@@ -77,25 +79,20 @@
     nav: true,    // flash the Fry Timers menu button
     vibrate: true,             // mobile vibration on checkpoints
     rollsPerBatch: 1,          // Rolls a finished pan counts per round — YOU set
-                               // this (global here, or per-pan in "Use global"
-                               // mode). Reported to Production as pieces.
-                               // 1 round/pan = THIS many rolls.
-    bagsPerBatch: null,         // Bags per round — OPTIONAL. null = bags derived
-                               // from the packing rule (rolls ÷ rollsPerBag,
-                               // full sets only). Set a number only when you
-                               // package each round into a fixed bag count.
-    rollsPerBag: 5,            // packing rule: only FULL sets of rolls
-                               // are a bag. 16 rolls ÷ 5 = 3 bags (floor).
+                               // this (global here, or per-pan). Reported to
+                               // Production as pieces. 1 round = THIS many rolls.
+    rollsPerBag: 5,            // packing rule: only FULL sets of rolls are a bag.
+                               // 16 rolls ÷ 5 = 3 bags (floor). Bags are counted
+                               // ONLY from these full sets, never per round.
     autoReport: true,          // finished batches auto-log to the Production panel
-    panOverrides: {}           // { panId: { fold, final, rolls, bags } } per-pan
-                               // timing, rolls AND bags, all set by you
+    panOverrides: {}           // { panId: { fold, final, rolls } } per-pan
+                               // timing, rolls, all set by you
   };
   var settings = normalizeSettings(SETTINGS_DEFAULTS);
 
   // Optional pan "runs" (feature 2): after a pan finishes a batch you can log
   // it to production from the timers screen. Keyed by pan id (dynamic).
   var runPieces = {};
-  var runBags = {};
   // Pans whose finished batch was already auto-reported to Production (live
   // session guard; persisted in each saved pan as `reported` so a refresh can
   // never double-count a finished batch).
@@ -134,16 +131,6 @@
     return settings.rollsPerBatch;
   }
 
-  /* Bags this pan counts per finished round — its own override or the global
-     value. Returns null when NOT set, so the pan reports ROLLS ONLY and
-     Production records 0 bags (count them when you actually package). */
-  function bagsFor(id) {
-    var o = panOverride(id);
-    if (o && typeof o.bags === 'number' && o.bags > 0) return o.bags;
-    if (typeof settings.bagsPerBatch === 'number' && settings.bagsPerBatch > 0) return settings.bagsPerBatch;
-    return null;
-  }
-
   function setOverride(id, data) {
     settings.panOverrides = settings.panOverrides || {};
     settings.panOverrides[id] = Object.assign({}, settings.panOverrides[id] || {}, data);
@@ -177,17 +164,8 @@
       if (isNaN(n)) return dflt;
       return Math.max(lo, Math.min(hi, n));
     }
-    /* Bags are OPTIONAL: empty means COUNT 0 BAGS — a finished round of rolls
-       is never auto-counted as a bag. Set a number only when the pan really
-       packages into a fixed bag size. */
-    function nullableNum(v, lo, hi) {
-      if (v === '' || v === null || v === undefined || v === 'null' || v === 'auto') return null;
-      var n = parseInt(v, 10);
-      if (isNaN(n)) return null;
-      return Math.max(lo, Math.min(hi, n));
-    }
     /* Per-pan overrides survive a settings save: only rows the user explicitly
-       customised are kept, each clamped to sane ranges. */
+       customised are kept (fold / final / rolls — bags are NEVER per-round). */
     var overrides = {};
     if (s.panOverrides && typeof s.panOverrides === 'object') {
       Object.keys(s.panOverrides).forEach(function (id) {
@@ -195,9 +173,8 @@
         var fold = num(o.fold, 5, 600, SETTINGS_DEFAULTS.fold);
         var fin = num(o.final, 1, 300, SETTINGS_DEFAULTS.final);
         var rolls = num(o.rolls, 1, 500, (SETTINGS_DEFAULTS.rollsPerBatch != null ? SETTINGS_DEFAULTS.rollsPerBatch : 1));
-        var bags = nullableNum(o.bags, 1, 500);   // empty -> null (unset) -> 0 bags, never a forced 1
-        if (o && typeof o === 'object' && (o.fold !== undefined || o.final !== undefined || o.rolls !== undefined || o.bags !== undefined)) {
-          overrides[id] = { fold: fold, final: fin, rolls: rolls, bags: bags };
+        if (o && typeof o === 'object' && (o.fold !== undefined || o.final !== undefined || o.rolls !== undefined)) {
+          overrides[id] = { fold: fold, final: fin, rolls: rolls };
         }
       });
     }
@@ -212,7 +189,6 @@
       nav: s.nav !== false,
       vibrate: s.vibrate !== false,
       rollsPerBatch: num(s.rollsPerBatch, 1, 500, (SETTINGS_DEFAULTS.rollsPerBatch != null ? SETTINGS_DEFAULTS.rollsPerBatch : 1)),
-      bagsPerBatch: nullableNum(s.bagsPerBatch, 1, 500),
       rollsPerBag: num(s.rollsPerBag, 1, 100, (SETTINGS_DEFAULTS.rollsPerBag || defaultRollsPerBag())),
       autoReport: s.autoReport !== false,
       panOverrides: overrides
@@ -384,7 +360,6 @@
     // reset can never double-report a batch that isn't actually being counted.
     reportedRun[pan.id] = false;
     runPieces[pan.id] = 0;
-    runBags[pan.id] = 0;
     save();
     paintPan(pan);
     stopTickIfIdle();
@@ -401,7 +376,7 @@
     var oldTotal = (t.fold + t.final) || 1;
     var fold = Math.max(1, Math.round(t.fold * sec / oldTotal));
     var final = Math.max(1, sec - fold);
-    setOverride(pan.id, { fold: fold, final: final, rolls: rollsFor(pan.id), bags: bagsFor(pan.id) });
+    setOverride(pan.id, { fold: fold, final: final, rolls: rollsFor(pan.id) });
     pan.duration = sec;
     pan.remaining = sec;
     pan.stage = 0;
@@ -555,17 +530,13 @@
       '</div>';
   }
 
-  /* How many rolls (and optional bags) ONE finished round of this pan counts. */
+  /* How many rolls ONE finished round of this pan counts. Bags are NEVER
+     per-round — they are counted from FULL SETS of rolls in the ledger. */
   function panOutLine(pan) {
     var r = rollsFor(pan.id) || 1;
-    var b = bagsFor(pan.id);
     var rpb = settings.rollsPerBag || defaultRollsPerBag();
     var txt = '1 round → <b class="pan-out-num">' + r + ' roll' + (r === 1 ? '' : 's') + '</b>';
-    if (b) {
-      txt += ' · <b class="pan-out-num">' + b + ' bag' + (b === 1 ? '' : 's') + '</b> per round';
-    } else {
-      txt += ' · <span class="pan-out-unset">bags: 1 per full ' + rpb + ' rolls</span>';
-    }
+    txt += ' · <span class="pan-out-unset">bags: 1 per full ' + rpb + ' rolls</span>';
     return txt;
   }
 
@@ -584,10 +555,8 @@
     if (pan.stage === 3) {
       var n = rollsFor(pan.id);
       var noun = n + ' roll' + (n === 1 ? '' : 's');
-      var b = bagsFor(pan.id);
       var rpb = settings.rollsPerBag || defaultRollsPerBag();
-      if (b) noun += ' + ' + b + ' bag' + (b === 1 ? '' : 's');
-      else noun += ' (bags: 1 per full ' + rpb + ' rolls)';
+      noun += ' · bags: 1 per full ' + rpb + ' rolls';
       return MSG[3] + (settings.autoReport ? ' — ' + noun + ' counted & reported to Production' : ' — ' + noun + ' counted, log it in the batch log');
     }
     if (pan.stage === 2) return stageMessage(pan);
@@ -638,29 +607,24 @@
   }
 
   /* ---------- Batch-run tracker (feature 2) ---------- */
-  /* A finished pan automatically counts its configured Rolls/batch AND
-     Bags/batch (per-pan or global defaults — both set by the user). The counts
-     stay editable in the batch log, and when autoReport is on they are reported
-     straight into the Production panel. */
+  /* A finished pan automatically counts its configured Rolls/batch. When
+     autoReport is on, the rolls are reported straight into the Production
+     panel and bags are derived there from FULL SETS of rolls. */
   function markRun(pan) {
     if (pan.stage === 3 && !pan.running && !reportedRun[pan.id]) {
       runPieces[pan.id] = runPieces[pan.id] || rollsFor(pan.id);
-      // 0 / null means "not counted yet" for bags — fill from the pan's setting.
-      // A typed positive number in the batch log is preserved.
-      runBags[pan.id] = runBags[pan.id] || bagsFor(pan.id);
     }
   }
   /* Auto-report a finished batch to Production (quietly — no tab jump, no
      success toast). The run is only cleared when the report succeeded, so a
-     stock shortage never loses the count and it can be retried. Bags pass
-     through with the exact value you set so the Production bag count matches. */
+     stock shortage never loses the count and it can be retried. Only ROLLS are
+     reported here; bags are derived in the ledger from full sets of rolls. */
   function autoReportDone(pan) {
     if (!settings.autoReport || reportedRun[pan.id] || !runPieces[pan.id]) return;
     if (typeof saveProductionFromRun !== 'function') return;
-    var ok = saveProductionFromRun(today(), runPieces[pan.id], runBags[pan.id], undefined, undefined, undefined, true);
+    var ok = saveProductionFromRun(today(), runPieces[pan.id], null, undefined, undefined, undefined, true);
     if (ok) {
       runPieces[pan.id] = 0;
-      runBags[pan.id] = 0;
       reportedRun[pan.id] = true;
     }
   }
@@ -669,24 +633,21 @@
     if (!box) return;
     box.innerHTML = pans.map(function (pan) {
       const pcs = runPieces[pan.id] || 0;
-      const bagsRaw = runBags[pan.id];
-      const bags = (typeof bagsRaw === 'number' && bagsRaw > 0) ? bagsRaw : 0;
       const rolls = rollsFor(pan.id) || 1;   // what ONE round produces
       const rpb = settings.rollsPerBag || defaultRollsPerBag();
-      const setBags = (typeof bagsRaw === 'number' && bagsRaw > 0);
+      const bags = Math.floor(pcs / rpb);    // FULL SETS ONLY
       return '<div class="p-3 rounded-lg bg-gray-800/60 border border-gray-700">' +
         '<div class="text-xs font-bold text-gray-300">' + escapeHtml(pan.name) +
           (pcs ? ' <span class="text-emerald-400 font-bold">✓ ' + pcs + ' roll' + (pcs === 1 ? '' : 's') +
-            (setBags ? ' · ' + bags + ' bag' + (bags === 1 ? '' : 's') : '') + '</span>' : '') +
+            (bags ? ' · ' + bags + ' bag' + (bags === 1 ? '' : 's') : '') + '</span>' : '') +
         '</div>' +
         '<div class="text-[10px] text-gray-500 mb-1.5">1 round = ' + rolls + ' roll' + (rolls === 1 ? '' : 's') +
-          (setBags ? ' · ' + bags + ' bag' + (bags === 1 ? '' : 's') : ' · bags: 1 per full ' + rpb + ' rolls') + '</div>' +
+          ' · bags: 1 per full ' + rpb + ' rolls (full sets only)</div>' +
         '<div class="flex items-center gap-2">' +
         '<label class="text-[10px] text-gray-400">Rolls<input type="number" min="0" step="1" value="' + pcs + '" data-run-pieces="' + pan.id + '" class="pan-ov-input w-16"></label>' +
-        '<label class="text-[10px] text-gray-400">Bags<input type="number" min="0" step="1" value="' + (setBags ? bags : '') + '" placeholder="auto" data-run-bags="' + pan.id + '" class="pan-ov-input w-16"></label>' +
         '</div>' +
-        '<div class="text-[10px] text-gray-500 mt-1">Bags auto-count at 1 per full ' + rpb + ' rolls (' + pcs + ' rolls → ' + Math.floor(pcs / rpb) + ' bag' + (Math.floor(pcs / rpb) === 1 ? '' : 's') + '). Type a number to override. Full sets only.</div></div>';
-    }).join('') || '<div class="text-gray-500 text-xs">No finished batches yet. Finished batches are auto-counted from your Rolls/bags settings and' + (settings.autoReport ? ' reported to Production.' : ' ready for the Log button below.') + '</div>';
+        '<div class="text-[10px] text-gray-500 mt-1">' + pcs + ' rolls → ' + bags + ' bag' + (bags === 1 ? '' : 's') + ' (only full ' + rpb + '-roll packs count).</div></div>';
+    }).join('') || '<div class="text-gray-500 text-xs">No finished batches yet. Finished pans count their Rolls automatically; bags are counted from full sets of rolls when logged to Production.</div>';
   }
   function wireRunSummary() {
     const box = g('panRunSummary');
@@ -697,24 +658,17 @@
         renderRunSummary();
       });
     });
-    Array.from(box.querySelectorAll('[data-run-bags]')).forEach(function (inp) {
-      inp.addEventListener('change', function () {
-        runBags[inp.dataset.runBags] = Math.max(0, parseInt(inp.value, 10) || 0);
-        renderRunSummary();
-      });
-    });
   }
   function saveRun() {
     // Save ALL remembered finished batches into Production (one batch per pan).
+    // Rolls are reported; bags are derived from full sets of rolls in the ledger.
     let savedAny = false;
     pans.forEach(function (pan) {
       const pcs = runPieces[pan.id] || 0;
       if (!pcs) return;
-      const bagVal = (runBags[pan.id] != null) ? runBags[pan.id] : bagsFor(pan.id);
-      const ok = saveProductionFromRun(today(), pcs, bagVal, undefined, (g('logNotes') ? g('logNotes').value : ''), undefined);
+      const ok = saveProductionFromRun(today(), pcs, null, undefined, (g('logNotes') ? g('logNotes').value : ''), undefined);
       if (ok) {
         runPieces[pan.id] = 0;
-        runBags[pan.id] = 0;
         reportedRun[pan.id] = true;
         savedAny = true;
       }
@@ -815,7 +769,6 @@
           p.running = false; p.endAt = 0; p.remaining = p.duration; p.stage = 0;
           reportedRun[p.id] = false;
           runPieces[p.id] = 0;
-          runBags[p.id] = 0;
         });
         stopTickIfIdle();
         save();
@@ -851,7 +804,6 @@
     g('panOptNav').checked = settings.nav;
     g('panOptVibrate').checked = settings.vibrate;
     if (g('panRollsDefault')) g('panRollsDefault').value = settings.rollsPerBatch;
-    if (g('panBagsDefault')) g('panBagsDefault').value = settings.bagsPerBatch;
     if (g('panRollsPerBag')) g('panRollsPerBag').value = settings.rollsPerBag;
     if (g('panOptAutoReport')) g('panOptAutoReport').checked = settings.autoReport;
     renderPanOverrideRows();
@@ -889,9 +841,8 @@
         var foldEl = box.querySelector('[data-ov-fold="' + id + '"]');
         var finalEl = box.querySelector('[data-ov-final="' + id + '"]');
         var rollsEl = box.querySelector('[data-ov-rolls="' + id + '"]');
-        var bagsEl = box.querySelector('[data-ov-bags="' + id + '"]');
-        if (!foldEl || !finalEl || !rollsEl || !bagsEl) return;
-        overrides[id] = { fold: foldEl.value, final: finalEl.value, rolls: rollsEl.value, bags: bagsEl.value };
+        if (!foldEl || !finalEl || !rollsEl) return;
+        overrides[id] = { fold: foldEl.value, final: finalEl.value, rolls: rollsEl.value };
       });
     }
     return normalizeSettings({
@@ -905,16 +856,16 @@
       nav: g('panOptNav').checked,
       vibrate: g('panOptVibrate').checked,
       rollsPerBatch: g('panRollsDefault') ? g('panRollsDefault').value : undefined,
-      bagsPerBatch: g('panBagsDefault') ? g('panBagsDefault').value : undefined,
       rollsPerBag: g('panRollsPerBag') ? g('panRollsPerBag').value : undefined,
       autoReport: g('panOptAutoReport') ? g('panOptAutoReport').checked : undefined,
       panOverrides: overrides
     });
   }
 
-  /* Per-pan rows in the settings modal: each pan shows its own fold/final/rolls/
-     bags with a "Use global" checkbox. Unchecking enables custom values — you
-     set the exact rolls AND bags that pan counts when it finishes a batch. */
+  /* Per-pan rows in the settings modal: each pan shows its own fold/final/rolls
+     with a "Use global" checkbox. Unchecking enables custom values — you set
+     the exact rolls that pan counts when it finishes a batch. Bags are NEVER
+     per-round. */
   function renderPanOverrideRows() {
     var box = g('panPerPanRows');
     if (!box) return;
@@ -925,7 +876,6 @@
       var fold = o ? o.fold : settings.fold;
       var fin = o ? o.final : settings.final;
       var rolls = o ? (o.rolls || settings.rollsPerBatch) : settings.rollsPerBatch;
-      var bags = o ? (typeof o.bags === 'number' && o.bags > 0 ? o.bags : '') : (typeof settings.bagsPerBatch === 'number' ? settings.bagsPerBatch : '');
       return '<div class="rounded-lg bg-gray-800/50 border border-gray-700 p-2 pan-ov-row" data-ov-row="' + pan.id + '">' +
         '<div class="flex items-center justify-between gap-2 mb-1.5">' +
           '<span class="text-xs font-bold" style="color:' + pan.accent + '">' + escapeHtml(pan.name) + '</span>' +
@@ -933,11 +883,10 @@
             '<input type="checkbox" class="accent-amber-500" data-ov-use="' + pan.id + '"' + (useGlobal ? ' checked' : '') + '> Use global' +
           '</label>' +
         '</div>' +
-        '<div class="grid grid-cols-4 gap-2">' +
+        '<div class="grid grid-cols-3 gap-2">' +
           '<label class="block text-[10px] text-gray-400 font-semibold">Fold (s)<input type="number" min="5" max="600" step="5" inputmode="numeric" data-ov-fold="' + pan.id + '" value="' + fold + '"' + (useGlobal ? ' disabled' : '') + ' class="pan-ov-input"></label>' +
           '<label class="block text-[10px] text-gray-400 font-semibold">Final (s)<input type="number" min="1" max="300" step="5" inputmode="numeric" data-ov-final="' + pan.id + '" value="' + fin + '"' + (useGlobal ? ' disabled' : '') + ' class="pan-ov-input"></label>' +
           '<label class="block text-[10px] text-gray-400 font-semibold">Rolls<input type="number" min="1" max="500" step="1" inputmode="numeric" data-ov-rolls="' + pan.id + '" value="' + rolls + '"' + (useGlobal ? ' disabled' : '') + ' class="pan-ov-input"></label>' +
-          '<label class="block text-[10px] text-gray-400 font-semibold">Bags<input type="number" min="0" max="500" step="1" inputmode="numeric" data-ov-bags="' + pan.id + '" value="' + bags + '"' + (useGlobal ? ' disabled' : '') + ' placeholder="0" class="pan-ov-input"></label>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -953,7 +902,7 @@
         if (!id) return;
         var row = box.querySelector('[data-ov-row="' + id + '"]');
         if (!row) return;
-        Array.from(row.querySelectorAll('[data-ov-fold], [data-ov-final], [data-ov-rolls], [data-ov-bags]')).forEach(function (inp) {
+        Array.from(row.querySelectorAll('[data-ov-fold], [data-ov-final], [data-ov-rolls]')).forEach(function (inp) {
           inp.disabled = cb.checked;
         });
         if (cb.checked) {
@@ -961,15 +910,12 @@
           var f = g('panFoldSec') ? g('panFoldSec').value : '';
           var fn = g('panFinalSec') ? g('panFinalSec').value : '';
           var rd = g('panRollsDefault') ? g('panRollsDefault').value : '';
-          var bd = g('panBagsDefault') ? g('panBagsDefault').value : '';
           var fe = row.querySelector('[data-ov-fold="' + id + '"]');
           if (fe) fe.value = f;
           var fne = row.querySelector('[data-ov-final="' + id + '"]');
           if (fne) fne.value = fn;
           var re = row.querySelector('[data-ov-rolls="' + id + '"]');
           if (re) re.value = rd;
-          var be = row.querySelector('[data-ov-bags="' + id + '"]');
-          if (be) be.value = bd;
         }
       });
     });
@@ -1023,7 +969,6 @@
     });
     pans = next;
     runPieces = {};
-    runBags = {};
     if (pans.length !== (settings.panCount || 3)) settings.panCount = pans.length;
   }
 

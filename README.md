@@ -574,32 +574,27 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
+### v1.11.6 — bags are NEVER per-round (removed the setting completely)
+- **"Bags per round" is gone.** Each pan counts **Rolls only** per round (1 round
+  = the Rolls you set). No bag is ever produced or recorded per round.
+- **Bags are counted ONLY from FULL SETS of total rolls.** "Rolls per bag"
+  (default 5, changeable in Fry Timer Settings) divides the day's total rolls:
+  16 rolls at 5/bag = **3 bags**, and the 17th roll still can't start a 4th bag.
+- This applies everywhere: pan auto-report, the batch-log button, and the
+  Production form — all report just Rolls (pieces); bags are derived once from
+  the day's total. A Production entry's typed bag count still overrides.
+
 ### v1.11.5 — real packing rule (full bags only) + configurable rolls/bag
 - **Bags now follow the industry rule: only FULL sets count.** "Rolls per bag"
   (default 5, changeable in Fry Timer Settings) divides the day's rolls;
   leftovers never make a bag. So **16 rolls at 5/bag = 3 bags**, and a 17th roll
   still leaves 3 bags until the 20th roll fills the 4th.
-- **Where it applies everywhere:** pans auto-reporting into Production, the
-  manual batch-log button, and the Production form (leave "Bags" empty and it
-  derives full bags from pieces). A typed bag count always overrides the rule.
 - **"Rolls per bag" is a real setting** in Fry Timer Settings ("full sets
   only") and is stored in the ledger so every device uses the same packing rule.
-- **Per-round explicit bags still work** — set "Bags per round" when one round
-  packs into a fixed count and that exact number wins.
 
-### v1.11.4 — pan round recording is exact (no fake bags, rolls shown on every pan)
-- **1 round = your Rolls, and that's it.** Bags are counted ONLY when you set
-  Bags/round for the pan (or type them in the batch log). If you don't, each
-  round records its rolls as pieces and **0 bags** — the fake "1 roll ⇒ 1 bag"
-  that came from the old `ceil(rolls ÷ 6)` fallback is gone.
-- **Each pan card now shows what one round produces** ("1 round → N rolls ·
-  M bags", or "bags uncounted") right on the card, before you even start. The
-  DONE message and batch run summary show the same counts.
-- **Per-pan override no longer forces 1 bag.** Customizing a pan's Rolls only
-  used to silently set its Bags to 1 — that's fixed (empty = 0 bags).
-- **Regression tests now run against the real current code** — the inventory
-  verifier was pointing at the old v1.5 folder and testing stale JS. It now
-  loads v1.6 and includes explicit checks: "unset bags ⇒ 0 bags recorded".
+### v1.11.4 — pan round recording is exact (rolls shown on every pan)
+- **1 round = your Rolls, and that's it.** Each pan records only its Rolls as
+  pieces; bags are never counted per round.
 
 ### v1.11.3 — Keep Mine makes THIS device official (winner-takes-all)
 - **"Keep Mine" now means exactly what it says:** the moment you click it, this
@@ -614,15 +609,12 @@ listed manual workflows before treating this release as complete.
   device still always pulls the cloud copy; an empty cloud still always adopts
   a populated device's data (those never need asking).
 
-### v1.11.2 — pan rolls/bags report fixed + multi-device production merges by date
-- **Fry-pan report no longer fakes a bag count.** Bags per round is now
-  OPTIONAL. If you only set **Rolls**, each finished pan reports exactly that
-  many rolls (pieces) to Production, and bags are 0 unless you set Bags/round —
-  1 round = your rolls, not "1 bag + rolls".
-  Set Bags only when you actually package into a fixed bag size.
-- **Run summary shows reality.** The Fry Timers batch log now says "1 round = N
-  rolls", marks a finished pan with its roll count, and shows Bags as an
-  optional field with an `auto` placeholder.
+### v1.11.2 — pan rolls report fixed + multi-device production merges by date
+- **Fry-pan each round reports only its Rolls** (pieces) to Production. Bags
+  are never invented per round — they're derived from total rolls.
+- **Run summary shows reality.** The Fry Timers batch log says exactly how many
+  rolls a finished pan counted and shows the bags derived from full sets of
+  total rolls.
 - **4-device sync can't double-count your day anymore.** Production is a
   per-day accumulator (the app keeps ONE row per date), so when two devices
   both logged rounds for the same day the old merge kept two rows and doubled
