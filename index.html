@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" data-build="v1.11.3">
+<html lang="en" class="dark" data-build="v1.11.4">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -909,7 +909,7 @@ tailwind.config = {
         <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="list-checks" class="w-5 h-5 text-emerald-400"></i> Today's Batch Log</h3>
         <button id="panSaveRunBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition">Log finished batch → Production</button>
       </div>
-      <p class="text-xs text-gray-400 mb-2">Each time a pan finishes it counts the <b class="text-emerald-400">Rolls &amp; Bags</b> you set for it (⚙ Settings). With <b>auto-report</b> on, those exact counts go straight into Production — Pieces and Bags Prod. grow automatically. Off, they stay here where you can adjust Rolls &amp; Bags before clicking the button to record them (usage uses the current form's usage).</p>
+      <p class="text-xs text-gray-400 mb-2">Each finished pan counts its <b class="text-emerald-400">Rolls</b> (and optional <b class="text-emerald-400">Bags</b>, only when you set them) and reports the rolls to Production automatically. Bags are never invented: if you don't set them, Production records 0 bags and you enter the real packed bags when you package.</p>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="panRunSummary"></div>
     </div>
   </section>
@@ -962,7 +962,7 @@ tailwind.config = {
               <label class="block text-[11px] text-gray-400 font-semibold">
                 Bags per round (optional)
                 <input id="panBagsDefault" type="number" min="0" max="500" step="1" inputmode="numeric" placeholder="auto (from rolls)" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500">
-                <span class="font-normal normal-case text-[10px] text-gray-500">Leave empty to auto-calculate from Rolls (≈ rolls ÷ 6) — 1 round never fakes a bag count.</span>
+                <span class="font-normal normal-case text-[10px] text-gray-500">Leave empty to count 0 bags per round — a round of rolls is never auto-counted as a bag. Enter bags only when you package into a fixed size.</span>
               </label>
             </div>
             <span class="font-normal normal-case text-[10px] text-gray-500">These are <b>your</b> numbers for one pan completion — the exact Rolls and Bags that get added to the Production panel each time a pan finishes.</span>
@@ -1452,31 +1452,31 @@ tailwind.config = {
 </div>
 
 
-    <script src="js/config.js?v=20260910"></script>
-    <script src="js/supabase.js?v=20260910"></script>
-    <script src="js/storage.js?v=20260910"></script>
-    <script src="js/google.js?v=20260910"></script>
-    <script src="js/helpers.js?v=20260910"></script>
-    <script src="js/pricing.js?v=20260910"></script>
-    <script src="js/usage.js?v=20260910"></script>
-    <script src="js/ledger.js?v=20260910"></script>
-    <script src="js/sales.js?v=20260910"></script>
-    <script src="js/dashboard.js?v=20260910"></script>
-    <script src="js/calendar.js?v=20260910"></script>
-    <script src="js/csv.js?v=20260910"></script>
-    <script src="js/sync-ui.js?v=20260910"></script>
-    <script src="js/sample-data.js?v=20260910"></script>
-    <script src="js/inventory.js?v=20260910"></script>
-    <script src="js/customers.js?v=20260910"></script>
-    <script src="js/suppliers.js?v=20260910"></script>
-    <script src="js/tools.js?v=20260910"></script>
-    <script src="js/pan-timers.js?v=20260910"></script>
-    <script src="js/cash.js?v=20260910"></script>
-    <script src="js/companies.js?v=20260910"></script>
-    <script src="js/auth.js?v=20260910"></script>
-    <script src="js/cloud.js?v=20260910"></script>
-    <script src="js/ai.js?v=20260910"></script>
-    <script src="js/init.js?v=20260910"></script>
+    <script src="js/config.js?v=20260911"></script>
+    <script src="js/supabase.js?v=20260911"></script>
+    <script src="js/storage.js?v=20260911"></script>
+    <script src="js/google.js?v=20260911"></script>
+    <script src="js/helpers.js?v=20260911"></script>
+    <script src="js/pricing.js?v=20260911"></script>
+    <script src="js/usage.js?v=20260911"></script>
+    <script src="js/ledger.js?v=20260911"></script>
+    <script src="js/sales.js?v=20260911"></script>
+    <script src="js/dashboard.js?v=20260911"></script>
+    <script src="js/calendar.js?v=20260911"></script>
+    <script src="js/csv.js?v=20260911"></script>
+    <script src="js/sync-ui.js?v=20260911"></script>
+    <script src="js/sample-data.js?v=20260911"></script>
+    <script src="js/inventory.js?v=20260911"></script>
+    <script src="js/customers.js?v=20260911"></script>
+    <script src="js/suppliers.js?v=20260911"></script>
+    <script src="js/tools.js?v=20260911"></script>
+    <script src="js/pan-timers.js?v=20260911"></script>
+    <script src="js/cash.js?v=20260911"></script>
+    <script src="js/companies.js?v=20260911"></script>
+    <script src="js/auth.js?v=20260911"></script>
+    <script src="js/cloud.js?v=20260911"></script>
+    <script src="js/ai.js?v=20260911"></script>
+    <script src="js/init.js?v=20260911"></script>
 
 </body>
 </html>

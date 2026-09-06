@@ -70,6 +70,9 @@
 .pan-stage-3 .pan-bar-fill { background: #EF4444; }
 
 .pan-msg { margin-top: .55rem; font-size: 12px; line-height: 1.35; color: #9CA3AF; font-weight: 600; min-height: 2.1em; }
+.pan-out { margin-top: .35rem; font-size: 10px; color: #9CA3AF; line-height: 1.3; }
+.pan-out-num { color: #FDE68A; font-weight: 700; }
+.pan-out-unset { color: #6B7280; }
 .pan-running .pan-msg { color: var(--pan-accent); }
 .pan-stage-1 .pan-msg { color: #FDE68A; }
 .pan-stage-2 .pan-msg { color: #FED7AA; font-weight: 800; }

@@ -157,10 +157,12 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
   // -------- Merge into an existing batch for the same day (no double deduct) --------
   if (existing) {
     existing.pieces = (existing.pieces || 0) + Math.round(pieces);
-    // Bags come from the caller: the pan's own Bags/batch setting (auto-report)
-    // or what the user entered in the batch log. Only fall back to the
-    // 6-per-bag estimate when no bag count is given.
-    existing.bags = (existing.bags || 0) + Math.round(bags || Math.ceil(pieces / 6));
+    // Bags are counted ONLY when the caller provides them (the pan's own
+    // Bags/round setting or an explicit batch-log entry). NEVER auto-estimate:
+    // "1 round" must not invent a bag. Unpacked rolls record 0 bags — enter the
+    // real bag count later via Update Production / Sales.
+    const b = (typeof bags === 'number' && isFinite(bags) && bags > 0) ? Math.round(bags) : 0;
+    existing.bags = (existing.bags || 0) + b;
     existing.notes = (existing.notes || '') + (notes ? (existing.notes ? ' · ' : '') + notes : '');
     if (useBy && !existing.useBy) existing.useBy = useBy;
     if (!existing.usage || !Object.keys(existing.usage).length) existing.usage = Object.assign({}, runUsage);
@@ -186,7 +188,9 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
     id: uid(),
     date: date,
     pieces: Math.round(pieces),
-    bags: Math.round(bags || Math.ceil(pieces / 6)),
+    // Bags only when explicitly provided (a positive number). Otherwise 0 —
+    // a finished round of rolls is NOT automatically a bag.
+    bags: (typeof bags === 'number' && isFinite(bags) && bags > 0) ? Math.round(bags) : 0,
     weightPerRoll: 0, mixWeight: 0, expectedRolls: 0,
     notes: notes || '',
     usage: Object.assign({}, runUsage),

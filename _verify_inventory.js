@@ -2,7 +2,7 @@
    with DOM stubs and exercises saveProduction() + the inventory deduction chain. */
 const fs = require('fs');
 const path = require('path');
-const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.5\\js';
+const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.6\\js';
 const read = (f) => fs.readFileSync(path.join(dir, f), 'utf8');
 
 /* ---- DOM stubs ---- */
@@ -23,6 +23,7 @@ global.document = {
   createElement() { return mkEl(); }
 };
 global.$ = (id) => document.getElementById(id);
+global.window = global;
 function storeEl(id, overrides) { els[id] = Object.assign(mkEl(), overrides || {}); return els[id]; }
 global.showToast = () => {};
 global.lucide = { createIcons() {} };
@@ -132,6 +133,21 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
   ok(state.production[0].pieces === 180 && state.production[0].bags === 30, 'merged batch totals pieces + bags (60 + 120)');
   ok(flourMoves.length === 1 && flourMoves[0].qty === -120, 'pan runs deduct the daily recipe exactly ONCE');
   ok(stock('Flour') === 5000 - 120, 'flour stock correct after both pan runs');
+
+  // ---- F) A pan round with NO bag setting records ROLLS ONLY (bags = 0) ----
+  reset();
+  recordInventoryMovement({ ingredientName: 'Flour', qty: 5000, type: 'opening' });
+  refreshInputs(60, 360, 90, 0, 40);
+  draftUsage = Object.assign({}, DEFAULT_USAGE); draftUsage.Flour = 120; draftUsage.Egg = 2;
+  // 1 round, rolls=1, bags NOT provided (null) — the exact pan-auto-report case
+  saveProductionFromRun('2026-09-01', 1, null);
+  ok(state.production.length === 1, 'one round creates one production row');
+  ok(state.production[0].pieces === 1, 'round records exactly its 1 roll');
+  ok(state.production[0].bags === 0, 'unset bags => 0 bags recorded (no invented bag)');
+  // a second round same day merges: pieces add, bags stay 0
+  saveProductionFromRun('2026-09-01', 1, null);
+  ok(state.production.length === 1, 'second round merges into the same day row');
+  ok(state.production[0].pieces === 2 && state.production[0].bags === 0, '2 rolls total, still 0 bags');
 
   console.log(fail === 0 ? 'ALL INVENTORY TRACE CHECKS PASSED' : (fail + ' FAILED'));
 })();

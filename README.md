@@ -574,6 +574,20 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
+### v1.11.4 — pan round recording is exact (no fake bags, rolls shown on every pan)
+- **1 round = your Rolls, and that's it.** Bags are counted ONLY when you set
+  Bags/round for the pan (or type them in the batch log). If you don't, each
+  round records its rolls as pieces and **0 bags** — the fake "1 roll ⇒ 1 bag"
+  that came from the old `ceil(rolls ÷ 6)` fallback is gone.
+- **Each pan card now shows what one round produces** ("1 round → N rolls ·
+  M bags", or "bags uncounted") right on the card, before you even start. The
+  DONE message and batch run summary show the same counts.
+- **Per-pan override no longer forces 1 bag.** Customizing a pan's Rolls only
+  used to silently set its Bags to 1 — that's fixed (empty = 0 bags).
+- **Regression tests now run against the real current code** — the inventory
+  verifier was pointing at the old v1.5 folder and testing stale JS. It now
+  loads v1.6 and includes explicit checks: "unset bags ⇒ 0 bags recorded".
+
 ### v1.11.3 — Keep Mine makes THIS device official (winner-takes-all)
 - **"Keep Mine" now means exactly what it says:** the moment you click it, this
   device's data becomes the **official copy** and is uploaded to the cloud for
@@ -590,8 +604,8 @@ listed manual workflows before treating this release as complete.
 ### v1.11.2 — pan rolls/bags report fixed + multi-device production merges by date
 - **Fry-pan report no longer fakes a bag count.** Bags per round is now
   OPTIONAL. If you only set **Rolls**, each finished pan reports exactly that
-  many rolls (pieces) to Production and bags are derived (rolls ÷ 6, the same
-  rule the rest of the app uses) — 1 round = your rolls, not "1 bag + rolls".
+  many rolls (pieces) to Production, and bags are 0 unless you set Bags/round —
+  1 round = your rolls, not "1 bag + rolls".
   Set Bags only when you actually package into a fixed bag size.
 - **Run summary shows reality.** The Fry Timers batch log now says "1 round = N
   rolls", marks a finished pan with its roll count, and shows Bags as an

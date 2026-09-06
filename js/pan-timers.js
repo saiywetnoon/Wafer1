@@ -76,10 +76,10 @@
                                // this (global here, or per-pan in "Use global"
                                // mode). Reported to Production as pieces.
                                // 1 round/pan = THIS many rolls.
-    bagsPerBatch: null,         // Bags per round — OPTIONAL. null = auto-derived
-                               // from rolls (rolls ÷ 6, same as the rest of the
-                               // app) so "1 round" never fakes a bag count. Set
-                               // a number only when you actually package into
+    bagsPerBatch: null,         // Bags per round — OPTIONAL. null = count 0 bags
+                               // (a round of rolls is NEVER auto-counted as a
+                               // bag). Set a number only when you actually
+                               // package into a fixed bag size.
                                // a fixed bag size.
     autoReport: true,          // finished batches auto-log to the Production panel
     panOverrides: {}           // { panId: { fold, final, rolls, bags } } per-pan
@@ -130,9 +130,8 @@
   }
 
   /* Bags this pan counts per finished round — its own override or the global
-     value. Returns null when NOT set, which tells Production to DERIVE bags from
-     rolls (rolls ÷ 6) — matching the rest of the app. So running rounds never
-     fakes a bag count you never configured. */
+     value. Returns null when NOT set, so the pan reports ROLLS ONLY and
+     Production records 0 bags (count them when you actually package). */
   function bagsFor(id) {
     var o = panOverride(id);
     if (o && typeof o.bags === 'number' && o.bags > 0) return o.bags;
@@ -173,8 +172,9 @@
       if (isNaN(n)) return dflt;
       return Math.max(lo, Math.min(hi, n));
     }
-    /* Bags are OPTIONAL: empty / "auto" / missing means "derive from rolls"
-       (rolls ÷ 6), so 1 round never auto-creates a fake bag count. */
+    /* Bags are OPTIONAL: empty means COUNT 0 BAGS — a finished round of rolls
+       is never auto-counted as a bag. Set a number only when the pan really
+       packages into a fixed bag size. */
     function nullableNum(v, lo, hi) {
       if (v === '' || v === null || v === undefined || v === 'null' || v === 'auto') return null;
       var n = parseInt(v, 10);
@@ -190,7 +190,7 @@
         var fold = num(o.fold, 5, 600, SETTINGS_DEFAULTS.fold);
         var fin = num(o.final, 1, 300, SETTINGS_DEFAULTS.final);
         var rolls = num(o.rolls, 1, 500, (SETTINGS_DEFAULTS.rollsPerBatch != null ? SETTINGS_DEFAULTS.rollsPerBatch : 1));
-        var bags = num(o.bags, 1, 500, (SETTINGS_DEFAULTS.bagsPerBatch != null ? SETTINGS_DEFAULTS.bagsPerBatch : 1));
+        var bags = nullableNum(o.bags, 1, 500);   // empty -> null (unset) -> 0 bags, never a forced 1
         if (o && typeof o === 'object' && (o.fold !== undefined || o.final !== undefined || o.rolls !== undefined || o.bags !== undefined)) {
           overrides[id] = { fold: fold, final: fin, rolls: rolls, bags: bags };
         }
@@ -539,6 +539,7 @@
         '<div class="pan-time">' + fmtTime(pan.remaining) + '</div>' +
         '<div class="pan-bar"><div class="pan-bar-fill"></div></div>' +
         '<div class="pan-msg">' + msgText(pan) + '</div>' +
+        '<div class="pan-out">' + panOutLine(pan) + '</div>' +
         '<div class="flex items-center gap-2 mt-3">' +
           '<button class="pan-btn pan-btn-primary" data-act="toggle">Start</button>' +
           '<button class="pan-btn" data-act="reset">Reset</button>' +
@@ -546,6 +547,16 @@
         '</div>' +
         '<div class="pan-hint">Key <kbd>' + pan.key + '</kbd> run/pause · <kbd>Shift+' + pan.key + '</kbd> reset · click card · right-click reset</div>' +
       '</div>';
+  }
+
+  /* How many rolls (and optional bags) ONE finished round of this pan counts. */
+  function panOutLine(pan) {
+    var r = rollsFor(pan.id) || 1;
+    var b = bagsFor(pan.id);
+    var txt = '1 round → <b class="pan-out-num">' + r + ' roll' + (r === 1 ? '' : 's') + '</b>';
+    if (b) txt += ' · <b class="pan-out-num">' + b + ' bag' + (b === 1 ? '' : 's') + '</b>';
+    else txt += ' · <span class="pan-out-unset">bags uncounted</span>';
+    return txt;
   }
 
   function badgeText(pan) {
@@ -563,6 +574,8 @@
     if (pan.stage === 3) {
       var n = rollsFor(pan.id);
       var noun = n + ' roll' + (n === 1 ? '' : 's');
+      var b = bagsFor(pan.id);
+      if (b) noun += ' + ' + b + ' bag' + (b === 1 ? '' : 's');
       return MSG[3] + (settings.autoReport ? ' — ' + noun + ' counted & reported to Production' : ' — ' + noun + ' counted, log it in the batch log');
     }
     if (pan.stage === 2) return stageMessage(pan);
@@ -620,6 +633,8 @@
   function markRun(pan) {
     if (pan.stage === 3 && !pan.running && !reportedRun[pan.id]) {
       runPieces[pan.id] = runPieces[pan.id] || rollsFor(pan.id);
+      // 0 / null means "not counted yet" for bags — fill from the pan's setting.
+      // A typed positive number in the batch log is preserved.
       runBags[pan.id] = runBags[pan.id] || bagsFor(pan.id);
     }
   }
@@ -645,14 +660,19 @@
       const bagsRaw = runBags[pan.id];
       const bags = (typeof bagsRaw === 'number' && bagsRaw > 0) ? bagsRaw : 0;
       const rolls = rollsFor(pan.id) || 1;   // what ONE round produces
+      const setBags = (typeof bagsRaw === 'number' && bagsRaw > 0);
       return '<div class="p-3 rounded-lg bg-gray-800/60 border border-gray-700">' +
-        '<div class="text-xs font-bold text-gray-300">' + escapeHtml(pan.name) + (pcs ? ' <span class="text-emerald-400 font-bold">✓ ' + pcs + ' roll' + (pcs === 1 ? '' : 's') + '</span>' : '') + '</div>' +
-        '<div class="text-[10px] text-gray-500 mb-1.5">1 round = ' + rolls + ' roll' + (rolls === 1 ? '' : 's') + '</div>' +
+        '<div class="text-xs font-bold text-gray-300">' + escapeHtml(pan.name) +
+          (pcs ? ' <span class="text-emerald-400 font-bold">✓ ' + pcs + ' roll' + (pcs === 1 ? '' : 's') +
+            (setBags ? ' · ' + bags + ' bag' + (bags === 1 ? '' : 's') : '') + '</span>' : '') +
+        '</div>' +
+        '<div class="text-[10px] text-gray-500 mb-1.5">1 round = ' + rolls + ' roll' + (rolls === 1 ? '' : 's') +
+          (setBags ? ' · ' + bags + ' bag' + (bags === 1 ? '' : 's') : ' · bags uncounted') + '</div>' +
         '<div class="flex items-center gap-2">' +
         '<label class="text-[10px] text-gray-400">Rolls<input type="number" min="0" step="1" value="' + pcs + '" data-run-pieces="' + pan.id + '" class="pan-ov-input w-16"></label>' +
-        '<label class="text-[10px] text-gray-400">Bags<input type="number" min="0" step="1" value="' + (bags || '') + '" placeholder="auto" data-run-bags="' + pan.id + '" class="pan-ov-input w-16"></label>' +
+        '<label class="text-[10px] text-gray-400">Bags<input type="number" min="0" step="1" value="' + (setBags ? bags : '') + '" placeholder="0" data-run-bags="' + pan.id + '" class="pan-ov-input w-16"></label>' +
         '</div>' +
-        '<div class="text-[10px] text-gray-500 mt-1">Bags are counted only when you set them; leave empty to auto-calculate from rolls (≈' + Math.max(1, Math.ceil((rolls) / 6)) + ' per round).</div></div>';
+        '<div class="text-[10px] text-gray-500 mt-1">Bags count only when you type a number here (or set Bags/round in ⚙) — a round of rolls is never auto-counted as a bag. Enter the real packed bags when you package them.</div></div>';
     }).join('') || '<div class="text-gray-500 text-xs">No finished batches yet. Finished batches are auto-counted from your Rolls/bags settings and' + (settings.autoReport ? ' reported to Production.' : ' ready for the Log button below.') + '</div>';
   }
   function wireRunSummary() {
@@ -677,7 +697,8 @@
     pans.forEach(function (pan) {
       const pcs = runPieces[pan.id] || 0;
       if (!pcs) return;
-      const ok = saveProductionFromRun(today(), pcs, runBags[pan.id] || bagsFor(pan.id), undefined, (g('logNotes') ? g('logNotes').value : ''), undefined);
+      const bagVal = (runBags[pan.id] != null) ? runBags[pan.id] : bagsFor(pan.id);
+      const ok = saveProductionFromRun(today(), pcs, bagVal, undefined, (g('logNotes') ? g('logNotes').value : ''), undefined);
       if (ok) {
         runPieces[pan.id] = 0;
         runBags[pan.id] = 0;
@@ -888,8 +909,8 @@
       var useGlobal = !o;
       var fold = o ? o.fold : settings.fold;
       var fin = o ? o.final : settings.final;
-      var rolls = o ? o.rolls : settings.rollsPerBatch;
-      var bags = o ? o.bags : settings.bagsPerBatch;
+      var rolls = o ? (o.rolls || settings.rollsPerBatch) : settings.rollsPerBatch;
+      var bags = o ? (typeof o.bags === 'number' && o.bags > 0 ? o.bags : '') : (typeof settings.bagsPerBatch === 'number' ? settings.bagsPerBatch : '');
       return '<div class="rounded-lg bg-gray-800/50 border border-gray-700 p-2 pan-ov-row" data-ov-row="' + pan.id + '">' +
         '<div class="flex items-center justify-between gap-2 mb-1.5">' +
           '<span class="text-xs font-bold" style="color:' + pan.accent + '">' + escapeHtml(pan.name) + '</span>' +
@@ -901,7 +922,7 @@
           '<label class="block text-[10px] text-gray-400 font-semibold">Fold (s)<input type="number" min="5" max="600" step="5" inputmode="numeric" data-ov-fold="' + pan.id + '" value="' + fold + '"' + (useGlobal ? ' disabled' : '') + ' class="pan-ov-input"></label>' +
           '<label class="block text-[10px] text-gray-400 font-semibold">Final (s)<input type="number" min="1" max="300" step="5" inputmode="numeric" data-ov-final="' + pan.id + '" value="' + fin + '"' + (useGlobal ? ' disabled' : '') + ' class="pan-ov-input"></label>' +
           '<label class="block text-[10px] text-gray-400 font-semibold">Rolls<input type="number" min="1" max="500" step="1" inputmode="numeric" data-ov-rolls="' + pan.id + '" value="' + rolls + '"' + (useGlobal ? ' disabled' : '') + ' class="pan-ov-input"></label>' +
-          '<label class="block text-[10px] text-gray-400 font-semibold">Bags<input type="number" min="1" max="500" step="1" inputmode="numeric" data-ov-bags="' + pan.id + '" value="' + bags + '"' + (useGlobal ? ' disabled' : '') + ' class="pan-ov-input"></label>' +
+          '<label class="block text-[10px] text-gray-400 font-semibold">Bags<input type="number" min="0" max="500" step="1" inputmode="numeric" data-ov-bags="' + pan.id + '" value="' + bags + '"' + (useGlobal ? ' disabled' : '') + ' placeholder="0" class="pan-ov-input"></label>' +
         '</div>' +
       '</div>';
     }).join('');
