@@ -221,7 +221,9 @@ button (🗑) that turns it into a daily-usage item and clears its stock history
   endpoint error), a persistent flag is set and the status line says so. When
   the connection returns (or on next page load / manual sync) the current state
   — which includes every change made offline — is pushed automatically and the
-  flag clears. Conflict resolution on boot is last-write-wins by `updatedAt`.
+  flag clears. When the cloud copy and this device's copy differ, the app asks
+  you to **Accept or Decline** (Sync & Backup tab / sync-review pop-up) instead
+  of silently overwriting either copy.
 - **Daily Cash Count / Close** — the Cash tab now computes today's **expected
   cash** automatically (paid sales + customer payments). Enter what you counted
   and the variance is shown live; one click posts it as a drawer adjustment.
@@ -572,6 +574,19 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
+### v1.11.0 — user-controlled sync (accept/decline) + supplier added date
+- **No more silent data loss between devices.** The app used to pick one copy
+  ("more records wins", newest write wins) and overwrite the other — that's why
+  an edit on your phone could vanish from your laptop and vice-versa. Now, when
+  another browser/device saves different data, a pop-up lists exactly what
+  changed and asks **Accept** (load the remote copy) or **Decline** (keep this
+  device's copy and push it back up). Nothing is overwritten until you choose.
+- **Suppliers now show when each shop was added** (date + time), and the
+  delete button has a clearer confirmation (history is kept so totals stay
+  correct).
+- **Fresh-device safety kept** — an empty browser still pulls the cloud ledger
+  automatically; it can never clobber it.
+
 ### v1.9.3 — professional UI & navigation polish
 - **Grouped tab navigation.** Tabs are now organized into labelled sections
   (Operations · Insight · Manage · Finance · System) so where things live is
@@ -599,9 +614,11 @@ listed manual workflows before treating this release as complete.
   whose full history was never pushed has an *older* timestamp while the cloud
   row is *newer* but has *fewer* records — so the app refused to push *and*
   refused to pull, and every other browser kept seeing the stale partial copy.
-  Rule now: **the copy with more real records wins** (ties break by newest
-  write). Your origin device's full history uploads automatically, and a fresh
-  browser always pulls it.
+- **Conflicts are decided by YOU, not by record counts.** When both the cloud
+  and a device have data that differs, the sync-review pop-up shows what
+  changed and asks **Accept / Decline** instead of silently picking a winner.
+  Your origin device's full history uploads automatically, and a fresh browser
+  always pulls it.
 - **A fresh/empty browser can never clobber the cloud.** Signing in on a new
   device used to risk pushing its empty default state over a populated ledger.
   Now an empty device always pulls.

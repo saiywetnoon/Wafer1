@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" data-build="v1.10.2">
+<html lang="en" class="dark" data-build="v1.11.0">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -797,7 +797,7 @@ tailwind.config = {
         </button>
         <div class="mt-4 max-h-64 overflow-y-auto scrollbar-thin">
           <table class="w-full text-xs">
-            <thead><tr class="text-left text-gray-400 border-b border-gray-700"><th class="py-1.5 pr-2">Shop</th><th class="py-1.5 pr-2">What You Owe</th><th class="py-1.5"></th></tr></thead>
+            <thead><tr class="text-left text-gray-400 border-b border-gray-700"><th class="py-1.5 pr-2">Shop</th><th class="py-1.5 pr-2">Added</th><th class="py-1.5 pr-2">What You Owe</th><th class="py-1.5 text-right">Actions</th></tr></thead>
             <tbody id="supplierListBody"></tbody>
           </table>
         </div>
@@ -1322,6 +1322,32 @@ tailwind.config = {
 <!-- Toast Container -->
 <div id="toastContainer" class="fixed top-16 right-4 z-[95] space-y-2 w-80 max-w-[90vw] pointer-events-none"></div>
 
+<!-- ===================== SYNC CHANGE REVIEW (accept / decline) ===================== -->
+<div id="syncReviewModal" class="hidden fixed inset-0 z-[110] bg-gray-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+  <div class="w-full max-w-lg bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+      <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="refresh-cw" class="w-5 h-5 text-sky-400"></i> Change From Another Device</h3>
+      <span id="syncReviewTs" class="text-[10px] text-gray-500 whitespace-nowrap"></span>
+    </div>
+    <div class="px-5 py-4">
+      <p class="text-xs text-gray-400 mb-2">Your other device (phone / laptop / browser) saved different data. Nothing is overwritten until you choose:</p>
+      <div id="syncReviewDiff" class="rounded-xl bg-gray-950/60 border border-gray-800 px-3 py-1 max-h-[48vh] overflow-y-auto scrollbar-thin text-xs"></div>
+      <div class="mt-3 text-[11px] text-gray-500 leading-snug">
+        <span class="text-emerald-400 font-semibold">Accept</span> — load the new data into this device and sync it.<br>
+        <span class="text-red-400 font-semibold">Decline</span> — keep this device's data as-is and push it to the cloud.
+      </div>
+    </div>
+    <div class="px-5 py-4 border-t border-gray-800 flex flex-wrap items-center justify-end gap-2">
+      <button id="syncReviewDeclineBtn" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition flex items-center gap-1.5">
+        <i data-lucide="x" class="w-3.5 h-3.5"></i> Decline — keep mine
+      </button>
+      <button id="syncReviewAcceptBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5">
+        <i data-lucide="check" class="w-3.5 h-3.5"></i> Accept — load the change
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ===================== ACCOUNT LOGIN / SIGN UP ===================== -->
 <div id="authScreen" class="fixed inset-0 z-[200] bg-gray-950 overflow-y-auto">
   <div class="min-h-screen flex items-center justify-center p-4">
@@ -1423,31 +1449,31 @@ tailwind.config = {
 </div>
 
 
-    <script src="js/config.js?v=20260903"></script>
-    <script src="js/supabase.js?v=20260903"></script>
-    <script src="js/storage.js?v=20260903"></script>
-    <script src="js/google.js?v=20260903"></script>
-    <script src="js/helpers.js?v=20260903"></script>
-    <script src="js/pricing.js?v=20260903"></script>
-    <script src="js/usage.js?v=20260903"></script>
-    <script src="js/ledger.js?v=20260903"></script>
-    <script src="js/sales.js?v=20260903"></script>
-    <script src="js/dashboard.js?v=20260903"></script>
-    <script src="js/calendar.js?v=20260903"></script>
-    <script src="js/csv.js?v=20260903"></script>
-    <script src="js/sync-ui.js?v=20260903"></script>
-    <script src="js/sample-data.js?v=20260903"></script>
-    <script src="js/inventory.js?v=20260903"></script>
-    <script src="js/customers.js?v=20260903"></script>
-    <script src="js/suppliers.js?v=20260903"></script>
-    <script src="js/tools.js?v=20260903"></script>
-    <script src="js/pan-timers.js?v=20260903"></script>
-    <script src="js/cash.js?v=20260903"></script>
-    <script src="js/companies.js?v=20260903"></script>
-    <script src="js/auth.js?v=20260903"></script>
-    <script src="js/cloud.js?v=20260903"></script>
-    <script src="js/ai.js?v=20260903"></script>
-    <script src="js/init.js?v=20260903"></script>
+    <script src="js/config.js?v=20260906"></script>
+    <script src="js/supabase.js?v=20260906"></script>
+    <script src="js/storage.js?v=20260906"></script>
+    <script src="js/google.js?v=20260906"></script>
+    <script src="js/helpers.js?v=20260906"></script>
+    <script src="js/pricing.js?v=20260906"></script>
+    <script src="js/usage.js?v=20260906"></script>
+    <script src="js/ledger.js?v=20260906"></script>
+    <script src="js/sales.js?v=20260906"></script>
+    <script src="js/dashboard.js?v=20260906"></script>
+    <script src="js/calendar.js?v=20260906"></script>
+    <script src="js/csv.js?v=20260906"></script>
+    <script src="js/sync-ui.js?v=20260906"></script>
+    <script src="js/sample-data.js?v=20260906"></script>
+    <script src="js/inventory.js?v=20260906"></script>
+    <script src="js/customers.js?v=20260906"></script>
+    <script src="js/suppliers.js?v=20260906"></script>
+    <script src="js/tools.js?v=20260906"></script>
+    <script src="js/pan-timers.js?v=20260906"></script>
+    <script src="js/cash.js?v=20260906"></script>
+    <script src="js/companies.js?v=20260906"></script>
+    <script src="js/auth.js?v=20260906"></script>
+    <script src="js/cloud.js?v=20260906"></script>
+    <script src="js/ai.js?v=20260906"></script>
+    <script src="js/init.js?v=20260906"></script>
 
 </body>
 </html>

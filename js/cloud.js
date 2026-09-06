@@ -115,39 +115,28 @@ function stateDataCount(s) {
   return n;
 }
 
-/* Auto-apply edits arriving from another device (realtime).
+/* Edits arriving from another device (realtime).
    Professional behaviour:
    - Ignore echoes of THIS device's own writes (no re-render, no message).
-   - Apply genuine remote changes and persist them locally WITHOUT pushing them
-     back (push-backs re-broadcast an event and create an endless sync loop).
-   - No toast spam — a quiet status line is enough for an auto-sync. */
+   - NEVER silently replace a different local copy. Pop the sync-review modal so
+     the user sees exactly what changed and chooses Accept / Decline.
+   - No toast spam — the modal (or a quiet status line) is the notification. */
 function supabaseUpdate(uid) {
   if (!uid) return;
   SUPA.subscribeRealtime(uid, function (row) {
     if (!row || !row.payload || !row.payload.state) return;
-    const remoteTs = Date.parse(row.updated_at) || 0;
-    const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
-    if (remoteTs && localTs && remoteTs <= localTs) return; // local is same/newer
     if (statesEqual(state, row.payload.state)) return;       // echo of our own write
-    /* Apply + persist locally, but suppress the echo push to break the loop. */
-    setCloudSyncSuppressed(true);
-    try {
-      applyCloudRemote({ state: row.payload.state }, remoteTs);
-    } finally {
-      setCloudSyncSuppressed(false);
-    }
-    renderAll();
-    // A draft that just arrived from another device belongs in the form too.
-    try { loadDraftIfNewer(); } catch (e) {}
-    updateGoogleSyncStatus('Last update from another device just now.', 'info');
+    const remoteTs = Date.parse(row.updated_at) || 0;
+    // Ask the user to review/accept/decline instead of overwriting either copy.
+    openSyncReview(row.payload.state, remoteTs, 'Your other device just saved changes');
   });
 }
 function supabaseWatch(uid) { supabaseUpdate(uid); }
 /* Background freshness poll (60s). Realtime is the fast path for other open
    devices, but a silently-failed channel / browser quirk must not leave a tab
-   showing stale numbers for hours. Every minute we pull the cloud copy and
-   apply it when it is genuinely newer — same guards as realtime (no echo, no
-   overwriting a richer local copy). */
+   showing stale numbers for hours. Every minute we pull the cloud copy and,
+   when it differs from what THIS device has, surface the sync-review modal so
+   the user decides (never silently overwrite either copy). */
 var cloudPollTimer = null;
 function startCloudPolling() {
   if (cloudPollTimer || !SUPA.configured()) return;
@@ -157,18 +146,11 @@ function startCloudPolling() {
       const res = await cloudGet();
       const remote = res && res.ok ? res.payload : null;
       if (!remote || !remote.state) return;
+      if (statesEqual(state, remote.state)) return; // aligned already
       const remoteTs = remote.exportedAt ? Date.parse(remote.exportedAt) : 0;
-      const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
-      if (remoteTs && localTs && remoteTs <= localTs) return;
-      if (statesEqual(state, remote.state)) return;
-      // Guard: never downgrade a richer local copy just because it's older.
-      if (stateDataCount(remote.state) < stateDataCount(state)) return;
-      setCloudSyncSuppressed(true);
-      try { applyCloudRemote(remote, remoteTs || undefined); } finally { setCloudSyncSuppressed(false); }
-      renderAll();
-      try { loadDraftIfNewer(); } catch (e) {}
-      updateGoogleSyncStatus('Auto-refreshed latest from your account.', 'info');
-      renderCloudStatus();
+      // Never auto-downgrade a richer local copy and never auto-replace a
+      // different local copy — ask the user which version to keep.
+      openSyncReview(remote.state, remoteTs || undefined, 'Background sync');
     } catch (e) { /* poll is best-effort */ }
   }, 60000);
 }
@@ -176,8 +158,8 @@ function startCloudPolling() {
 /* Offline-first: every push that cannot reach the cloud marks a persistent
    "pending sync" flag. The next successful online moment (reconnect, page
    load, manual sync) replays the CURRENT state — which contains every change
-   made while offline — and clears the flag. Last-write-wins by timestamp is
-   applied during the boot reconcile (cloudAfterSignIn). */
+   made while offline — and clears the flag. When it later collides with a
+   different cloud copy, the sync-review modal asks the user Accept/Decline. */
 var SYNC_QUEUE_KEY = 'dailyCrispyRollLedger_syncQueue';
 var CLOUD_LAST_SYNC_KEY = 'dailyCrispyRollLedger_lastCloudSync';
 /* True while the most recent push did NOT reach the cloud (this session).
@@ -291,6 +273,255 @@ async function cloudBackup() { return SUPA.configured() ? { ok: false, message: 
 async function cloudList() { return SUPA.configured() ? { ok: true, backups: [] } : cloudPost('list'); }
 async function cloudRestore() { return SUPA.configured() ? { ok: false, message: 'Use Download backup instead (Supabase).' } : cloudPost('restore', { fileName: '' }); }
 async function cloudClear() { return SUPA.configured() ? { ok: true, message: 'Cleared.' } : cloudPost('clear'); }
+
+/* ============================================================
+   REMOTE-CHANGE REVIEW — accept / decline conflict resolution
+   ------------------------------------------------------------
+   The app used to pick a "winner" silently (more records wins,
+   timestamps tie-break) and overwrite the other copy. That is
+   exactly how data appears to "disappear" between a phone and a
+   laptop: the two devices legitimately diverged and one copy was
+   clobbered. From now on, when a remote copy differs from what a
+   device has, the sync-review modal shows WHAT changed and asks the
+   user to Accept (load the remote copy) or Decline (keep this
+   device's copy and push it back up). Nothing is overwritten until
+   the user decides.
+   ============================================================ */
+
+var syncReview = { open: false, current: null, pending: null };
+var syncReviewDeclined = {}; // content-fingerprint -> true (this session)
+
+function stateFingerprint(s) {
+  if (!s) return '';
+  try {
+    var c = JSON.parse(JSON.stringify(s));
+    delete c.updatedAt; delete c.version;
+    return JSON.stringify(c, Object.keys(c).sort());
+  } catch (e) { return ''; }
+}
+function wasSyncDeclined(fp) { return !!(fp && syncReviewDeclined[fp]); }
+function markSyncDeclined(fp) {
+  if (!fp) return;
+  syncReviewDeclined[fp] = true;
+  var keys = Object.keys(syncReviewDeclined);
+  while (keys.length > 60) { delete syncReviewDeclined[keys.shift()]; }
+}
+
+/* Which top-level collections the diff shows, and their icon. */
+var SYNC_DIFF_FIELDS = [
+  { f: 'production', label: 'Production batches', icon: 'flame' },
+  { f: 'sales', label: 'Sales', icon: 'shopping-cart' },
+  { f: 'purchases', label: 'Stock purchases', icon: 'shopping-bag' },
+  { f: 'payments', label: 'Supplier payments', icon: 'banknote' },
+  { f: 'customerPayments', label: 'Customer payments', icon: 'hand-coins' },
+  { f: 'suppliers', label: 'Suppliers (shops)', icon: 'store' },
+  { f: 'customers', label: 'Customers', icon: 'users' },
+  { f: 'expenses', label: 'Expenses', icon: 'receipt' },
+  { f: 'recurringExpenses', label: 'Recurring fixed costs', icon: 'repeat' },
+  { f: 'waste', label: 'Waste', icon: 'trash-2' },
+  { f: 'recipes', label: 'Recipes', icon: 'book-open' },
+  { f: 'inventoryMovements', label: 'Inventory movements', icon: 'boxes' }
+];
+
+function diffArrEq(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return a === b;
+  if (a.length !== b.length) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+function diffRecordLabel(it) {
+  if (!it) return '?';
+  if (it.name) return String(it.name);
+  if (it.date) return String(it.date);
+  if (it.id) return String(it.id).slice(0, 8);
+  return 'row';
+}
+function diffCollection(localArr, remoteArr) {
+  localArr = Array.isArray(localArr) ? localArr : [];
+  remoteArr = Array.isArray(remoteArr) ? remoteArr : [];
+  if (diffArrEq(localArr, remoteArr)) return null;
+  function keyOf(it) {
+    if (!it) return JSON.stringify(it);
+    return String(it.id || it.name || it.date || it.ingredientName || JSON.stringify(it));
+  }
+  var lk = {}, rk = {};
+  localArr.forEach(function (it) { lk[keyOf(it)] = it; });
+  remoteArr.forEach(function (it) { rk[keyOf(it)] = it; });
+  var added = remoteArr.filter(function (it) { return !lk[keyOf(it)]; });
+  var removed = localArr.filter(function (it) { return !rk[keyOf(it)]; });
+  var changed = 0;
+  remoteArr.forEach(function (it) {
+    var k = keyOf(it);
+    if (lk[k] && JSON.stringify(lk[k]) !== JSON.stringify(it)) changed++;
+  });
+  return {
+    local: localArr.length,
+    remote: remoteArr.length,
+    added: added.map(diffRecordLabel).slice(0, 4),
+    removed: removed.map(diffRecordLabel).slice(0, 4),
+    changed: changed
+  };
+}
+/* Human-readable list of what a remote copy changes compared to local. */
+function buildSyncDiffHtml(local, remote) {
+  if (!local || !remote) return '<div class="text-gray-500">No data to compare.</div>';
+  var lines = [];
+
+  SYNC_DIFF_FIELDS.forEach(function (def) {
+    var d = diffCollection(local[def.f], remote[def.f]);
+    if (!d) return;
+    var bits = [];
+    if (d.remote !== d.local) bits.push(d.local + ' → ' + d.remote + ' record' + (d.remote === 1 ? '' : 's'));
+    if (d.added.length) bits.push('+' + d.added.length + ' new (' + d.added.join(', ') + ')');
+    if (d.removed.length) bits.push('−' + d.removed.length + ' removed (' + d.removed.join(', ') + ')');
+    if (d.changed) bits.push(d.changed + ' edited');
+    lines.push('<div class="flex items-start gap-2 py-2 border-b border-gray-800 last:border-0">' +
+      '<i data-lucide="' + def.icon + '" class="w-4 h-4 mt-0.5 text-amber-400 shrink-0"></i>' +
+      '<div class="min-w-0"><div class="font-semibold text-gray-200">' + def.label + '</div>' +
+      '<div class="text-gray-500 text-[11px] leading-snug">' + bits.join(' · ') + '</div></div></div>');
+  });
+
+  // Finished-good stock.
+  try {
+    if (JSON.stringify(local.stock || null) !== JSON.stringify(remote.stock || null)) {
+      lines.push('<div class="flex items-start gap-2 py-2 border-b border-gray-800 last:border-0">' +
+        '<i data-lucide="package" class="w-4 h-4 mt-0.5 text-amber-400 shrink-0"></i>' +
+        '<div class="min-w-0"><div class="font-semibold text-gray-200">Finished-good stock</div>' +
+        '<div class="text-gray-500 text-[11px]">' + (local.stock && local.stock.pieces || 0) + ' → ' + (remote.stock && remote.stock.pieces || 0) + ' pieces</div></div></div>');
+    }
+  } catch (e) {}
+  // Inventory level snapshot (the movement ledger above is the detail view).
+  try {
+    var lInvKeys = local.inventory ? Object.keys(local.inventory) : [];
+    var rInvKeys = remote.inventory ? Object.keys(remote.inventory) : [];
+    if (lInvKeys.length !== rInvKeys.length) {
+      lines.push('<div class="flex items-start gap-2 py-2 border-b border-gray-800 last:border-0">' +
+        '<i data-lucide="boxes" class="w-4 h-4 mt-0.5 text-amber-400 shrink-0"></i>' +
+        '<div class="min-w-0"><div class="font-semibold text-gray-200">Inventory items tracked</div>' +
+        '<div class="text-gray-500 text-[11px]">' + lInvKeys.length + ' → ' + rInvKeys.length + ' ingredients</div></div></div>');
+    }
+  } catch (e) {}
+  // Cash drawer adjustments.
+  try {
+    var lAdj = local.cash && local.cash.adjustments ? local.cash.adjustments.length : 0;
+    var rAdj = remote.cash && remote.cash.adjustments ? remote.cash.adjustments.length : 0;
+    if (lAdj !== rAdj) {
+      lines.push('<div class="flex items-start gap-2 py-2 border-b border-gray-800 last:border-0">' +
+        '<i data-lucide="coins" class="w-4 h-4 mt-0.5 text-amber-400 shrink-0"></i>' +
+        '<div class="min-w-0"><div class="font-semibold text-gray-200">Cash adjustments</div>' +
+        '<div class="text-gray-500 text-[11px]">' + lAdj + ' → ' + rAdj + ' items</div></div></div>');
+    }
+  } catch (e) {}
+  // Production-form draft.
+  try {
+    var lDraft = local.draft ? (local.draft.date || 'saved') : 'empty';
+    var rDraft = remote.draft ? (remote.draft.date || 'saved') : 'empty';
+    if (String(lDraft) !== String(rDraft)) {
+      lines.push('<div class="flex items-start gap-2 py-2 border-b border-gray-800 last:border-0">' +
+        '<i data-lucide="file-text" class="w-4 h-4 mt-0.5 text-amber-400 shrink-0"></i>' +
+        '<div class="min-w-0"><div class="font-semibold text-gray-200">Production draft</div>' +
+        '<div class="text-gray-500 text-[11px]">' + lDraft + ' → ' + rDraft + '</div></div></div>');
+    }
+  } catch (e) {}
+
+  if (!lines.length) return '<div class="text-gray-500 text-xs py-2">No meaningful difference — the two copies are effectively identical.</div>';
+  return lines.join('');
+}
+
+function syncReviewTimeText(ts) {
+  if (!ts) return '';
+  try {
+    return new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  } catch (e) { return ''; }
+}
+/* Open the accept/decline modal for a remote copy. Returns true when a modal
+   was opened; false when the copy was already declined this session or another
+   review is showing (in which case it is remembered and offered next). */
+function openSyncReview(remoteState, remoteTs, source) {
+  if (!remoteState || typeof document === 'undefined') return false;
+  var fp = stateFingerprint(remoteState);
+  if (wasSyncDeclined(fp)) return false; // user already answered this exact copy
+  var modal = document.getElementById('syncReviewModal');
+  if (!modal) return false;
+  if (syncReview.open) {
+    syncReview.pending = { state: remoteState, ts: remoteTs || 0, source: source || '' };
+    return false;
+  }
+  syncReview.open = true;
+  syncReview.current = { state: remoteState, ts: remoteTs || 0, source: source || '', fp: fp };
+  try {
+    var diffEl = document.getElementById('syncReviewDiff');
+    if (diffEl) diffEl.innerHTML = buildSyncDiffHtml(state, remoteState);
+    var tsEl = document.getElementById('syncReviewTs');
+    if (tsEl) tsEl.textContent = syncReviewTimeText(remoteTs) || 'just now';
+    modal.classList.remove('hidden');
+  } catch (e) {
+    syncReview.open = false;
+    syncReview.current = null;
+    return false;
+  }
+  try { if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons(); } catch (e) {}
+  return true;
+}
+
+/* The user answered. true = Accept (load remote), false = Decline (keep this
+   device's copy and push it back to the cloud so both sides agree). */
+function resolveSyncReview(accepted) {
+  var cur = syncReview.current;
+  syncReview.open = false;
+  syncReview.current = null;
+  var modal = document.getElementById('syncReviewModal');
+  if (modal) modal.classList.add('hidden');
+  if (!cur) return;
+
+  try {
+    if (accepted) {
+      setCloudSyncSuppressed(true);
+      try {
+        if (applyCloudRemote({ state: cur.state }, cur.ts || undefined, true)) {
+          renderAll();
+          try { loadDraftIfNewer(); } catch (e) {}
+          syncQueueClear();
+          cloudSyncFailed = false;
+          if (typeof updateGoogleSyncStatus === 'function') updateGoogleSyncStatus('Change from your other device accepted and applied.', 'success');
+          if (typeof showToast === 'function') showToast('Change accepted and applied on this device.', 'success');
+        } else if (typeof updateGoogleSyncStatus === 'function') {
+          updateGoogleSyncStatus('Could not apply the remote change.', 'error');
+        }
+      } finally {
+        setCloudSyncSuppressed(false);
+      }
+    } else {
+      if (cur.fp) markSyncDeclined(cur.fp);
+      // Keep this device's version — push it up so the cloud matches us.
+      syncQueueMark();
+      try { cloudPush(); } catch (e) {}
+      if (typeof updateGoogleSyncStatus === 'function') updateGoogleSyncStatus('Declined — keeping this device’s copy.', 'info');
+      if (typeof showToast === 'function') showToast('Declined the change — this device’s data stays as-is.', 'info');
+    }
+  } catch (e) { console.warn('sync review resolve failed', e); }
+  try { renderCloudStatus(); } catch (e) {}
+  // If more updates arrived while the modal was open, offer the newest one.
+  if (syncReview.pending) {
+    var p = syncReview.pending;
+    syncReview.pending = null;
+    setTimeout(function () { openSyncReview(p.state, p.ts, p.source); }, 80);
+  }
+}
+
+/* Wire the modal buttons once (called at the end of boot). */
+function initSyncReview() {
+  if (window.__syncReviewInit) return;
+  window.__syncReviewInit = true;
+  var modal = document.getElementById('syncReviewModal');
+  if (!modal) return;
+  var accept = document.getElementById('syncReviewAcceptBtn');
+  var decline = document.getElementById('syncReviewDeclineBtn');
+  if (accept) accept.addEventListener('click', function () { resolveSyncReview(true); });
+  if (decline) decline.addEventListener('click', function () { resolveSyncReview(false); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && syncReview.open) resolveSyncReview(false);
+  });
+}
 /* ---------- Merge a remote cloud state into the current workspace ---------- */
 /* Copy every listed array field from a remote payload onto state, but only when
    the remote actually carries that array (so a partial copy can never null or
@@ -301,13 +532,15 @@ function copyArrayFields(remote, fieldNames) {
   });
 }
 
-function applyCloudRemote(remote, remoteTs) {
+function applyCloudRemote(remote, remoteTs, force) {
   if (!remote || !remote.state) return false;
   const r = remote.state;
   // Older/partial cloud rows must not erase newer local history. This is
   // especially important for inventory, where the movement ledger is the
   // source of truth rather than the cached stock snapshot.
-  if (stateDataCount(r) < stateDataCount(state)) return false;
+  // `force` = the user explicitly chose "Accept" in the sync-review modal,
+  // so we honour that decision even if the remote happens to have fewer rows.
+  if (!force && stateDataCount(r) < stateDataCount(state)) return false;
 
   // Scalar / object fields (guarded against empty/partial values).
   if (r.prices && Array.isArray(r.prices) && r.prices.length) state.prices = r.prices;
@@ -351,17 +584,17 @@ function applyCloudRemote(remote, remoteTs) {
 
 /* ---------- Reconcile after sign-in ----------
    Pulls the newer copy (cloud -> device) or pushes local when the
-   device holds newer data (or the cloud is empty for this account).
-   Works for account login (session token) and legacy Google sign-in.
+   device holds data the cloud doesn't (or a fresh device with
+   nothing on it). Works for account login (session token) and
+   legacy Google sign-in.
 
-   LATEST-WINS-BY-CONTENT: the decision is made on REAL RECORDS first and
-   timestamps only as a tie-breaker. Comparing timestamps alone caused the
-   classic deadlock: a device whose rich history was never pushed has an OLD
-   updatedAt, while the cloud row is timestamped NEWER but contains FEWER
-   records — so the app refused to push (remote newer) AND refused to pull
-   (count guard). Result: every other browser kept seeing the stale cloud.
-   Rule: the copy with MORE real records wins; on equal counts, the newest
-   write wins. A fresh device NEVER overwrites a populated cloud. */
+   CONFLICTS ARE DECIDED BY THE USER: when both sides have real data
+   and the copies differ, the sync-review modal lists exactly what
+   changed and asks Accept (load the cloud copy) or Decline (keep
+   this device's copy and push it back up). Nothing is overwritten
+   silently anymore — that is what made data "disappear" between a
+   phone and a laptop. A fresh device NEVER overwrites a populated
+   cloud. */
 async function cloudAfterSignIn() {
   const email = cloudSignedInEmail();
   if (!email || !cloudAccountToken()) return false;
@@ -430,22 +663,15 @@ async function cloudAfterSignIn() {
     return true;
   }
 
-  // Both have data -> the copy with MORE real records is the authoritative one
-  // (it contains history the other is missing). Ties break by newest write.
-  if (localCount > remoteCount || (localCount === remoteCount && localTs > remoteTs)) {
-    const up = await cloudPush();
-    if (up && up.ok) updateGoogleSyncStatus('Online as ' + email + '. Your copy is richer/newer — pushed to cloud.', 'success');
-    else updateGoogleSyncStatus('Could not push local copy to cloud yet — it is queued and will retry.', 'info');
-    renderCloudStatus();
-    return true;
-  }
-
-  if (applyCloudRemote(remote, remoteTs || undefined)) {
-    renderAll();
-    updateGoogleSyncStatus('Online as ' + email + '. Loaded latest from your account.', 'success');
-    showToast('Loaded the latest ' + remoteCount + ' records from the cloud.', 'success');
-    // A draft pulled from the cloud (typed on another device) goes in the form.
-    try { loadDraftIfNewer(); } catch (e) {}
+  // Both sides have real data and the copies differ — NEVER silently pick a
+  // winner. Show what changed and let the user Accept (load the cloud copy)
+  // or Decline (keep this device's copy and push it back up).
+  if (openSyncReview(remoteState, remoteTs || undefined, 'Reconcile after sign-in')) {
+    updateGoogleSyncStatus('Online as ' + email + '. There are changes from your other device — review them above.', 'info');
+  } else {
+    updateGoogleSyncStatus(statesEqual(state, remoteState)
+      ? 'Online as ' + email + '. Your ledger is up to date.'
+      : 'Online as ' + email + '. Kept this device’s version.', 'success');
   }
   renderCloudStatus();
   return true;

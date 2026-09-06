@@ -16,6 +16,17 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
   if (c === '"') return '&' + 'quot;';
   return '&' + '#39;';
 });
+/* Human-readable "9/5/2026, 3:42 PM" from an ISO string (safe for any device). */
+const fmtDateTime = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  try {
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  } catch (e) {
+    return d.toISOString().replace('T', ' ').slice(0, 16);
+  }
+};
 
 function entriesSorted() {
   return Object.keys(state.entries).sort().map(function (d) {

@@ -323,6 +323,8 @@ async function appStart() {
   setCloudAutoSync(true);
   // Topbar notification bell + dropdown.
   try { initNotifications(); } catch (e) { console.warn('notifications unavailable', e); }
+  // Wire the accept/decline sync-review modal (changes from other devices).
+  try { initSyncReview(); } catch (e) { console.warn('sync review unavailable', e); }
   // Offline-first: retry anything saved while offline when the connection is back.
   initSyncFlushers();
   try { await flushPendingSync(); } catch (e) { console.warn('pending sync flush failed', e); }

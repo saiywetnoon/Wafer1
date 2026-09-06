@@ -256,24 +256,19 @@ async function cloudSyncNow() {
     else showToast('Sync failed.', 'error');
     renderCloudStatus(); return;
   }
-  // Both have data -> keep whichever is newer.
-  const remoteTs = (remote && remote.exportedAt) ? Date.parse(remote.exportedAt) : 0;
-  const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
-  if (remoteTs && localTs && remoteTs < localTs) {
-    const up = await cloudPush();
-    if (up && up.ok) updateGoogleSyncStatus('Synced — your local copy was newer, pushed to cloud.', 'success');
-    else showToast('Sync failed.', 'error');
-    renderCloudStatus(); return;
+  // Both have data and the copies differ -> let the user decide (accept/decline),
+  // never silently pick a winner by timestamp.
+  if (!statesEqual(state, remoteState)) {
+    const remoteTs = (remote && remote.exportedAt) ? Date.parse(remote.exportedAt) : 0;
+    if (openSyncReview(remoteState, remoteTs, 'Manual sync')) {
+      updateGoogleSyncStatus('A change from your other device needs your decision — review it above.', 'info');
+    } else {
+      updateGoogleSyncStatus('Already aligned with your account.', 'success');
+    }
+    renderCloudStatus();
+    return;
   }
-  if (applyCloudRemote(remote)) {
-    renderAll();
-    updateGoogleSyncStatus('Synced — pulled the latest cloud copy.', 'success');
-    showToast('Pulled the latest cloud data.', 'success');
-    // A draft pulled from the cloud (typed on another device) goes in the form.
-    try { loadDraftIfNewer(); } catch (e) {}
-  } else {
-    updateGoogleSyncStatus('Already up to date.', 'success');
-  }
+  updateGoogleSyncStatus('Already up to date.', 'success');
   renderCloudStatus();
 }
 

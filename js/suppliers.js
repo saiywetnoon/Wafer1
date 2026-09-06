@@ -61,12 +61,16 @@ function renderSupplierList() {
   var suppliers = state.suppliers || [];
   body.innerHTML = suppliers.length ? suppliers.map(function (s) {
     var bal = supplierBalance(s.id);
+    var added = s.createdAt ? fmtDateTime(s.createdAt) : '';
     return '<tr class="border-b border-gray-800">' +
-      '<td class="py-1.5 pr-2 font-medium">' + esc(s.name) + (s.phone ? ' <span class="text-gray-500">(' + esc(s.phone) + ')</span>' : '') + '</td>' +
+      '<td class="py-1.5 pr-2 min-w-0">' +
+        '<div class="font-medium truncate">' + esc(s.name) + (s.phone ? ' <span class="text-gray-500 font-normal">(' + esc(s.phone) + ')</span>' : '') + '</div>' +
+      '</td>' +
+      '<td class="py-1.5 pr-2 text-gray-500 whitespace-nowrap">' + (added ? esc(added) : '<span class="text-gray-600">—</span>') + '</td>' +
       '<td class="py-1.5 pr-2 ' + (bal > 0 ? 'text-red-400' : 'text-emerald-400') + ' font-semibold">' + fmtKs(bal) + '</td>' +
-      '<td class="py-1.5 text-right"><button onclick="deleteSupplier(\'' + s.id + '\')" class="text-red-500 hover:text-red-400" title="Remove supplier"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></td>' +
+      '<td class="py-1.5 text-right whitespace-nowrap"><button onclick="deleteSupplier(\'' + s.id + '\')" class="text-red-500 hover:text-red-400" title="Delete this supplier"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></td>' +
       '</tr>';
-  }).join('') : '<tr><td colspan="3" class="py-4 text-center text-gray-500">No suppliers yet. Add the shops you buy from above.</td></tr>';
+  }).join('') : '<tr><td colspan="4" class="py-4 text-center text-gray-500">No suppliers yet. Add the shops you buy from above.</td></tr>';
 }
 
 function renderPurchaseHistory() {
@@ -92,7 +96,8 @@ $('addSupplierBtn').addEventListener('click', function () {
   var name = validateText($('supplierName'));
   if (!name) { showToast('Enter a shop name.', 'error'); return; }
   if (!state.suppliers) state.suppliers = [];
-  state.suppliers.push({ id: uid(), name: name, phone: $('supplierPhone').value.trim() });
+  var nowIso = new Date().toISOString();
+  state.suppliers.push({ id: uid(), name: name, phone: $('supplierPhone').value.trim(), createdAt: nowIso, updatedAt: nowIso });
   saveState();
   $('supplierName').value = '';
   $('supplierPhone').value = '';
@@ -101,11 +106,13 @@ $('addSupplierBtn').addEventListener('click', function () {
 });
 
 function deleteSupplier(id) {
-  if (!confirm('Remove this supplier? Their purchases and payables stay in history.')) return;
-  state.suppliers = (state.suppliers || []).filter(function (s) { return s.id !== id; });
+  var s = supplierById(id);
+  var label = s ? s.name : 'this supplier';
+  if (!confirm('Delete "' + label + '" from your suppliers?\n\nTheir purchase and payment history is kept so your totals stay correct — the shop just stops being listed.')) return;
+  state.suppliers = (state.suppliers || []).filter(function (x) { return x.id !== id; });
   saveState();
   renderSuppliers();
-  showToast('Supplier removed.');
+  showToast('Supplier "' + label + '" deleted.');
 }
 
 /* ---------- Purchase items builder ---------- */
