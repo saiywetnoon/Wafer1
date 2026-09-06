@@ -169,6 +169,7 @@ const panOptBeep = el('panOptBeep');
 const panOptToast = el('panOptToast');
 const panRollsDefault = el('panRollsDefault');
 const panBagsDefault = el('panBagsDefault');
+const panRollsPerBag = el('panRollsPerBag');
 const panOptAutoReport = el('panOptAutoReport');
 const panOptTitle = el('panOptTitle');
 const panOptNav = el('panOptNav');
@@ -195,6 +196,7 @@ byId['panOptNav'] = panOptNav;
 byId['panOptVibrate'] = panOptVibrate;
 byId['panRollsDefault'] = panRollsDefault;
 byId['panBagsDefault'] = panBagsDefault;
+byId['panRollsPerBag'] = panRollsPerBag;
 byId['panOptAutoReport'] = panOptAutoReport;
 byId['panPerPanRows'] = new OvRowsEl();   // settings modal per-pan rows
 

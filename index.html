@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" data-build="v1.11.4">
+<html lang="en" class="dark" data-build="v1.11.5">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -962,7 +962,12 @@ tailwind.config = {
               <label class="block text-[11px] text-gray-400 font-semibold">
                 Bags per round (optional)
                 <input id="panBagsDefault" type="number" min="0" max="500" step="1" inputmode="numeric" placeholder="auto (from rolls)" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500">
-                <span class="font-normal normal-case text-[10px] text-gray-500">Leave empty to count 0 bags per round — a round of rolls is never auto-counted as a bag. Enter bags only when you package into a fixed size.</span>
+                <span class="font-normal normal-case text-[10px] text-gray-500">Leave empty to count bags by the full-set rule below.</span>
+              </label>
+              <label class="block text-[11px] text-gray-400 font-semibold">
+                Rolls per bag (full sets only)
+                <input id="panRollsPerBag" type="number" min="1" max="100" step="1" inputmode="numeric" value="5" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <span class="font-normal normal-case text-[10px] text-gray-500">Only full sets count as a bag: 16 rolls at 5/bag = 3 bags, 16 rolls at 4/bag = 4 bags.</span>
               </label>
             </div>
             <span class="font-normal normal-case text-[10px] text-gray-500">These are <b>your</b> numbers for one pan completion — the exact Rolls and Bags that get added to the Production panel each time a pan finishes.</span>
@@ -1452,31 +1457,31 @@ tailwind.config = {
 </div>
 
 
-    <script src="js/config.js?v=20260911"></script>
-    <script src="js/supabase.js?v=20260911"></script>
-    <script src="js/storage.js?v=20260911"></script>
-    <script src="js/google.js?v=20260911"></script>
-    <script src="js/helpers.js?v=20260911"></script>
-    <script src="js/pricing.js?v=20260911"></script>
-    <script src="js/usage.js?v=20260911"></script>
-    <script src="js/ledger.js?v=20260911"></script>
-    <script src="js/sales.js?v=20260911"></script>
-    <script src="js/dashboard.js?v=20260911"></script>
-    <script src="js/calendar.js?v=20260911"></script>
-    <script src="js/csv.js?v=20260911"></script>
-    <script src="js/sync-ui.js?v=20260911"></script>
-    <script src="js/sample-data.js?v=20260911"></script>
-    <script src="js/inventory.js?v=20260911"></script>
-    <script src="js/customers.js?v=20260911"></script>
-    <script src="js/suppliers.js?v=20260911"></script>
-    <script src="js/tools.js?v=20260911"></script>
-    <script src="js/pan-timers.js?v=20260911"></script>
-    <script src="js/cash.js?v=20260911"></script>
-    <script src="js/companies.js?v=20260911"></script>
-    <script src="js/auth.js?v=20260911"></script>
-    <script src="js/cloud.js?v=20260911"></script>
-    <script src="js/ai.js?v=20260911"></script>
-    <script src="js/init.js?v=20260911"></script>
+    <script src="js/config.js?v=20260912"></script>
+    <script src="js/supabase.js?v=20260912"></script>
+    <script src="js/storage.js?v=20260912"></script>
+    <script src="js/google.js?v=20260912"></script>
+    <script src="js/helpers.js?v=20260912"></script>
+    <script src="js/pricing.js?v=20260912"></script>
+    <script src="js/usage.js?v=20260912"></script>
+    <script src="js/ledger.js?v=20260912"></script>
+    <script src="js/sales.js?v=20260912"></script>
+    <script src="js/dashboard.js?v=20260912"></script>
+    <script src="js/calendar.js?v=20260912"></script>
+    <script src="js/csv.js?v=20260912"></script>
+    <script src="js/sync-ui.js?v=20260912"></script>
+    <script src="js/sample-data.js?v=20260912"></script>
+    <script src="js/inventory.js?v=20260912"></script>
+    <script src="js/customers.js?v=20260912"></script>
+    <script src="js/suppliers.js?v=20260912"></script>
+    <script src="js/tools.js?v=20260912"></script>
+    <script src="js/pan-timers.js?v=20260912"></script>
+    <script src="js/cash.js?v=20260912"></script>
+    <script src="js/companies.js?v=20260912"></script>
+    <script src="js/auth.js?v=20260912"></script>
+    <script src="js/cloud.js?v=20260912"></script>
+    <script src="js/ai.js?v=20260912"></script>
+    <script src="js/init.js?v=20260912"></script>
 
 </body>
 </html>

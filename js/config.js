@@ -87,7 +87,12 @@ const DEFAULT_USAGE = {
   'Additive Blend': 50, 'Electricity': 4, 'Packaging': 82
 };
 
+/* Packing rule: only FULL sets of rolls count as a bag.
+   16 rolls at 5 rolls/bag = floor(16/5) = 3 bags. Changeable in Fry Timer
+   settings ("Rolls per bag"). */
+const DEFAULT_ROLLS_PER_BAG = 5;
+
 /* Current app build. `index.html` stamps the same id on <html data-build=…>.
    A mismatch (old HTML or old JS in the cache) makes the app warn loudly,
    because stale files are the #1 cause of "it says Synced but nothing uploads". */
-const __LEDGER_BUILD = 'v1.11.4';
+const __LEDGER_BUILD = 'v1.11.5';

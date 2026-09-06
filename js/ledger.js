@@ -28,6 +28,11 @@ function saveProduction() {
     showToast('Bags, pieces and labor must be zero or valid numbers.', 'error');
     return;
   }
+  // Real packing rule: when the bag field is left EMPTY but pieces were entered,
+  // derive bags as FULL sets only — floor(pieces ÷ rollsPerBag). 16 rolls at
+  // 5/bag = 3 bags. If the user typed a bag count, always respect it.
+  const bagsFieldRaw = ($('logBagsProduced').value || '').trim();
+  const bagsEntered = bagsFieldRaw !== '';
   const usage = currentUsage();
   const ingCost = ingredientCostFor(usage);
   const extra = parseFloat($('additionalCost').value) || 0;
@@ -69,7 +74,8 @@ function saveProduction() {
     id: isUpdate ? editId : uid(),
     date: date,
     pieces: Math.round(pieces),
-    bags: Math.round(bags),
+    // Bags: what was typed, or if left empty then derived from full sets only.
+    bags: bagsEntered ? Math.round(bags) : (pieces > 0 ? deriveBagsFromPieces(pieces) : 0),
     weightPerRoll: wPerRoll,
     mixWeight: Math.round(mixWeight),
     expectedRolls: expectedRolls,
@@ -141,6 +147,18 @@ function saveProduction() {
 
 $('saveLogBtn').addEventListener('click', saveProduction);
 
+/* Packing rule: only FULL sets of rolls count as a bag (floor division).
+   16 rolls at 5 rolls/bag → 3 bags. Live from state.settings.rollsPerBag. */
+function productionRollsPerBag() {
+  var v = parseInt((state.settings && state.settings.rollsPerBag) != null ? state.settings.rollsPerBag : 0, 10);
+  return (v > 0) ? v : DEFAULT_ROLLS_PER_BAG;
+}
+/* Derived bag count for a number of rolled pieces (floor — full sets only). */
+function deriveBagsFromPieces(pieces) {
+  var rpb = productionRollsPerBag();
+  return Math.max(0, Math.floor((parseFloat(pieces) || 0) / rpb));
+}
+
 /* One-click save of a pan batch's production (used by the run tracker, the pan's
    automatic roll counting and per-pan timings). Writes the same Production entry
    as the main form, then navigates to the Production tab so the totals are
@@ -152,17 +170,23 @@ $('saveLogBtn').addEventListener('click', saveProduction);
 function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
   if (!date || !(pieces > 0)) { if (!quiet) showToast('No finished batch to save.', 'error'); return false; }
   const runUsage = usage || currentUsage();
+  // "Explicit bags" = the caller passed a real positive bag count. Otherwise
+  // bags are DERIVED from the day's total rolls using the packing rule
+  // floor(total ÷ rollsPerBag) — full sets only, never invented per round.
+  const explicitBags = (typeof bags === 'number' && isFinite(bags) && bags > 0);
   const existing = (state.production || []).find(function (p) { return p.date === date; });
 
   // -------- Merge into an existing batch for the same day (no double deduct) --------
   if (existing) {
     existing.pieces = (existing.pieces || 0) + Math.round(pieces);
-    // Bags are counted ONLY when the caller provides them (the pan's own
-    // Bags/round setting or an explicit batch-log entry). NEVER auto-estimate:
-    // "1 round" must not invent a bag. Unpacked rolls record 0 bags — enter the
-    // real bag count later via Update Production / Sales.
-    const b = (typeof bags === 'number' && isFinite(bags) && bags > 0) ? Math.round(bags) : 0;
-    existing.bags = (existing.bags || 0) + b;
+    if (explicitBags) {
+      existing.bags = (existing.bags || 0) + Math.round(bags);
+      existing.bagsAuto = false;
+    } else if (existing.bagsAuto) {
+      // Auto-derived mode stays derived from the running total.
+      existing.bags = deriveBagsFromPieces(existing.pieces);
+    }
+    // (if bags were typed manually earlier, leave that manual count alone)
     existing.notes = (existing.notes || '') + (notes ? (existing.notes ? ' · ' : '') + notes : '');
     if (useBy && !existing.useBy) existing.useBy = useBy;
     if (!existing.usage || !Object.keys(existing.usage).length) existing.usage = Object.assign({}, runUsage);
@@ -188,9 +212,10 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
     id: uid(),
     date: date,
     pieces: Math.round(pieces),
-    // Bags only when explicitly provided (a positive number). Otherwise 0 —
-    // a finished round of rolls is NOT automatically a bag.
-    bags: (typeof bags === 'number' && isFinite(bags) && bags > 0) ? Math.round(bags) : 0,
+    // Bags: explicit when the caller gave one; otherwise derived by the
+    // packing rule floor(pieces ÷ rollsPerBag) — full sets only (never per-round).
+    bags: explicitBags ? Math.round(bags) : deriveBagsFromPieces(pieces),
+    bagsAuto: explicitBags ? false : true,
     weightPerRoll: 0, mixWeight: 0, expectedRolls: 0,
     notes: notes || '',
     usage: Object.assign({}, runUsage),

@@ -6,7 +6,7 @@ let state = {
   production: [],       // batches you ROLLED: { id, date, pieces, bags, usage, additionalCost, capital, laborMinutes, laborCost, costPerPiece }
   sales: [],            // what you SOLD: { id, date, bags, pieces, price, amount, cogs, avgCost, net }
   stock: { pieces: 0, cost: 0 }, // finished goods ready to sell (cost basis for cogs)
-  settings: { hourlyWage: 1500 },
+  settings: { hourlyWage: 1500, rollsPerBag: DEFAULT_ROLLS_PER_BAG },
   inventory: {},   // { ingredientName: { stock (derived snapshot), lowAlert } }
   inventoryMovements: [], // [{ id, date, ingredientName, qty (+/-), type, reason, referenceId }]
   inventoryMovementVersion: 0,
@@ -78,7 +78,7 @@ function loadState() {
       const parsed = JSON.parse(raw);
       if (parsed && parsed.entries) state.entries = parsed.entries;
       if (parsed && Array.isArray(parsed.prices) && parsed.prices.length) state.prices = parsed.prices;
-      if (parsed && parsed.settings) state.settings = Object.assign({ hourlyWage: 1500 }, parsed.settings);
+      if (parsed && parsed.settings) state.settings = Object.assign({ hourlyWage: 1500, rollsPerBag: DEFAULT_ROLLS_PER_BAG }, parsed.settings);
       if (parsed && parsed.inventory && typeof parsed.inventory === 'object') state.inventory = parsed.inventory;
       if (parsed && Array.isArray(parsed.inventoryMovements)) state.inventoryMovements = parsed.inventoryMovements;
       if (parsed && parsed.inventoryMovementVersion) state.inventoryMovementVersion = parsed.inventoryMovementVersion;

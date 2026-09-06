@@ -574,6 +574,19 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
+### v1.11.5 — real packing rule (full bags only) + configurable rolls/bag
+- **Bags now follow the industry rule: only FULL sets count.** "Rolls per bag"
+  (default 5, changeable in Fry Timer Settings) divides the day's rolls;
+  leftovers never make a bag. So **16 rolls at 5/bag = 3 bags**, and a 17th roll
+  still leaves 3 bags until the 20th roll fills the 4th.
+- **Where it applies everywhere:** pans auto-reporting into Production, the
+  manual batch-log button, and the Production form (leave "Bags" empty and it
+  derives full bags from pieces). A typed bag count always overrides the rule.
+- **"Rolls per bag" is a real setting** in Fry Timer Settings ("full sets
+  only") and is stored in the ledger so every device uses the same packing rule.
+- **Per-round explicit bags still work** — set "Bags per round" when one round
+  packs into a fixed count and that exact number wins.
+
 ### v1.11.4 — pan round recording is exact (no fake bags, rolls shown on every pan)
 - **1 round = your Rolls, and that's it.** Bags are counted ONLY when you set
   Bags/round for the pan (or type them in the batch log). If you don't, each

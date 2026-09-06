@@ -62,6 +62,10 @@
        rolls-per-batch. Pans with no override simply follow the global values.
      - autoReport: when a pan finishes, its configured roll count is counted
        automatically and reported straight into the Production panel. */
+  /* Default rolls-per-bag packing rule: falls back to 5 when config.js hasn't
+     defined the DEFAULT_ROLLS_PER_BAG constant (e.g. standalone test harnesses). */
+  function defaultRollsPerBag() { return (typeof DEFAULT_ROLLS_PER_BAG !== 'undefined') ? DEFAULT_ROLLS_PER_BAG : 5; }
+
   var SETTINGS_DEFAULTS = {
     fold: 50,     // seconds of heating before "Open lid & fold margins" fires
     final: 20,    // seconds of heating after the lid is closed back
@@ -76,11 +80,12 @@
                                // this (global here, or per-pan in "Use global"
                                // mode). Reported to Production as pieces.
                                // 1 round/pan = THIS many rolls.
-    bagsPerBatch: null,         // Bags per round — OPTIONAL. null = count 0 bags
-                               // (a round of rolls is NEVER auto-counted as a
-                               // bag). Set a number only when you actually
-                               // package into a fixed bag size.
-                               // a fixed bag size.
+    bagsPerBatch: null,         // Bags per round — OPTIONAL. null = bags derived
+                               // from the packing rule (rolls ÷ rollsPerBag,
+                               // full sets only). Set a number only when you
+                               // package each round into a fixed bag count.
+    rollsPerBag: 5,            // packing rule: only FULL sets of rolls
+                               // are a bag. 16 rolls ÷ 5 = 3 bags (floor).
     autoReport: true,          // finished batches auto-log to the Production panel
     panOverrides: {}           // { panId: { fold, final, rolls, bags } } per-pan
                                // timing, rolls AND bags, all set by you
@@ -208,6 +213,7 @@
       vibrate: s.vibrate !== false,
       rollsPerBatch: num(s.rollsPerBatch, 1, 500, (SETTINGS_DEFAULTS.rollsPerBatch != null ? SETTINGS_DEFAULTS.rollsPerBatch : 1)),
       bagsPerBatch: nullableNum(s.bagsPerBatch, 1, 500),
+      rollsPerBag: num(s.rollsPerBag, 1, 100, (SETTINGS_DEFAULTS.rollsPerBag || defaultRollsPerBag())),
       autoReport: s.autoReport !== false,
       panOverrides: overrides
     };
@@ -553,9 +559,13 @@
   function panOutLine(pan) {
     var r = rollsFor(pan.id) || 1;
     var b = bagsFor(pan.id);
+    var rpb = settings.rollsPerBag || defaultRollsPerBag();
     var txt = '1 round → <b class="pan-out-num">' + r + ' roll' + (r === 1 ? '' : 's') + '</b>';
-    if (b) txt += ' · <b class="pan-out-num">' + b + ' bag' + (b === 1 ? '' : 's') + '</b>';
-    else txt += ' · <span class="pan-out-unset">bags uncounted</span>';
+    if (b) {
+      txt += ' · <b class="pan-out-num">' + b + ' bag' + (b === 1 ? '' : 's') + '</b> per round';
+    } else {
+      txt += ' · <span class="pan-out-unset">bags: 1 per full ' + rpb + ' rolls</span>';
+    }
     return txt;
   }
 
@@ -575,7 +585,9 @@
       var n = rollsFor(pan.id);
       var noun = n + ' roll' + (n === 1 ? '' : 's');
       var b = bagsFor(pan.id);
+      var rpb = settings.rollsPerBag || defaultRollsPerBag();
       if (b) noun += ' + ' + b + ' bag' + (b === 1 ? '' : 's');
+      else noun += ' (bags: 1 per full ' + rpb + ' rolls)';
       return MSG[3] + (settings.autoReport ? ' — ' + noun + ' counted & reported to Production' : ' — ' + noun + ' counted, log it in the batch log');
     }
     if (pan.stage === 2) return stageMessage(pan);
@@ -660,6 +672,7 @@
       const bagsRaw = runBags[pan.id];
       const bags = (typeof bagsRaw === 'number' && bagsRaw > 0) ? bagsRaw : 0;
       const rolls = rollsFor(pan.id) || 1;   // what ONE round produces
+      const rpb = settings.rollsPerBag || defaultRollsPerBag();
       const setBags = (typeof bagsRaw === 'number' && bagsRaw > 0);
       return '<div class="p-3 rounded-lg bg-gray-800/60 border border-gray-700">' +
         '<div class="text-xs font-bold text-gray-300">' + escapeHtml(pan.name) +
@@ -667,12 +680,12 @@
             (setBags ? ' · ' + bags + ' bag' + (bags === 1 ? '' : 's') : '') + '</span>' : '') +
         '</div>' +
         '<div class="text-[10px] text-gray-500 mb-1.5">1 round = ' + rolls + ' roll' + (rolls === 1 ? '' : 's') +
-          (setBags ? ' · ' + bags + ' bag' + (bags === 1 ? '' : 's') : ' · bags uncounted') + '</div>' +
+          (setBags ? ' · ' + bags + ' bag' + (bags === 1 ? '' : 's') : ' · bags: 1 per full ' + rpb + ' rolls') + '</div>' +
         '<div class="flex items-center gap-2">' +
         '<label class="text-[10px] text-gray-400">Rolls<input type="number" min="0" step="1" value="' + pcs + '" data-run-pieces="' + pan.id + '" class="pan-ov-input w-16"></label>' +
-        '<label class="text-[10px] text-gray-400">Bags<input type="number" min="0" step="1" value="' + (setBags ? bags : '') + '" placeholder="0" data-run-bags="' + pan.id + '" class="pan-ov-input w-16"></label>' +
+        '<label class="text-[10px] text-gray-400">Bags<input type="number" min="0" step="1" value="' + (setBags ? bags : '') + '" placeholder="auto" data-run-bags="' + pan.id + '" class="pan-ov-input w-16"></label>' +
         '</div>' +
-        '<div class="text-[10px] text-gray-500 mt-1">Bags count only when you type a number here (or set Bags/round in ⚙) — a round of rolls is never auto-counted as a bag. Enter the real packed bags when you package them.</div></div>';
+        '<div class="text-[10px] text-gray-500 mt-1">Bags auto-count at 1 per full ' + rpb + ' rolls (' + pcs + ' rolls → ' + Math.floor(pcs / rpb) + ' bag' + (Math.floor(pcs / rpb) === 1 ? '' : 's') + '). Type a number to override. Full sets only.</div></div>';
     }).join('') || '<div class="text-gray-500 text-xs">No finished batches yet. Finished batches are auto-counted from your Rolls/bags settings and' + (settings.autoReport ? ' reported to Production.' : ' ready for the Log button below.') + '</div>';
   }
   function wireRunSummary() {
@@ -839,6 +852,7 @@
     g('panOptVibrate').checked = settings.vibrate;
     if (g('panRollsDefault')) g('panRollsDefault').value = settings.rollsPerBatch;
     if (g('panBagsDefault')) g('panBagsDefault').value = settings.bagsPerBatch;
+    if (g('panRollsPerBag')) g('panRollsPerBag').value = settings.rollsPerBag;
     if (g('panOptAutoReport')) g('panOptAutoReport').checked = settings.autoReport;
     renderPanOverrideRows();
     updateTotalReadout();
@@ -892,6 +906,7 @@
       vibrate: g('panOptVibrate').checked,
       rollsPerBatch: g('panRollsDefault') ? g('panRollsDefault').value : undefined,
       bagsPerBatch: g('panBagsDefault') ? g('panBagsDefault').value : undefined,
+      rollsPerBag: g('panRollsPerBag') ? g('panRollsPerBag').value : undefined,
       autoReport: g('panOptAutoReport') ? g('panOptAutoReport').checked : undefined,
       panOverrides: overrides
     });
@@ -978,6 +993,15 @@
     save();
     paint();
     updateGlobalBanner();
+    // Push the packing rule (rolls per bag) into the ledger so Production's
+    // bag counts use the SAME full-set rule everywhere (16 rolls ÷ 5 = 3 bags).
+    try {
+      if (typeof state !== 'undefined' && typeof DEFAULT_ROLLS_PER_BAG !== 'undefined') {
+        state.settings = Object.assign({}, state.settings || {}, {
+          rollsPerBag: (settings.rollsPerBag > 0) ? settings.rollsPerBag : defaultRollsPerBag()
+        });
+      }
+    } catch (e) { /* best-effort; ledger derive has its own fallback */ }
   }
 
   /* (Re)build the pan array to match settings.panCount, preserving any running

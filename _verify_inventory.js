@@ -149,6 +149,28 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
   ok(state.production.length === 1, 'second round merges into the same day row');
   ok(state.production[0].pieces === 2 && state.production[0].bags === 0, '2 rolls total, still 0 bags');
 
+  // ---- G) FULL-SET PACKING RULE: bags = floor(pieces ÷ rollsPerBag) ----
+  reset();
+  recordInventoryMovement({ ingredientName: 'Flour', qty: 5000, type: 'opening' });
+  refreshInputs(60, 360, 90, 0, 40);
+  draftUsage = Object.assign({}, DEFAULT_USAGE); draftUsage.Flour = 120; draftUsage.Egg = 2;
+  state.settings.rollsPerBag = 5;
+  // 16 rolls, no bag typed -> 3 bags (floor(16/5)), never 4.
+  saveProductionFromRun('2026-09-02', 16, null);
+  ok(state.production[0].bags === 3, '16 rolls at 5/bag => exactly 3 bags (full sets only)');
+  // 1 more roll -> 17 rolls, still 3 bags (the 17th is not a full set yet).
+  saveProductionFromRun('2026-09-02', 1, null);
+  ok(state.production[0].pieces === 17 && state.production[0].bags === 3, '17 rolls still = 3 bags (4th bag needs 5)');
+  // A typed bag count overrides the rule.
+  saveProductionFromRun('2026-09-03', 16, 9);
+  const typedRow = (state.production || []).find(function (p) { return p.date === '2026-09-03'; });
+  ok(!!typedRow && typedRow.bags === 9, 'typed bag count overrides the derived rule');
+  // Change the rule to 4/bag -> 16 rolls = 4 bags.
+  reset();
+  state.settings.rollsPerBag = 4;
+  saveProductionFromRun('2026-09-04', 16, null);
+  ok(state.production[0].bags === 4, '16 rolls at 4/bag => 4 bags');
+
   console.log(fail === 0 ? 'ALL INVENTORY TRACE CHECKS PASSED' : (fail + ' FAILED'));
 })();
 `;
