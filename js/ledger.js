@@ -294,6 +294,7 @@ function renderProduction() {
       '<td class="py-2 pr-2">' + diff + '</td>' +
       '<td class="py-2 pr-2">' + note + useBy + '</td>' +
       '<td class="py-2"><div class="flex gap-2">' +
+      '<button onclick="updateProductionBags(\'' + p.id + '\')" class="text-emerald-400 hover:text-emerald-300 transition" title="Update bags for this date"><i data-lucide="box" class="w-4 h-4"></i></button>' +
       '<button onclick="editProduction(\'' + p.id + '\')" class="text-amber-400 hover:text-amber-300 transition" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>' +
       '<button onclick="deleteProduction(\'' + p.id + '\')" class="text-red-400 hover:text-red-300 transition" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
       '</div></td></tr>';
@@ -314,6 +315,7 @@ function editProduction(id) {
   });
   $('additionalCost').value = p.additionalCost || 0;
   $('logBagsProduced').value = p.bags || 0;
+  if (typeof $('logBagsProduced').setAttribute === 'function') $('logBagsProduced').setAttribute('data-calc', '0');   // loaded batch = manual
   $('logPieces').value = p.pieces || 0;
   $('logLabor').value = p.laborMinutes || 0;
   $('logWeightPerRoll').value = p.weightPerRoll || 0;
@@ -337,6 +339,30 @@ function deleteProduction(id) {
   renderAll();
   triggerGoogleSync();
   showToast('Production batch deleted. Stock and inventory restored.');
+}
+
+/* Quick "update bags" straight from the Recent Production list — without opening
+   the full form. Accepts the number of FULL bags packed for that date. */
+function updateProductionBags(id) {
+  const p = state.production.find(function (x) { return x.id === id; });
+  if (!p) return;
+  const rpb = parseInt((state.settings && state.settings.rollsPerBag) != null ? state.settings.rollsPerBag : 0, 10);
+  const effRpb = rpb > 0 ? rpb : (typeof DEFAULT_ROLLS_PER_BAG !== 'undefined' ? DEFAULT_ROLLS_PER_BAG : 5);
+  const current = (typeof p.bags === 'number' && p.bags > 0) ? p.bags : '';
+  const message = 'Update bags for ' + p.date + ' (' + fmt(p.pieces) + ' pieces):\n\n' +
+    'Full-set rule: floor(' + p.pieces + ' ÷ ' + effRpb + ') = ' + deriveBagsFromPieces(p.pieces) +
+    ' bags. Enter the actual packed bag count.';
+  const input = prompt(message, String(current));
+  if (input === null) return;                       // cancelled
+  const val = parseInt(input, 10);
+  if (isNaN(val) || val < 0) { showToast('Enter a valid non-negative bag count.', 'error'); return; }
+  p.bags = val;
+  p.bagsAuto = false;                               // manual override now wins
+  saveState();
+  renderProduction();
+  renderAll();
+  triggerGoogleSync();
+  showToast('Bags updated to ' + fmt(val) + ' for ' + p.date + (val > 0 ? '.' : ' — full bags will be derived from rolls.'));
 }
 
 /* ============================================================

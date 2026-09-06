@@ -574,6 +574,16 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
+### v1.11.8 — update bags right in Production
+- **Quick "Update bags" button on every production row.** In Recent Production,
+  click the box icon (✎/box) next to a day to set its packed bag count directly —
+  no need to open the edit form. It shows you the full-set rule for that day's
+  pieces and lets you enter the actual packed count (or 0 = let it re-derive).
+- **Production form auto-fills the derived bag count live.** Type your Actual
+  Pieces and the Bags field fills itself with `floor(pieces ÷ rolls per bag)`
+  (a real, visible, editable number) so you can adjust it before you save.
+  Typing your own bag count always wins and is kept as the manual value.
+
 ### v1.11.7 — Rolls-per-bag setting on Production + Sales/Stock forms
 - **Set the packing rule where you work.** Both the **Production** form and the
   **Sales & Stock** form now have a **"Rolls per bag (full sets only)"** field —

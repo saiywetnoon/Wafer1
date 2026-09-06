@@ -108,6 +108,7 @@ function populateProductionForm(date) {
     draftUsage = Object.assign({}, batch.usage || {});
     $('additionalCost').value = batch.additionalCost || 0;
     $('logBagsProduced').value = batch.bags || 0;
+    if (typeof $('logBagsProduced').setAttribute === 'function') $('logBagsProduced').setAttribute('data-calc', '0');   // stored value is authoritative, not auto
     $('logPieces').value = batch.pieces || 0;
     $('logLabor').value = batch.laborMinutes || 0;
     $('logWeightPerRoll').value = batch.weightPerRoll || 0;
@@ -117,6 +118,7 @@ function populateProductionForm(date) {
     // No saved batch: use the default/previous usage but NEVER touch the
     // quantities/labor/notes the user is editing.
     setDefaultProductionUsage(date);
+    if ($('logBagsProduced') && typeof $('logBagsProduced').setAttribute === 'function') $('logBagsProduced').setAttribute('data-calc', '0');   // fresh form = no auto-fill yet
   }
   renderUsageTable(true);   // rebuild usage rows (this IS the date change)
   updateUsageCosts();
@@ -258,14 +260,32 @@ function updateLive() {
   const extra = parseFloat($('additionalCost').value) || 0;
   const capital = ingCost + extra;
   const parts = parseFloat($('logPieces').value) || 0;
-  const bags = parseFloat($('logBagsProduced').value) || 0;
+  const bagsInput = $('logBagsProduced');
+  const bags = parseFloat(bagsInput ? bagsInput.value : 0) || 0;
   // Full-set packing rule: when no bag count was typed, bags = floor(pieces ÷ rollsPerBag).
   const rpb = parseInt((state.settings && state.settings.rollsPerBag) != null ? state.settings.rollsPerBag : 0, 10);
   const effectiveRpb = rpb > 0 ? rpb : (typeof DEFAULT_ROLLS_PER_BAG !== 'undefined' ? DEFAULT_ROLLS_PER_BAG : 5);
-  const bagsFieldRaw = String($('logBagsProduced').value || '').trim();
+  const bagsFieldRaw = String(bagsInput ? bagsInput.value : '').trim();
   const bagsEntered = bagsFieldRaw !== '';
   const bagsDerived = (!bagsEntered && parts > 0) ? Math.floor(parts / effectiveRpb) : 0;
   const bagsShown = bagsEntered ? bags : bagsDerived;
+  // Live auto-fill: put the derived bag count INTO the Bags field so it's a real,
+  // visible, editable value (an "update" you can see). Only auto-fill when the
+  // field is empty (or still showing the previous auto value) AND the user
+  // hasn't typed a manual bag count on this trip.
+  if (bagsInput) {
+    const autoCalc = (typeof bagsInput.getAttribute === 'function') ? String(bagsInput.getAttribute('data-calc') || '') : '';
+    const wantsAuto = !bagsEntered || autoCalc === '1';
+    if (wantsAuto && parts > 0 && bagsDerived > 0) {
+      if (bagsInput.value === '' || autoCalc === '1') {
+        bagsInput.value = bagsDerived || '';
+        if (typeof bagsInput.setAttribute === 'function') bagsInput.setAttribute('data-calc', '1');
+      }
+    } else if (wantsAuto && (parts <= 0 || !bagsDerived)) {
+      if (autoCalc === '1') bagsInput.value = '';
+      if (typeof bagsInput.setAttribute === 'function') bagsInput.setAttribute('data-calc', '0');
+    }
+  }
   const bagsHintEl = $('logBagsHint');
   if (bagsHintEl) {
     bagsHintEl.textContent = bagsDerived > 0
@@ -304,7 +324,10 @@ function updateLive() {
 }
 ['logBagsProduced', 'logPieces', 'logWeightPerRoll', 'logNotes', 'logLabor', 'hourlyWage', 'additionalCost', 'logRollsPerBag'].forEach(function (id) {
   const el = $(id);
-  if (el) el.addEventListener('input', function () {
+  if (el) el.addEventListener('input', function (ev) {
+    // The user typed in the Bags field — mark it MANUAL so the live auto-fill
+    // (data-calc=1) never overwrites what they entered.
+    if (id === 'logBagsProduced' && ev && ev.target === el && typeof el.setAttribute === 'function') el.setAttribute('data-calc', '0');
     updateUsageCosts();
     persistDraft();
     draftTouched = true;
