@@ -574,6 +574,52 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
+### v1.11.3 — Keep Mine makes THIS device official (winner-takes-all)
+- **"Keep Mine" now means exactly what it says:** the moment you click it, this
+  device's data becomes the **official copy** and is uploaded to the cloud for
+  every device. The other device's data is not merged in, not imported, kept
+  out — this device's data wins completely.
+- **"Accept" means the reverse:** the other device's data replaces this
+  device's and is pushed to the cloud as official.
+- There is **no more silent merging.** When two devices both have data that
+  differs, the pop-up always asks which copy is official, shows exactly what's
+  different, and remembers your choice so a refresh never re-asks. An empty
+  device still always pulls the cloud copy; an empty cloud still always adopts
+  a populated device's data (those never need asking).
+
+### v1.11.2 — pan rolls/bags report fixed + multi-device production merges by date
+- **Fry-pan report no longer fakes a bag count.** Bags per round is now
+  OPTIONAL. If you only set **Rolls**, each finished pan reports exactly that
+  many rolls (pieces) to Production and bags are derived (rolls ÷ 6, the same
+  rule the rest of the app uses) — 1 round = your rolls, not "1 bag + rolls".
+  Set Bags only when you actually package into a fixed bag size.
+- **Run summary shows reality.** The Fry Timers batch log now says "1 round = N
+  rolls", marks a finished pan with its roll count, and shows Bags as an
+  optional field with an `auto` placeholder.
+- **4-device sync can't double-count your day anymore.** Production is a
+  per-day accumulator (the app keeps ONE row per date), so when two devices
+  both logged rounds for the same day the old merge kept two rows and doubled
+  your totals. Production now merges **by date** — same-day rounds are summed
+  into one row. Sales/customers/etc still merge by record id (each sale is
+  unique), and genuine same-record conflicts still ask Accept/Decline once.
+
+### v1.11.1 — automatic safe merge (no more repeated pop-ups)
+- **Edits on two devices now COMBINE automatically.** If the phone added a
+  supplier and the laptop added a sale, both records are kept on both devices
+  and pushed to the cloud — nothing is deleted, no action needed. The
+  accept/decline pop-up now appears ONLY when the **same** record was edited
+  differently on both devices.
+- **No more "why does this pop-up keep coming back?"** Accept/Decline answers
+  are remembered per account, and both buttons merge + push the result to the
+  cloud. Refreshing the page never re-asks the same question, and never
+  silently overwrites a copy.
+- **Fixed phantom "only stock changed" pop-ups.** Finished-good stock is now
+  compared as a *derived* number (computed from production/sales/waste) instead
+  of comparing each device's stored snapshot, which differed after a refresh
+  even when the ledgers were identical.
+- **Richer review dialog.** The pop-up now shows every changed category, flags
+  both-device edits in red, and clearly states what will be merged.
+
 ### v1.11.0 — user-controlled sync (accept/decline) + supplier added date
 - **No more silent data loss between devices.** The app used to pick one copy
   ("more records wins", newest write wins) and overwrite the other — that's why

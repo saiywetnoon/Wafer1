@@ -256,19 +256,24 @@ async function cloudSyncNow() {
     else showToast('Sync failed.', 'error');
     renderCloudStatus(); return;
   }
-  // Both have data and the copies differ -> let the user decide (accept/decline),
-  // never silently pick a winner by timestamp.
-  if (!statesEqual(state, remoteState)) {
-    const remoteTs = (remote && remote.exportedAt) ? Date.parse(remote.exportedAt) : 0;
-    if (openSyncReview(remoteState, remoteTs, 'Manual sync')) {
-      updateGoogleSyncStatus('A change from your other device needs your decision — review it above.', 'info');
-    } else {
-      updateGoogleSyncStatus('Already aligned with your account.', 'success');
-    }
-    renderCloudStatus();
-    return;
+  // Both have data and the copies differ -> the user decides which copy is
+  // OFFICIAL (Accept = other device's data; Keep Mine = this device's data wins
+  // and is pushed to the cloud). Never silent overwrites.
+  const remoteTs = (remote && remote.exportedAt) ? Date.parse(remote.exportedAt) : 0;
+  const status = handleRemoteCopy(remoteState, remoteTs, 'Manual sync');
+  if (status === 'review') {
+    updateGoogleSyncStatus('Choose which device’s data is the official copy — review the pop-up.', 'info');
+  } else if (status === 'pushed') {
+    updateGoogleSyncStatus('Synced — this device’s data uploaded to the cloud.', 'success');
+    showToast('Synced — this device’s data is now official.', 'success');
+  } else if (status === 'pulled') {
+    updateGoogleSyncStatus('Synced — loaded the cloud data onto this device.', 'success');
+    showToast('Synced — loaded the cloud data.', 'success');
+  } else if (status === 'declined' || status === 'accepted') {
+    updateGoogleSyncStatus('Synced — keeping the copy you chose before.', 'success');
+  } else {
+    updateGoogleSyncStatus('Already aligned with your account.', 'success');
   }
-  updateGoogleSyncStatus('Already up to date.', 'success');
   renderCloudStatus();
 }
 

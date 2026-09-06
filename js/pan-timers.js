@@ -72,12 +72,15 @@
     title: true,  // flash the browser-tab title
     nav: true,    // flash the Fry Timers menu button
     vibrate: true,             // mobile vibration on checkpoints
-    rollsPerBatch: 1,          // Rolls a finished pan counts by default — YOU set
+    rollsPerBatch: 1,          // Rolls a finished pan counts per round — YOU set
                                // this (global here, or per-pan in "Use global"
                                // mode). Reported to Production as pieces.
-    bagsPerBatch: 1,           // Bags a finished pan counts by default — YOU set
-                               // this too (global, or per-pan). Reported to
-                               // Production as the bag count for that batch.
+                               // 1 round/pan = THIS many rolls.
+    bagsPerBatch: null,         // Bags per round — OPTIONAL. null = auto-derived
+                               // from rolls (rolls ÷ 6, same as the rest of the
+                               // app) so "1 round" never fakes a bag count. Set
+                               // a number only when you actually package into
+                               // a fixed bag size.
     autoReport: true,          // finished batches auto-log to the Production panel
     panOverrides: {}           // { panId: { fold, final, rolls, bags } } per-pan
                                // timing, rolls AND bags, all set by you
@@ -126,13 +129,15 @@
     return settings.rollsPerBatch;
   }
 
-  /* Bags this pan counts per finished batch (its own override or the global
-     default). Reported to Production as the bag count — so the Production bag
-     count always matches exactly what YOU set, not a fixed 6-per-bag rule. */
+  /* Bags this pan counts per finished round — its own override or the global
+     value. Returns null when NOT set, which tells Production to DERIVE bags from
+     rolls (rolls ÷ 6) — matching the rest of the app. So running rounds never
+     fakes a bag count you never configured. */
   function bagsFor(id) {
     var o = panOverride(id);
     if (o && typeof o.bags === 'number' && o.bags > 0) return o.bags;
-    return settings.bagsPerBatch;
+    if (typeof settings.bagsPerBatch === 'number' && settings.bagsPerBatch > 0) return settings.bagsPerBatch;
+    return null;
   }
 
   function setOverride(id, data) {
@@ -168,6 +173,14 @@
       if (isNaN(n)) return dflt;
       return Math.max(lo, Math.min(hi, n));
     }
+    /* Bags are OPTIONAL: empty / "auto" / missing means "derive from rolls"
+       (rolls ÷ 6), so 1 round never auto-creates a fake bag count. */
+    function nullableNum(v, lo, hi) {
+      if (v === '' || v === null || v === undefined || v === 'null' || v === 'auto') return null;
+      var n = parseInt(v, 10);
+      if (isNaN(n)) return null;
+      return Math.max(lo, Math.min(hi, n));
+    }
     /* Per-pan overrides survive a settings save: only rows the user explicitly
        customised are kept, each clamped to sane ranges. */
     var overrides = {};
@@ -194,7 +207,7 @@
       nav: s.nav !== false,
       vibrate: s.vibrate !== false,
       rollsPerBatch: num(s.rollsPerBatch, 1, 500, (SETTINGS_DEFAULTS.rollsPerBatch != null ? SETTINGS_DEFAULTS.rollsPerBatch : 1)),
-      bagsPerBatch: num(s.bagsPerBatch, 1, 500, (SETTINGS_DEFAULTS.bagsPerBatch != null ? SETTINGS_DEFAULTS.bagsPerBatch : 1)),
+      bagsPerBatch: nullableNum(s.bagsPerBatch, 1, 500),
       autoReport: s.autoReport !== false,
       panOverrides: overrides
     };
@@ -629,14 +642,17 @@
     if (!box) return;
     box.innerHTML = pans.map(function (pan) {
       const pcs = runPieces[pan.id] || 0;
-      const bags = runBags[pan.id] || 0;
+      const bagsRaw = runBags[pan.id];
+      const bags = (typeof bagsRaw === 'number' && bagsRaw > 0) ? bagsRaw : 0;
+      const rolls = rollsFor(pan.id) || 1;   // what ONE round produces
       return '<div class="p-3 rounded-lg bg-gray-800/60 border border-gray-700">' +
-        '<div class="text-xs font-bold text-gray-300">' + escapeHtml(pan.name) + '</div>' +
-        '<div class="flex items-center gap-2 mt-1">' +
+        '<div class="text-xs font-bold text-gray-300">' + escapeHtml(pan.name) + (pcs ? ' <span class="text-emerald-400 font-bold">✓ ' + pcs + ' roll' + (pcs === 1 ? '' : 's') + '</span>' : '') + '</div>' +
+        '<div class="text-[10px] text-gray-500 mb-1.5">1 round = ' + rolls + ' roll' + (rolls === 1 ? '' : 's') + '</div>' +
+        '<div class="flex items-center gap-2">' +
         '<label class="text-[10px] text-gray-400">Rolls<input type="number" min="0" step="1" value="' + pcs + '" data-run-pieces="' + pan.id + '" class="pan-ov-input w-16"></label>' +
-        '<label class="text-[10px] text-gray-400">Bags<input type="number" min="0" step="1" value="' + bags + '" data-run-bags="' + pan.id + '" class="pan-ov-input w-16"></label>' +
+        '<label class="text-[10px] text-gray-400">Bags<input type="number" min="0" step="1" value="' + (bags || '') + '" placeholder="auto" data-run-bags="' + pan.id + '" class="pan-ov-input w-16"></label>' +
         '</div>' +
-        '<div class="text-[10px] text-gray-500 mt-1">Rolls &amp; bags you set are what get reported to Production when this batch is logged.</div></div>';
+        '<div class="text-[10px] text-gray-500 mt-1">Bags are counted only when you set them; leave empty to auto-calculate from rolls (≈' + Math.max(1, Math.ceil((rolls) / 6)) + ' per round).</div></div>';
     }).join('') || '<div class="text-gray-500 text-xs">No finished batches yet. Finished batches are auto-counted from your Rolls/bags settings and' + (settings.autoReport ? ' reported to Production.' : ' ready for the Log button below.') + '</div>';
   }
   function wireRunSummary() {

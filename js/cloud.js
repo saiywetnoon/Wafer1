@@ -75,16 +75,17 @@ async function supabaseGet() {
   if (!row) return { ok: false, payload: null };
   return { ok: true, payload: row.payload, exportedAt: row.updatedAt };
 }
-/* True when two states are effectively identical (ignores bookkeeping stamps
-   such as updatedAt/version). Used to ignore echoes of our own writes. */
+/* True when two states are effectively identical. Ignores bookkeeping stamps
+   (updatedAt/version), the draft's capture time, and — crucially — the DERIVED
+   finished-good stock. Stock is recomputed from production/sales/waste on every
+   render, so two devices holding the same ledger are frequently carrying
+   different `stock` snapshots. Comparing the derived number instead of the
+   stored field stops phantom "only stock changed" popups after every refresh. */
 function statesEqual(a, b) {
   if (!a || !b) return false;
-  function pure(o) {
-    const c = JSON.parse(JSON.stringify(o));
-    delete c.updatedAt; delete c.version;
-    return JSON.stringify(c);
-  }
-  return pure(a) === pure(b);
+  try {
+    return JSON.stringify(normalizeForCompare(a)) === JSON.stringify(normalizeForCompare(b));
+  } catch (e) { return false; }
 }
 
 /* Count how many meaningful data records a ledger state holds. This is what
@@ -125,10 +126,11 @@ function supabaseUpdate(uid) {
   if (!uid) return;
   SUPA.subscribeRealtime(uid, function (row) {
     if (!row || !row.payload || !row.payload.state) return;
-    if (statesEqual(state, row.payload.state)) return;       // echo of our own write
     const remoteTs = Date.parse(row.updated_at) || 0;
-    // Ask the user to review/accept/decline instead of overwriting either copy.
-    openSyncReview(row.payload.state, remoteTs, 'Your other device just saved changes');
+    // Echoes of our own writes are ignored inside handleRemoteCopy via
+    // statesEqual. Anything genuinely different gets MERGED (additive — no data
+    // loss); only true same-record conflicts open the review modal.
+    handleRemoteCopy(row.payload.state, remoteTs, 'Your other device just saved changes');
   });
 }
 function supabaseWatch(uid) { supabaseUpdate(uid); }
@@ -146,11 +148,10 @@ function startCloudPolling() {
       const res = await cloudGet();
       const remote = res && res.ok ? res.payload : null;
       if (!remote || !remote.state) return;
-      if (statesEqual(state, remote.state)) return; // aligned already
       const remoteTs = remote.exportedAt ? Date.parse(remote.exportedAt) : 0;
-      // Never auto-downgrade a richer local copy and never auto-replace a
-      // different local copy — ask the user which version to keep.
-      openSyncReview(remote.state, remoteTs || undefined, 'Background sync');
+      // Differs -> merge additively (no data loss); true conflicts go to the
+      // review modal. Already-decided copies are handled silently.
+      handleRemoteCopy(remote.state, remoteTs || undefined, 'Background sync');
     } catch (e) { /* poll is best-effort */ }
   }, 60000);
 }
@@ -275,37 +276,97 @@ async function cloudRestore() { return SUPA.configured() ? { ok: false, message:
 async function cloudClear() { return SUPA.configured() ? { ok: true, message: 'Cleared.' } : cloudPost('clear'); }
 
 /* ============================================================
-   REMOTE-CHANGE REVIEW — accept / decline conflict resolution
+   REMOTE-CHANGE REVIEW — safe merge + accept / decline
    ------------------------------------------------------------
    The app used to pick a "winner" silently (more records wins,
    timestamps tie-break) and overwrite the other copy. That is
    exactly how data appears to "disappear" between a phone and a
    laptop: the two devices legitimately diverged and one copy was
-   clobbered. From now on, when a remote copy differs from what a
-   device has, the sync-review modal shows WHAT changed and asks the
-   user to Accept (load the remote copy) or Decline (keep this
-   device's copy and push it back up). Nothing is overwritten until
-   the user decides.
+   clobbered.
+
+   Now every divergence goes through an ADDITIVE MERGE first:
+   - Records that exist on only ONE side are KEPT FROM BOTH (a phone
+     edit and a laptop edit combine — nothing is deleted).
+   - Only true conflicts (the same record edited differently on both
+     sides) open the sync-review modal, where the user picks whose
+     edit wins for those rows. Both buttons still converge the cloud
+     (merge + push), so the question never repeats.
+   - Accept / Decline answers are remembered per content copy, so a
+     page refresh never re-asks the same question.
    ============================================================ */
 
 var syncReview = { open: false, current: null, pending: null };
-var syncReviewDeclined = {}; // content-fingerprint -> true (this session)
+var SYNC_REVIEW_DECIDED_KEY = 'dailyCrispyRollLedger_syncReview';
+
+/* Finished-good stock derived from production / sales / waste — mirrors the
+   math in rebuildStockAndCogs() so "compare ledgers" and "render ledgers"
+   agree on what stock SHOULD be. */
+function computeStockSnapshot(o) {
+  var events = [];
+  (o.production || []).forEach(function (p) { events.push({ date: p.date, type: 0, p: p }); });
+  (o.sales || []).forEach(function (s) { events.push({ date: s.date, type: 1, s: s }); });
+  (o.waste || []).forEach(function (w) { events.push({ date: w.date, type: 2, w: w }); });
+  events.sort(function (a, b) {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    return a.type - b.type;
+  });
+  var stock = { pieces: 0, cost: 0 };
+  events.forEach(function (ev) {
+    if (ev.type === 0) {
+      stock.pieces += (ev.p.pieces || 0);
+      stock.cost += (ev.p.capital || 0);
+    } else {
+      var item = ev.type === 1 ? ev.s : ev.w;
+      var qty = item.pieces !== undefined ? item.pieces : item.qty;
+      var avg = stock.pieces > 0 ? (stock.cost / stock.pieces) : 0;
+      var costQty = Math.max(0, Math.min(qty, stock.pieces));
+      var cost = Math.round(costQty * avg);
+      stock.pieces = Math.max(0, stock.pieces - (qty || 0));
+      stock.cost = Math.max(0, stock.cost - cost);
+    }
+  });
+  return { pieces: Math.round(stock.pieces), cost: Math.round(stock.cost) };
+}
+/* Deep-clone a ledger and drop the fields that make TWO IDENTICAL ledgers
+   look different: write timestamps, the draft's capture time, and the stored
+   stock snapshot (the derived value above is compared instead). */
+function normalizeForCompare(o) {
+  var c = JSON.parse(JSON.stringify(o));
+  delete c.updatedAt; delete c.version;
+  if (c.draft && c.draft.capturedAt) delete c.draft.capturedAt;
+  c.stock = computeStockSnapshot(c);
+  return c;
+}
 
 function stateFingerprint(s) {
   if (!s) return '';
   try {
-    var c = JSON.parse(JSON.stringify(s));
-    delete c.updatedAt; delete c.version;
-    return JSON.stringify(c, Object.keys(c).sort());
+    var n = normalizeForCompare(s);
+    return JSON.stringify(n, Object.keys(n).sort());
   } catch (e) { return ''; }
 }
-function wasSyncDeclined(fp) { return !!(fp && syncReviewDeclined[fp]); }
-function markSyncDeclined(fp) {
-  if (!fp) return;
-  syncReviewDeclined[fp] = true;
-  var keys = Object.keys(syncReviewDeclined);
-  while (keys.length > 60) { delete syncReviewDeclined[keys.shift()]; }
+/* Accept/Decline answers survive page reloads so a copy the user already
+   decided about never pops up again on refresh. */
+function syncDecisions() {
+  try {
+    var raw = (typeof window !== 'undefined' && window.localStorage)
+      ? window.localStorage.getItem(SYNC_REVIEW_DECIDED_KEY) : null;
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
 }
+function syncDecision(fp) { return fp ? (syncDecisions()[fp] || null) : null; }
+function setSyncDecision(fp, val) {
+  if (!fp) return;
+  try {
+    var m = syncDecisions();
+    m[fp] = val;
+    var keys = Object.keys(m);
+    while (keys.length > 150) { delete m[keys.shift()]; }
+    if (window.localStorage) window.localStorage.setItem(SYNC_REVIEW_DECIDED_KEY, JSON.stringify(m));
+  } catch (e) { /* best-effort */ }
+}
+function wasSyncDeclined(fp) { return syncDecision(fp) === 'declined'; }
+function wasSyncAccepted(fp) { return syncDecision(fp) === 'accepted'; }
 
 /* Which top-level collections the diff shows, and their icon. */
 var SYNC_DIFF_FIELDS = [
@@ -361,18 +422,89 @@ function diffCollection(localArr, remoteArr) {
     changed: changed
   };
 }
-/* Human-readable list of what a remote copy changes compared to local. */
-function buildSyncDiffHtml(local, remote) {
+
+/* The single entry point for "another copy exists that differs from this
+   device". ONE authoritative copy wins everywhere — decided by the user.
+   Returns a status string for the caller. */
+function handleRemoteCopy(remoteState, remoteTs, source) {
+  if (!remoteState) return 'noop';
+  if (statesEqual(state, remoteState)) return 'aligned';
+
+  const localCount = stateDataCount(state);
+  const remoteCount = stateDataCount(remoteState);
+
+  // An EMPTY cloud never wipes a populated device -> this device's data is
+  // official and is pushed up automatically.
+  if (remoteCount === 0 && localCount > 0) {
+    try { cloudPush(); } catch (e) {}
+    if (typeof updateGoogleSyncStatus === 'function') updateGoogleSyncStatus(source + ': this device’s data uploaded to the cloud.', 'success');
+    try { renderCloudStatus(); } catch (e) {}
+    return 'pushed';
+  }
+  // An EMPTY device always adopts the cloud copy (a fresh browser must never
+  // clobber the account's data).
+  if (localCount === 0 && remoteCount > 0) {
+    setCloudSyncSuppressed(true);
+    try { applyCloudRemote({ state: remoteState }, remoteTs || undefined, true); }
+    finally { setCloudSyncSuppressed(false); }
+    renderAll();
+    try { loadDraftIfNewer(); } catch (e) {}
+    if (typeof updateGoogleSyncStatus === 'function') updateGoogleSyncStatus(source + ': loaded the latest cloud data onto this device.', 'success');
+    try { renderCloudStatus(); } catch (e) {}
+    return 'pulled';
+  }
+
+  const fp = stateFingerprint(remoteState);
+  // Already accepted this exact copy → the remote is the official data; if this
+  // device has since made NEWER edits, those win (and will be pushed) instead of
+  // being reverted by an older echo.
+  if (wasSyncAccepted(fp)) {
+    try { cloudPush(); } catch (e) {}
+    return 'accepted';
+  }
+  // Already declined this exact copy → this device's data stays official.
+  if (wasSyncDeclined(fp)) {
+    try { cloudPush(); } catch (e) {}
+    if (typeof updateGoogleSyncStatus === 'function') updateGoogleSyncStatus(source + ': keeping this device’s copy (as you chose before).', 'info');
+    try { renderCloudStatus(); } catch (e) {}
+    return 'declined';
+  }
+
+  // Both sides have real data and differ -> ask the user which copy is official.
+  if (openSyncReview(remoteState, remoteTs || undefined, source)) {
+    if (typeof updateGoogleSyncStatus === 'function') updateGoogleSyncStatus(source + ': choose which device’s data is the official copy.', 'info');
+    try { renderCloudStatus(); } catch (e) {}
+    return 'review';
+  }
+  return 'noop';
+}
+
+/* Human-readable list of what a remote copy changes compared to local.
+   `conflicts` (optional) lists records that were edited on BOTH sides. */
+function buildSyncDiffHtml(local, remote, conflicts) {
   if (!local || !remote) return '<div class="text-gray-500">No data to compare.</div>';
   var lines = [];
+
+  // True conflicts first, so the thing the user MUST decide is front and centre.
+  var con = conflicts || [];
+  if (con.length) {
+    lines.push('<div class="rounded-lg bg-red-950/40 border border-red-800 px-2 py-1.5 mb-1">' +
+      '<div class="flex items-center gap-1.5 text-red-300 text-[11px] font-bold mb-1"><i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> ' +
+      con.length + ' record' + (con.length === 1 ? '' : 's') + ' edited on BOTH devices</div>' +
+      con.slice(0, 6).map(function (c) {
+        return '<div class="text-red-200/80 text-[11px] py-0.5">• ' + esc(c.label) + ' <span class="text-gray-500">(' + (c.field || '') + ')</span></div>';
+      }).join('') +
+      (con.length > 6 ? '<div class="text-gray-500 text-[10px] pt-0.5">and ' + (con.length - 6) + ' more…</div>' : '') +
+      '</div>');
+  }
 
   SYNC_DIFF_FIELDS.forEach(function (def) {
     var d = diffCollection(local[def.f], remote[def.f]);
     if (!d) return;
     var bits = [];
-    if (d.remote !== d.local) bits.push(d.local + ' → ' + d.remote + ' record' + (d.remote === 1 ? '' : 's'));
+    if (d.remote !== d.local) bits.push(d.local + ' → ' + d.remote + ' records');
     if (d.added.length) bits.push('+' + d.added.length + ' new (' + d.added.join(', ') + ')');
-    if (d.removed.length) bits.push('−' + d.removed.length + ' removed (' + d.removed.join(', ') + ')');
+    if (d.removed.length) bits.push(d.removed.length + ' only on this device (kept)');
     if (d.changed) bits.push(d.changed + ' edited');
     lines.push('<div class="flex items-start gap-2 py-2 border-b border-gray-800 last:border-0">' +
       '<i data-lucide="' + def.icon + '" class="w-4 h-4 mt-0.5 text-amber-400 shrink-0"></i>' +
@@ -380,13 +512,14 @@ function buildSyncDiffHtml(local, remote) {
       '<div class="text-gray-500 text-[11px] leading-snug">' + bits.join(' · ') + '</div></div></div>');
   });
 
-  // Finished-good stock.
+  // Finished-good stock (derived — not the stored snapshot).
   try {
-    if (JSON.stringify(local.stock || null) !== JSON.stringify(remote.stock || null)) {
+    var ls = computeStockSnapshot(local), rs = computeStockSnapshot(remote);
+    if (ls.pieces !== rs.pieces || ls.cost !== rs.cost) {
       lines.push('<div class="flex items-start gap-2 py-2 border-b border-gray-800 last:border-0">' +
         '<i data-lucide="package" class="w-4 h-4 mt-0.5 text-amber-400 shrink-0"></i>' +
         '<div class="min-w-0"><div class="font-semibold text-gray-200">Finished-good stock</div>' +
-        '<div class="text-gray-500 text-[11px]">' + (local.stock && local.stock.pieces || 0) + ' → ' + (remote.stock && remote.stock.pieces || 0) + ' pieces</div></div></div>');
+        '<div class="text-gray-500 text-[11px]">' + ls.pieces + ' → ' + rs.pieces + ' pieces, ' + fmtKs(ls.cost) + ' → ' + fmtKs(rs.cost) + '</div></div></div>');
     }
   } catch (e) {}
   // Inventory level snapshot (the movement ledger above is the detail view).
@@ -433,13 +566,14 @@ function syncReviewTimeText(ts) {
     return new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   } catch (e) { return ''; }
 }
-/* Open the accept/decline modal for a remote copy. Returns true when a modal
-   was opened; false when the copy was already declined this session or another
-   review is showing (in which case it is remembered and offered next). */
+/* Open the accept / keep-mine decision modal. The user picks which copy is the
+   OFFICIAL ledger: Accept → the other device's data replaces this one; Keep Mine
+   → this device's data stays and is uploaded to the cloud. A copy the user
+   already decided about (this session or a previous reload) never reopens. */
 function openSyncReview(remoteState, remoteTs, source) {
   if (!remoteState || typeof document === 'undefined') return false;
   var fp = stateFingerprint(remoteState);
-  if (wasSyncDeclined(fp)) return false; // user already answered this exact copy
+  if (wasSyncDeclined(fp) || wasSyncAccepted(fp)) return false; // already answered
   var modal = document.getElementById('syncReviewModal');
   if (!modal) return false;
   if (syncReview.open) {
@@ -463,9 +597,12 @@ function openSyncReview(remoteState, remoteTs, source) {
   return true;
 }
 
-/* The user answered. true = Accept (load remote), false = Decline (keep this
-   device's copy and push it back to the cloud so both sides agree). */
-function resolveSyncReview(accepted) {
+/* The user decided which copy is OFFICIAL:
+   - Accept (true): this device adopts the other device's data, then it is
+     pushed to the cloud so it is official for every device.
+   - Keep Mine (false): this device's data stays untouched and is uploaded to
+     the cloud — it becomes the official copy for everyone. Nothing is merged. */
+async function resolveSyncReview(accepted) {
   var cur = syncReview.current;
   syncReview.open = false;
   syncReview.current = null;
@@ -475,6 +612,7 @@ function resolveSyncReview(accepted) {
 
   try {
     if (accepted) {
+      if (cur.fp) setSyncDecision(cur.fp, 'accepted');
       setCloudSyncSuppressed(true);
       try {
         if (applyCloudRemote({ state: cur.state }, cur.ts || undefined, true)) {
@@ -482,29 +620,46 @@ function resolveSyncReview(accepted) {
           try { loadDraftIfNewer(); } catch (e) {}
           syncQueueClear();
           cloudSyncFailed = false;
-          if (typeof updateGoogleSyncStatus === 'function') updateGoogleSyncStatus('Change from your other device accepted and applied.', 'success');
-          if (typeof showToast === 'function') showToast('Change accepted and applied on this device.', 'success');
+          try { await cloudPush(); } catch (e) {}
+          if (typeof updateGoogleSyncStatus === 'function') {
+            updateGoogleSyncStatus('Accepted — the other device’s data is now the official copy and is synced.', 'success');
+          }
+          if (typeof showToast === 'function') {
+            showToast('Accepted — the other device’s data is now official for this device and the cloud.', 'success');
+          }
         } else if (typeof updateGoogleSyncStatus === 'function') {
-          updateGoogleSyncStatus('Could not apply the remote change.', 'error');
+          updateGoogleSyncStatus('Could not apply the other device’s data.', 'error');
         }
       } finally {
         setCloudSyncSuppressed(false);
       }
     } else {
-      if (cur.fp) markSyncDeclined(cur.fp);
-      // Keep this device's version — push it up so the cloud matches us.
-      syncQueueMark();
-      try { cloudPush(); } catch (e) {}
-      if (typeof updateGoogleSyncStatus === 'function') updateGoogleSyncStatus('Declined — keeping this device’s copy.', 'info');
-      if (typeof showToast === 'function') showToast('Declined the change — this device’s data stays as-is.', 'info');
+      // KEEP MINE → this device's data is official; sync it to the cloud NOW.
+      if (cur.fp) setSyncDecision(cur.fp, 'declined');
+      var up = { ok: false };
+      try { up = await cloudPush(); } catch (e) {}
+      if (up && up.ok) {
+        syncQueueClear();
+        cloudSyncFailed = false;
+      }
+      if (typeof updateGoogleSyncStatus === 'function') {
+        updateGoogleSyncStatus(up && up.ok
+          ? 'Kept mine — this device’s data is now the official copy and is synced to the cloud.'
+          : 'Kept mine — this device’s data stays official; the upload will keep retrying.', up && up.ok ? 'success' : 'error');
+      }
+      if (typeof showToast === 'function') {
+        showToast(up && up.ok
+          ? 'Kept mine — this device’s data is now official for everyone.'
+          : 'Kept mine — could not reach the cloud yet; retrying in the background.', up && up.ok ? 'success' : 'error');
+      }
     }
   } catch (e) { console.warn('sync review resolve failed', e); }
   try { renderCloudStatus(); } catch (e) {}
-  // If more updates arrived while the modal was open, offer the newest one.
+  // If more updates arrived while the modal was open, process the newest one.
   if (syncReview.pending) {
     var p = syncReview.pending;
     syncReview.pending = null;
-    setTimeout(function () { openSyncReview(p.state, p.ts, p.source); }, 80);
+    setTimeout(function () { handleRemoteCopy(p.state, p.ts, p.source); }, 80);
   }
 }
 
@@ -663,15 +818,20 @@ async function cloudAfterSignIn() {
     return true;
   }
 
-  // Both sides have real data and the copies differ — NEVER silently pick a
-  // winner. Show what changed and let the user Accept (load the cloud copy)
-  // or Decline (keep this device's copy and push it back up).
-  if (openSyncReview(remoteState, remoteTs || undefined, 'Reconcile after sign-in')) {
-    updateGoogleSyncStatus('Online as ' + email + '. There are changes from your other device — review them above.', 'info');
+  // Both sides have real data and the copies differ — merge additively (no data
+  // loss). Only true same-record conflicts open the review modal, and a copy
+  // the user already decided about is handled silently.
+  const status = handleRemoteCopy(remoteState, remoteTs || undefined, 'Reconcile after sign-in');
+  if (status === 'review') {
+    updateGoogleSyncStatus('Online as ' + email + '. Choose which device’s data is the official copy.', 'info');
+  } else if (status === 'pushed') {
+    updateGoogleSyncStatus('Online as ' + email + '. Uploaded this device’s data to the cloud.', 'success');
+  } else if (status === 'pulled') {
+    updateGoogleSyncStatus('Online as ' + email + '. Loaded the cloud data onto this device.', 'success');
+  } else if (status === 'aligned') {
+    updateGoogleSyncStatus('Online as ' + email + '. Your ledger is up to date.', 'success');
   } else {
-    updateGoogleSyncStatus(statesEqual(state, remoteState)
-      ? 'Online as ' + email + '. Your ledger is up to date.'
-      : 'Online as ' + email + '. Kept this device’s version.', 'success');
+    updateGoogleSyncStatus('Online as ' + email + '.', 'success');
   }
   renderCloudStatus();
   return true;

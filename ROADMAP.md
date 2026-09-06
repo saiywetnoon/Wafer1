@@ -16,7 +16,7 @@ approved account's data kept private.
 |---|---|---|
 | Email/password accounts | ✅ | Supabase Auth gate, approved/pending/rejected account states, first account becomes admin. |
 | Database privacy | ✅ | RLS restricts profiles and ledger access; pending users cannot access ledgers. |
-| Multi-device sync | ✅ | Supabase Realtime receives inserts and updates. When two devices diverge, a pop-up shows the diff and asks Accept/Decline — no copy is overwritten silently. Whole-ledger writes are still one JSON row (a record-level DB is on the roadmap). |
+| Multi-device sync | ✅ | Supabase Realtime receives updates. When two devices both hold data that differs, a pop-up shows the diff and asks which copy is **official**: Accept (other device's data replaces this one) or **Keep Mine** (this device's data is uploaded to the cloud as official). Choices persist per copy so refresh never re-asks; an empty device always pulls and an empty cloud always adopts local. No copy is overwritten or merged silently. Whole-ledger writes are still one JSON row (a record-level DB is on the roadmap). |
 | Production and sales | ✅ | Production adds finished goods; sales use weighted-average COGS. |
 | Finished-goods controls | ✅ | Sales and waste cannot consume unavailable stock for their date. |
 | Ingredient inventory | 🟡 | Dated opening, purchase, production, reversal, and manual-adjustment movements now calculate stock; live acceptance testing remains. |

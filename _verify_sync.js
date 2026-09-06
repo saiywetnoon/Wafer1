@@ -55,72 +55,101 @@ function payloadFromState(s) { return { app: 'x', exportedAt: s.updatedAt || new
 
 let pass = 0, fail = 0;
 function ok(cond, msg) { if (cond) { pass++; console.log('PASS ' + msg); } else { fail++; console.log('FAIL ' + msg); } }
-/* The sync-review modal is session state inside cloud.js — reset between tests. */
-function resetReview() { syncReview.open = false; syncReview.current = null; syncReview.pending = null; applied = 0; }
+function resetReview() { syncReview.open = false; syncReview.current = null; syncReview.pending = null; applied = 0; pushes = 0; statuses = []; }
 
 (async function run() {
-  console.log('== reconcile (cloudAfterSignIn) verifier ==');
+  console.log('== winner-takes-all reconcile verifier ==');
+  // Fresh empty device always PULLS the cloud ledger (never clobbers).
   state = mkState(0);
   cloudBody = { ok: true, payload: payloadFromState(mkState(5, '2026-08-31T10:00:00Z')) };
-  pushes = 0; statuses = []; resetReview();
+  resetReview();
   await cloudAfterSignIn();
   ok(state.production.length === 5, 'fresh browser pulls the cloud ledger (5 records)');
   ok(pushes === 0, 'fresh browser does NOT push its empty state over the cloud');
   ok(statuses.some(s => /Loaded your cloud data/.test(s)), 'status says cloud data loaded');
 
-  state = mkState(20, '2026-08-30T08:00:00Z');
-  cloudBody = { ok: true, payload: payloadFromState(mkState(5, '2026-08-31T12:00:00Z')) };
-  pushes = 0; statuses = []; resetReview();
-  await cloudAfterSignIn();
-  ok(syncReview.open === true, 'differing copies open the sync-review modal (ask the user)');
-  ok(pushes === 0 && applied === 0, 'nothing is pushed or applied silently while reviewing');
-  ok(state.production.length === 20, 'local copy untouched until the user decides');
-
-  state = mkState(5, '2026-08-30T08:00:00Z');
-  const remoteNewer = mkState(5, '2026-08-31T12:00:00Z');
-  remoteNewer.production[2].notes = 'edited on device B';
-  cloudBody = { ok: true, payload: payloadFromState(remoteNewer) };
-  pushes = 0; applied = 0; resetReview();
-  await cloudAfterSignIn();
-  ok(syncReview.open === true, 'equal counts + edited remote -> review modal instead of silent pull');
-  ok(pushes === 0 && applied === 0, 'no push and no silent apply while the review is pending');
-
-  // Simulate the user pressing "Accept": the modal resolution applies the remote copy.
-  state = mkState(5, '2026-08-30T08:00:00Z');
-  cloudBody = { ok: true, payload: payloadFromState(remoteNewer) };
+  // Both sides have data and differ -> ALWAYS ask (no silent merge).
+  state = mkState(3, '2026-08-30T08:00:00Z');
+  state.suppliers.push({ id: 's1', name: 'Sun Market' });
+  const remote = mkState(5, '2026-08-31T12:00:00Z');
+  cloudBody = { ok: true, payload: payloadFromState(remote) };
   resetReview();
-  syncReview.current = { state: remoteNewer, ts: Date.parse('2026-08-31T12:00:00Z'), fp: '' };
-  syncReview.open = true;
-  resolveSyncReview(true);
-  ok(state.production[2].notes === 'edited on device B', 'ACCEPT loads the edited remote copy');
-  ok(syncReview.open === false, 'modal closes after a decision');
-
-  // And the user pressing "Decline" keeps the local copy and pushes it back up.
-  state = mkState(20, '2026-08-29T00:00:00Z');
-  cloudBody = { ok: true, payload: payloadFromState(mkState(3, '2026-08-31T11:59:00Z')) };
-  pushes = 0; applied = 0; resetReview();
   await cloudAfterSignIn();
-  ok(syncReview.open === true, 'subset-cloud still opens the review (never silently overwrites)');
-  syncReview.current = { state: cloudBody.payload.state, ts: 0, fp: stateFingerprint(cloudBody.payload.state) };
-  syncReview.open = true;
-  resolveSyncReview(false);
-  ok(state.production.length === 20, 'DECLINE keeps the richer local ledger');
-  ok(pushes === 1, 'DECLINE pushes the local copy back to the cloud');
+  ok(syncReview.open === true, 'differing copies open the review modal (ask the user)');
+  ok(pushes === 0 && applied === 0, 'nothing pushed/applied while the review is pending');
+  ok(state.production.length === 3 && state.suppliers.length === 1, 'local copy untouched until the user decides');
 
+  // ACCEPT -> the OTHER device's data fully replaces this device and is pushed to cloud.
+  const acceptFp = stateFingerprint(remote);
+  syncReview.current = { state: remote, ts: 0, fp: acceptFp };
+  syncReview.open = true;
+  await resolveSyncReview(true);
+  ok(state.production.length === 5, 'ACCEPT replaces this device with the remote copy (5 records)');
+  ok(state.suppliers.length === 0, 'ACCEPT removes this device’s local-only supplier (remote is official)');
+  ok(pushes >= 1, 'ACCEPT pushes the accepted copy to the cloud');
+  ok(syncDecision(acceptFp) === 'accepted', 'ACCEPT decision persisted');
+
+  // RELOAD after ACCEPT -> never re-asks; later local edits survive.
+  state.sales.push({ id: 'x1', date: '2026-09-02', bags: 1, pieces: 6, price: 600, amount: 600, cogs: 0, avgCost: 0, net: 600 });
+  cloudBody = { ok: true, payload: payloadFromState(remote) };
+  resetReview();
+  await cloudAfterSignIn();
+  ok(syncReview.open === false, 'an already-accepted copy never reopens the modal on refresh');
+  ok(state.sales.some(s => s.id === 'x1'), 'new local sale untouched after reload');
+
+  // KEEP MINE -> this device's data stays EXACTLY as-is and is uploaded to the cloud.
+  state = mkState(3, '2026-08-29T00:00:00Z');
+  state.suppliers.push({ id: 's1', name: 'Sun Market' });
+  const mineRemote = mkState(5, '2026-08-31T11:59:00Z');
+  mineRemote.suppliers.push({ id: 'r1', name: 'Fresh Mart' });
+  const declineFp = stateFingerprint(mineRemote);
+  cloudBody = { ok: true, payload: payloadFromState(mineRemote) };
+  resetReview();
+  await cloudAfterSignIn();
+  ok(syncReview.open === true, 'differing copies open the review modal again');
+  syncReview.current = { state: mineRemote, ts: 0, fp: declineFp };
+  syncReview.open = true;
+  await resolveSyncReview(false);
+  ok(state.production.length === 3, 'KEEP MINE does NOT replace local with the remote copy');
+  ok(state.suppliers.length === 1 && state.suppliers[0].name === 'Sun Market', 'KEEP MINE keeps local supplier and does NOT import remote-only supplier');
+  ok(pushes >= 1, 'KEEP MINE uploads this device’s data to the cloud (official)');
+  ok(syncDecision(declineFp) === 'declined', 'KEEP MINE decision persisted');
+
+  // RELOAD after KEEP MINE -> never re-asks, pushes local again.
+  cloudBody = { ok: true, payload: payloadFromState(mineRemote) };
+  resetReview();
+  await cloudAfterSignIn();
+  ok(syncReview.open === false, 'a keep-mine copy never reopens the modal on refresh');
+  ok(state.suppliers.length === 1, 'keep-mine official copy is preserved after reload');
+
+  // Phantom stock difference (stored snapshots differ but derived stock equal) -> aligned.
+  state = mkState(5, '2026-08-31T12:00:00Z');
+  state.stock = { pieces: 999, cost: 999 };
+  const stockRemote = mkState(5, '2026-08-31T12:05:00Z');
+  stockRemote.stock = { pieces: 1, cost: 1 };
+  cloudBody = { ok: true, payload: payloadFromState(stockRemote) };
+  resetReview();
+  await cloudAfterSignIn();
+  ok(syncReview.open === false, 'stale stock snapshots are NOT a real difference (no popup)');
+  ok(pushes === 0 && applied === 0, 'stale-stock-only copies cause no churn');
+
+  // Identical copies cause no sync churn.
   state = mkState(5, '2026-08-31T12:00:00Z');
   cloudBody = { ok: true, payload: payloadFromState(mkState(5, '2026-08-31T12:00:00Z')) };
-  pushes = 0; applied = 0; resetReview();
+  resetReview();
   await cloudAfterSignIn();
-  ok(pushes === 0 && applied === 0, 'identical copies cause no sync churn and no modal');
+  ok(pushes === 0 && applied === 0 && syncReview.open === false, 'identical copies cause no sync churn and no modal');
 
+  // Empty cloud + local data -> first sync pushes local.
   state = mkState(3, '2026-08-31T09:00:00Z');
   cloudBody = { ok: true, payload: payloadFromState(mkState(0, null)) };
-  pushes = 0; resetReview();
+  resetReview();
   await cloudAfterSignIn();
   ok(pushes === 1, 'empty cloud + local data -> first sync pushes local');
 
   console.log(fail === 0 ? 'ALL RECONCILE CHECKS PASSED' : (fail + ' FAILED'));
 })();`;
+
 
 const src = read('config.js') + '\n' + read('storage.js') + '\n' +
   read('helpers.js') + '\n' + read('cloud.js') + '\n' + TEST_BODY;

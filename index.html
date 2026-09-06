@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" data-build="v1.11.0">
+<html lang="en" class="dark" data-build="v1.11.3">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -955,12 +955,14 @@ tailwind.config = {
             <div class="text-xs font-bold text-gray-300 mb-2">Rolls, bags &amp; reporting</div>
             <div class="grid grid-cols-2 gap-2">
               <label class="block text-[11px] text-gray-400 font-semibold">
-                Rolls per finished batch (default)
+                Rolls per round (default)
                 <input id="panRollsDefault" type="number" min="1" max="500" step="1" inputmode="numeric" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <span class="font-normal normal-case text-[10px] text-gray-500">One finished pan = ONE round = this many rolls.</span>
               </label>
               <label class="block text-[11px] text-gray-400 font-semibold">
-                Bags per finished batch (default)
-                <input id="panBagsDefault" type="number" min="1" max="500" step="1" inputmode="numeric" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                Bags per round (optional)
+                <input id="panBagsDefault" type="number" min="0" max="500" step="1" inputmode="numeric" placeholder="auto (from rolls)" class="mt-1 w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <span class="font-normal normal-case text-[10px] text-gray-500">Leave empty to auto-calculate from Rolls (≈ rolls ÷ 6) — 1 round never fakes a bag count.</span>
               </label>
             </div>
             <span class="font-normal normal-case text-[10px] text-gray-500">These are <b>your</b> numbers for one pan completion — the exact Rolls and Bags that get added to the Production panel each time a pan finishes.</span>
@@ -1330,19 +1332,20 @@ tailwind.config = {
       <span id="syncReviewTs" class="text-[10px] text-gray-500 whitespace-nowrap"></span>
     </div>
     <div class="px-5 py-4">
-      <p class="text-xs text-gray-400 mb-2">Your other device (phone / laptop / browser) saved different data. Nothing is overwritten until you choose:</p>
+      <p class="text-xs text-gray-400 mb-2">Your other device has different data. Choose which copy is the <b class="text-gray-300">official</b> one — your choice is synced to the cloud for every device. Nothing is merged.</p>
       <div id="syncReviewDiff" class="rounded-xl bg-gray-950/60 border border-gray-800 px-3 py-1 max-h-[48vh] overflow-y-auto scrollbar-thin text-xs"></div>
       <div class="mt-3 text-[11px] text-gray-500 leading-snug">
-        <span class="text-emerald-400 font-semibold">Accept</span> — load the new data into this device and sync it.<br>
-        <span class="text-red-400 font-semibold">Decline</span> — keep this device's data as-is and push it to the cloud.
+        <span class="text-emerald-400 font-semibold">Accept</span> — the other device's data replaces this device's and becomes official everywhere.<br>
+        <span class="text-red-400 font-semibold">Keep Mine</span> — this device's data stays exactly as-is and is uploaded to the cloud as the official copy.<br>
+        You won't be asked twice for the same change.
       </div>
     </div>
     <div class="px-5 py-4 border-t border-gray-800 flex flex-wrap items-center justify-end gap-2">
-      <button id="syncReviewDeclineBtn" class="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition flex items-center gap-1.5">
-        <i data-lucide="x" class="w-3.5 h-3.5"></i> Decline — keep mine
+      <button id="syncReviewDeclineBtn" class="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition flex items-center gap-1.5">
+        <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Keep Mine — this is official
       </button>
       <button id="syncReviewAcceptBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5">
-        <i data-lucide="check" class="w-3.5 h-3.5"></i> Accept — load the change
+        <i data-lucide="check" class="w-3.5 h-3.5"></i> Accept — use the other device's data
       </button>
     </div>
   </div>
@@ -1449,31 +1452,31 @@ tailwind.config = {
 </div>
 
 
-    <script src="js/config.js?v=20260906"></script>
-    <script src="js/supabase.js?v=20260906"></script>
-    <script src="js/storage.js?v=20260906"></script>
-    <script src="js/google.js?v=20260906"></script>
-    <script src="js/helpers.js?v=20260906"></script>
-    <script src="js/pricing.js?v=20260906"></script>
-    <script src="js/usage.js?v=20260906"></script>
-    <script src="js/ledger.js?v=20260906"></script>
-    <script src="js/sales.js?v=20260906"></script>
-    <script src="js/dashboard.js?v=20260906"></script>
-    <script src="js/calendar.js?v=20260906"></script>
-    <script src="js/csv.js?v=20260906"></script>
-    <script src="js/sync-ui.js?v=20260906"></script>
-    <script src="js/sample-data.js?v=20260906"></script>
-    <script src="js/inventory.js?v=20260906"></script>
-    <script src="js/customers.js?v=20260906"></script>
-    <script src="js/suppliers.js?v=20260906"></script>
-    <script src="js/tools.js?v=20260906"></script>
-    <script src="js/pan-timers.js?v=20260906"></script>
-    <script src="js/cash.js?v=20260906"></script>
-    <script src="js/companies.js?v=20260906"></script>
-    <script src="js/auth.js?v=20260906"></script>
-    <script src="js/cloud.js?v=20260906"></script>
-    <script src="js/ai.js?v=20260906"></script>
-    <script src="js/init.js?v=20260906"></script>
+    <script src="js/config.js?v=20260910"></script>
+    <script src="js/supabase.js?v=20260910"></script>
+    <script src="js/storage.js?v=20260910"></script>
+    <script src="js/google.js?v=20260910"></script>
+    <script src="js/helpers.js?v=20260910"></script>
+    <script src="js/pricing.js?v=20260910"></script>
+    <script src="js/usage.js?v=20260910"></script>
+    <script src="js/ledger.js?v=20260910"></script>
+    <script src="js/sales.js?v=20260910"></script>
+    <script src="js/dashboard.js?v=20260910"></script>
+    <script src="js/calendar.js?v=20260910"></script>
+    <script src="js/csv.js?v=20260910"></script>
+    <script src="js/sync-ui.js?v=20260910"></script>
+    <script src="js/sample-data.js?v=20260910"></script>
+    <script src="js/inventory.js?v=20260910"></script>
+    <script src="js/customers.js?v=20260910"></script>
+    <script src="js/suppliers.js?v=20260910"></script>
+    <script src="js/tools.js?v=20260910"></script>
+    <script src="js/pan-timers.js?v=20260910"></script>
+    <script src="js/cash.js?v=20260910"></script>
+    <script src="js/companies.js?v=20260910"></script>
+    <script src="js/auth.js?v=20260910"></script>
+    <script src="js/cloud.js?v=20260910"></script>
+    <script src="js/ai.js?v=20260910"></script>
+    <script src="js/init.js?v=20260910"></script>
 
 </body>
 </html>
