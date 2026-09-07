@@ -263,18 +263,15 @@ $('savePurchaseBtn').addEventListener('click', function () {
     }
   });
   if (updated.length) {
-    var names = updated.map(function (u) { return u.name; }).join(', ');
-    if (confirm('The purchase price for ' + names + ' differs from your price list. Update the price list to the actual purchased price?')) {
-      updated.forEach(function (u) {
-        var ing = priceItemByName(u.name);
-        if (!ing) return;
-        if (!state.priceHistory) state.priceHistory = [];
-        state.priceHistory.push({ date: today(), name: u.name, old: Math.round(u.old), new: Math.round(u.neu) });
-        ing.price = Math.round(u.neu);
-      });
-      saveState();
-      showToast('Price list updated from purchase prices.');
-    }
+  updated.forEach(function (u) {
+    var ing = priceItemByName(u.name);
+    if (!ing) return;
+    if (!state.priceHistory) state.priceHistory = [];
+    state.priceHistory.push({ date: today(), name: u.name, old: Math.round(u.old), new: Math.round(u.neu) });
+    ing.price = Math.round(u.neu);
+  });
+  saveState();
+  updateGoogleSyncStatus('Price list updated from purchase prices.', 'success');
   }
   var msg = 'Purchase saved — stock added to inventory.';
   if (paidNow < itemTotal) msg += ' You owe ' + fmtKs(Math.round(itemTotal - paidNow)) + ' to the shop.';

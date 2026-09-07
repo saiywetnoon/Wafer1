@@ -434,6 +434,148 @@ function diffCollection(localArr, remoteArr) {
    device". ONE authoritative copy wins everywhere — decided by the user.
    `deviceInfo` (optional) names the browser/phone that saved the remote copy.
    Returns a status string for the caller. */
+/* ============================================================
+   AUTO-MERGE — hands-free sync (no popups, nothing to click).
+   ------------------------------------------------------------
+   When two devices both hold data that differs, the ledger rows are
+   merged ADDITIVELY by record id: each device's records are different
+   rows, so unioning them never loses anything. For the rare case where
+   the SAME record was edited on both devices, the copy with the newest
+   edit timestamp wins automatically. The result is pushed back to the
+   cloud so every device converges. This is what makes sync feel like
+   "it just works" — nothing ever pops up, nothing ever needs clicking. */
+function recordUnionKey(it) {
+  if (!it) return '';
+  if (it.id) return 'id:' + it.id;
+
+  if (it.name) return 'name:' + it.name;
+  if (it.date) return 'date:' + it.date;
+  if (it.ingredientName) return 'ing:' + it.ingredientName;
+
+ return JSON.stringify(it);
+}
+/* True when the remote copy of a same-record clash should win (newest edit). */
+function remoteWins(localIt, remoteIt) {
+  var tl = localIt ? Date.parse(localIt.updatedAt) : NaN;
+var tr = remoteIt ? Date.parse(remoteIt.updatedAt) : NaN;
+if (!isNaN(tl) && !isNaN(tr)) return tr > tl;
+if (!isNaN(tr)) return true;   // local is legacy (no stamp) → remote wins
+return false;                       // neither stamped → keep local (don't disturb the view
+}
+function mergeRows(localArr, remoteArr) {
+var localArr2 = Array.isArray(localArr) ? localArr : [];
+var remoteArr2 = Array.isArray(remoteArr) ? remoteArr : [];
+var out = localArr2.map(function (it) { return JSON.parse(JSON.stringify(it)); });
+var indexMap = {};
+out.forEach(function (it, i) { var k = recordUnionKey(it); if (k) indexMap[k] = i; });
+remoteArr2.forEach(function (rit) {
+  var k = recordUnionKey(rit);
+  if (!k) { out.push(JSON.parse(JSON.stringify(rit))); return; }
+  var i = indexMap[k];
+  if (i === undefined) {
+    out.push(JSON.parse(JSON.stringify(rit)));
+    indexMap[k] = out.length - 1;
+  } else if (JSON.stringify(out[i]) !== JSON.stringify(rit) && remoteWins(out[i], rit)) {
+    out[i] = JSON.parse(JSON.stringify(rit));
+  }
+});
+return out;
+}
+function mergeEntriesObj(localE, remoteE) {
+var out = Object.assign({}, localE || {});
+Object.keys(remoteE || {}).forEach(function (d) {
+  if (!(d in out)) out[d] = remoteE[d];
+  else if (JSON.stringify(out[d]) !== JSON.stringify(remoteE[d]) && remoteWins(out[d], remoteE[d])) out[d] = remoteE[d];
+});
+return out;
+}
+function mergeKeyedObj(localO, remoteO) {
+var out = Object.assign({}, localO || {});
+Object.keys(remoteO || {}).forEach(function (k) {
+  if (out[k] === undefined) out[k] = remoteO[k];
+  else if (JSON.stringify(out[k]) !== JSON.stringify(remoteO[k]) && remoteWins(out[k], remoteO[k])) out[k] = remoteO[k];
+});
+return out;
+}
+
+/* Merge a remote ledger into the CURRENT state,additively.
+   Returns true when anything actually changed. */
+function mergeRemoteIntoLocal(r) {
+  if (!r) return false;
+  var changed = false;
+
+  // Record collections — union by id (remote-only rows added; same-id
+  // clashes → newest edit wins automatically).
+  ['production', 'sales', 'customers', 'suppliers', 'purchases', 'payments',
+    'customerPayments', 'expenses', 'recurringExpenses', 'waste', 'recipes'].forEach(function (f) {
+    var merged = mergeRows(state[f] || [], r[f] || []);
+    if (JSON.stringify(merged) !== JSON.stringify(state[f] || [])) { state[f] = merged; changed = true; }
+  });
+
+  // Inventory movement ledger — reuse the existing id-dedupe merge.
+  if (Array.isArray(r.inventoryMovements) && r.inventoryMovements.length) {
+
+    var mm = (typeof mergeMovements === 'function')
+      ? mergeMovements(state.inventoryMovements || [], r.inventoryMovements)
+      : mergeRows(state.inventoryMovements || [], r.inventoryMovements);
+    if (JSON.stringify(mm) !== JSON.stringify(state.inventoryMovements || [])) { state.inventoryMovements = mm; changed = true; }
+  }
+  if (r.inventoryMovementVersion) {
+    var mv = Math.max(state.inventoryMovementVersion || 0, r.inventoryMovementVersion);
+    if (mv !== (state.inventoryMovementVersion || 0)) { state.inventoryMovementVersion = mv; changed = true; }
+  }
+
+  // Legacy daily entries (date-keyed object).
+  if (r.entries) {
+    var me = mergeEntriesObj(state.entries || {}, r.entries);
+    if (JSON.stringify(me) !== JSON.stringify(state.entries || {})) { state.entries = me; changed = true; }
+  }
+  // Price list (name-keyed array; union, new/edited prices win by the same rules).
+  if (Array.isArray(r.prices) && r.prices.length) {
+
+    var mp = mergeRows(state.prices || [], r.prices);
+    if (JSON.stringify(mp) !== JSON.stringify(state.prices || [])) { state.prices = mp; changed = true; }
+  }
+  // Settings — remote overrides keys it carries (keeps local extras).
+  if (r.settings && typeof r.settings === 'object') {
+    var ms = Object.assign({}, state.settings || {}, r.settings);
+    if (JSON.stringify(ms) !== JSON.stringify(state.settings || {})) { state.settings = ms; changed = true; }
+  }
+  // Inventory — union by ingredient (remote wins same-ingredient when newer/unknown).
+  if (r.inventory && typeof r.inventory === 'object') {
+    var mi = mergeKeyedObj(state.inventory || {}, r.inventory);
+    if (JSON.stringify(mi) !== JSON.stringify(state.inventory || {})) { state.inventory = mi; changed = true; }
+  }
+  // Cash drawer — opening + additive adjustments union.
+  if (r.cash) {
+    var lc = state.cash || { opening: 0, adjustments: [] };
+    var mc = {
+      opening: (r.cash.opening !== undefined) ? r.cash.opening : lc.opening,
+      adjustments: mergeRows(lc.adjustments || [], r.cash.adjustments || [])
+    };
+    if (JSON.stringify(mc) !== JSON.stringify(state.cash || {})) { state.cash = mc; changed = true; }
+  }
+  // Finished-good stock is DERIVED — recompute from the merged ledger.
+  if (typeof rebuildStockAndCogs === 'function') {
+    var beforeStock = JSON.stringify(state.stock || {});
+    try { rebuildStockAndCogs(); } catch (e) { /* best-effort */ }
+    if (JSON.stringify(state.stock || {}) !== beforeStock) changed = true;
+  }
+  // Synced production-form draft — keep the newest (or the only one).
+  if (r.draft !== undefined) {
+    var md;
+    if (!state.draft) md = (r.draft && typeof r.draft === 'object' && r.draft.date) ? JSON.parse(JSON.stringify(r.draft)) : null;
+    else if (!r.draft || typeof r.draft !== 'object' || !r.draft.date) md = JSON.parse(JSON.stringify(state.draft));
+    else {
+      var tdl = state.draft.capturedAt ? Date.parse(state.draft.capturedAt) : NaN;
+      var tdr = r.draft.capturedAt ? Date.parse(r.draft.capturedAt) : NaN;
+      md = (!isNaN(tdl) && !isNaN(tdr) && tdr > tdl) ? JSON.parse(JSON.stringify(r.draft)) : JSON.parse(JSON.stringify(state.draft));
+    }
+    if (JSON.stringify(md) !== JSON.stringify(state.draft || null)) { state.draft = md; changed = true; }
+  }
+  return changed;
+}
+
 function handleRemoteCopy(remoteState, remoteTs, source, deviceInfo) {
   if (!remoteState) return 'noop';
   if (statesEqual(state, remoteState)) return 'aligned';
@@ -462,32 +604,25 @@ function handleRemoteCopy(remoteState, remoteTs, source, deviceInfo) {
     return 'pulled';
   }
 
-  const fp = stateFingerprint(remoteState);
-  // Already accepted this exact copy → the remote is the official data; if this
-  // device has since made NEWER edits, those win (and will be pushed) instead of
-  // being reverted by an older echo.
-  if (wasSyncAccepted(fp)) {
+  // BOTH sides have data -> AUTO-MERGE additively. Hands-free — no modal,
+  // nothing to click. Local extras (new sales, edits not yet pushed) are
+  // always kept -> zero data loss, zero interruption..
+  const changed = mergeRemoteIntoLocal(remoteState);
+  if (changed) {
+    setCloudSyncSuppressed(true);
+    try { saveState(); } catch (e) {}
     try { cloudPush(); } catch (e) {}
-    return 'accepted';
-  }
-  // Already declined this exact copy → this device's data stays official.
-  if (wasSyncDeclined(fp)) {
-    try { cloudPush(); } catch (e) {}
-    if (typeof updateGoogleSyncStatus === 'function') updateGoogleSyncStatus(source + ': keeping this device’s copy (as you chose before).', 'info');
-    try { renderCloudStatus(); } catch (e) {}
-    return 'declined';
-  }
-
-  // Both sides have real data and differ -> ask the user which copy is official.
-  if (openSyncReview(remoteState, remoteTs || undefined, source, deviceInfo)) {
+    finally { setCloudSyncSuppressed(false); }
+    renderAll();
+    try { loadDraftIfNewer(); } catch (e) {}
     if (typeof updateGoogleSyncStatus === 'function') {
       const who = (typeof deviceLabelOf === 'function') ? deviceLabelOf(deviceInfo) : '';
-      updateGoogleSyncStatus((who ? 'Changed by ' + who + ' — ' : '') + 'choose which copy is the official one.', 'info');
+      updateGoogleSyncStatus(who ? 'Merged changes from ' + who + '.' : 'Merged changes from another device.', 'info');
     }
     try { renderCloudStatus(); } catch (e) {}
-    return 'review';
+    return 'merged';
   }
-  return 'noop';
+  return 'aligned';
 }
 
 /* Human-readable list of what a remote copy changes compared to local.
@@ -839,8 +974,8 @@ async function cloudAfterSignIn() {
   // loss). Only true same-record conflicts open the review modal, and a copy
   // the user already decided about is handled silently.
   const status = handleRemoteCopy(remoteState, remoteTs || undefined, 'Reconcile after sign-in', (remote && remote.device) || null);
-  if (status === 'review') {
-    updateGoogleSyncStatus('Online as ' + email + '. Choose which device’s data is the official copy.', 'info');
+  if (status === 'merged') {
+    updateGoogleSyncStatus('Online as ' + email + '. Merged changes from another device.', 'success');
   } else if (status === 'pushed') {
     updateGoogleSyncStatus('Online as ' + email + '. Uploaded this device’s data to the cloud.', 'success');
   } else if (status === 'pulled') {

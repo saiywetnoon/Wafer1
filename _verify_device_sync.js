@@ -110,14 +110,16 @@ function freshModalStub() {
 
   // 5) A DIFFERENT device's change still reaches the review flow with its identity.
   state = mkState(3, '2026-08-31T09:00:00Z');
-  const stub = freshModalStub();
+  freshModalStub();
   const other = getDeviceFact(); other.sessionId = 'sess-OTHER-DEVICE';
   syncReview.open = false; syncReview.current = null; syncReview.pending = null;
-  subCallback({ updated_at: '2026-08-31T12:00:02Z', payload: { device: other, state: echoState } });
-  ok(syncReview.open === true, 'a different device\\'s change opens the review modal');
-  ok(syncReview.current && syncReview.current.device && syncReview.current.device.sessionId === 'sess-OTHER-DEVICE', 'remote device identity is passed through into the modal');
-  ok(stub.devEl.textContent === other.label, 'modal names the exact device ("' + stub.devEl.textContent + '")');
-
+  const diffState = mkState(5, '2026-08-31T12:00:00Z');
+  state.production.push({ id: 'local-extra', date: '2026-09-01', pieces: 60, bags: 10, usage: { Flour: 100 }, capital: 9000, updatedAt: '2026-08-31T11:00:00Z' });
+  subCallback({ updated_at: '2026-08-31T12:00:02Z', payload: { device: other, state: diffState } });
+  ok(syncReview.open === false && syncReview.current === null, 'different-device change does NOT open a modal');
+  ok(state.production.length === 6, 'remote records merged hands-free (3 + p0..p4 + local-extra)');
+  ok(state.production.some(function (p) { return p.id === 'local-extra'; }), 'local-only record kept after merge');
+  ok(state.production.some(function (p) { return p.id === 'p4'; }), 'remote-only record p4 adopted');
   console.log(fail === 0 ? 'ALL DEVICE-IDENTITY CHECKS PASSED' : (fail + ' FAILED'));
 })();`;
 

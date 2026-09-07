@@ -261,14 +261,12 @@ async function cloudSyncNow() {
   // and is pushed to the cloud). Never silent overwrites.
   const remoteTs = (remote && remote.exportedAt) ? Date.parse(remote.exportedAt) : 0;
   const status = handleRemoteCopy(remoteState, remoteTs, 'Manual sync', (remote && remote.device) || null);
-  if (status === 'review') {
-    updateGoogleSyncStatus('Choose which device’s data is the official copy — review the pop-up.', 'info');
+  if (status === 'merged') {
+    updateGoogleSyncStatus('Merged changes from another device.', 'success');
   } else if (status === 'pushed') {
     updateGoogleSyncStatus('Synced — this device’s data uploaded to the cloud.', 'success');
-    showToast('Synced — this device’s data is now official.', 'success');
   } else if (status === 'pulled') {
     updateGoogleSyncStatus('Synced — loaded the cloud data onto this device.', 'success');
-    showToast('Synced — loaded the cloud data.', 'success');
   } else if (status === 'declined' || status === 'accepted') {
     updateGoogleSyncStatus('Synced — keeping the copy you chose before.', 'success');
   } else {

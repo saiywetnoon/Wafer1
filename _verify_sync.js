@@ -68,59 +68,30 @@ function resetReview() { syncReview.open = false; syncReview.current = null; syn
   ok(pushes === 0, 'fresh browser does NOT push its empty state over the cloud');
   ok(statuses.some(s => /Loaded your cloud data/.test(s)), 'status says cloud data loaded');
 
-  // Both sides have data and differ -> ALWAYS ask (no silent merge).
-  state = mkState(3, '2026-08-30T08:00:00Z');
-  state.suppliers.push({ id: 's1', name: 'Sun Market' });
-  const remote = mkState(5, '2026-08-31T12:00:00Z');
-  cloudBody = { ok: true, payload: payloadFromState(remote) };
+  // Both sides have data and differ -> auto-merge (tested below). No modal.
+
+  // Differing copies AUTO-MERGE (no modal, nothing to click).
+  state = mkState(3);
+  cloudBody = { ok: true, payload: payloadFromState(mkState(5)) };
   resetReview();
   await cloudAfterSignIn();
-  ok(syncReview.open === true, 'differing copies open the review modal (ask the user)');
-  ok(pushes === 0 && applied === 0, 'nothing pushed/applied while the review is pending');
-  ok(state.production.length === 3 && state.suppliers.length === 1, 'local copy untouched until the user decides');
-
-  // ACCEPT -> the OTHER device's data fully replaces this device and is pushed to cloud.
-  const acceptFp = stateFingerprint(remote);
-  syncReview.current = { state: remote, ts: 0, fp: acceptFp };
-  syncReview.open = true;
-  await resolveSyncReview(true);
-  ok(state.production.length === 5, 'ACCEPT replaces this device with the remote copy (5 records)');
-  ok(state.suppliers.length === 0, 'ACCEPT removes this device’s local-only supplier (remote is official)');
-  ok(pushes >= 1, 'ACCEPT pushes the accepted copy to the cloud');
-  ok(syncDecision(acceptFp) === 'accepted', 'ACCEPT decision persisted');
-
-  // RELOAD after ACCEPT -> never re-asks; later local edits survive.
-  state.sales.push({ id: 'x1', date: '2026-09-02', bags: 1, pieces: 6, price: 600, amount: 600, cogs: 0, avgCost: 0, net: 600 });
-  cloudBody = { ok: true, payload: payloadFromState(remote) };
+  ok(syncReview.open===false,'no modal opens');
+  ok(state.production.length===5,'remote-only records merged in');
+  
+  // Same-record clash: newest edit wins automatically.
+  state = mkState(2);
+  state.production[0].updatedAt='2026-08-31T10:00:00Z';
+  state.production[1].updatedAt='2026-08-31T09:00:00Z';
+  const clashRemote = mkState(2);
+  clashRemote.production[0].updatedAt='2026-08-31T08:00:00Z';
+  clashRemote.production[1].updatedAt='2026-08-31T14:00:00Z';
+  cloudBody = { ok: true, payload: payloadFromState(clashRemote) };
   resetReview();
   await cloudAfterSignIn();
-  ok(syncReview.open === false, 'an already-accepted copy never reopens the modal on refresh');
-  ok(state.sales.some(s => s.id === 'x1'), 'new local sale untouched after reload');
-
-  // KEEP MINE -> this device's data stays EXACTLY as-is and is uploaded to the cloud.
-  state = mkState(3, '2026-08-29T00:00:00Z');
-  state.suppliers.push({ id: 's1', name: 'Sun Market' });
-  const mineRemote = mkState(5, '2026-08-31T11:59:00Z');
-  mineRemote.suppliers.push({ id: 'r1', name: 'Fresh Mart' });
-  const declineFp = stateFingerprint(mineRemote);
-  cloudBody = { ok: true, payload: payloadFromState(mineRemote) };
-  resetReview();
-  await cloudAfterSignIn();
-  ok(syncReview.open === true, 'differing copies open the review modal again');
-  syncReview.current = { state: mineRemote, ts: 0, fp: declineFp };
-  syncReview.open = true;
-  await resolveSyncReview(false);
-  ok(state.production.length === 3, 'KEEP MINE does NOT replace local with the remote copy');
-  ok(state.suppliers.length === 1 && state.suppliers[0].name === 'Sun Market', 'KEEP MINE keeps local supplier and does NOT import remote-only supplier');
-  ok(pushes >= 1, 'KEEP MINE uploads this device’s data to the cloud (official)');
-  ok(syncDecision(declineFp) === 'declined', 'KEEP MINE decision persisted');
-
-  // RELOAD after KEEP MINE -> never re-asks, pushes local again.
-  cloudBody = { ok: true, payload: payloadFromState(mineRemote) };
-  resetReview();
-  await cloudAfterSignIn();
-  ok(syncReview.open === false, 'a keep-mine copy never reopens the modal on refresh');
-  ok(state.suppliers.length === 1, 'keep-mine official copy is preserved after reload');
+  const p0After = state.production.find(function (p) { return p.id === 'p0'; });
+  const p1After = state.production.find(function (p) { return p.id === 'p1'; });
+  ok(p0After.updatedAt==='2026-08-31T10:00:00Z','clash: local newer edit kept');
+  ok(p1After.updatedAt==='2026-08-31T14:00:00Z','clash: remote newer edit adopted');
 
   // Phantom stock difference (stored snapshots differ but derived stock equal) -> aligned.
   state = mkState(5, '2026-08-31T12:00:00Z');
