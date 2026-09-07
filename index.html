@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" data-build="v1.11.9">
+<html lang="en" class="dark" data-build="v1.11.11">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -884,6 +884,11 @@ tailwind.config = {
           <span class="text-[10px] text-gray-500">unpaid shown in red</span>
         </div>
         <div id="purchaseHistory" class="text-xs text-gray-400 max-h-72 overflow-y-auto scrollbar-thin"></div>
+        <div class="mb-2 mt-4 flex items-center gap-2">
+          <span class="font-bold text-gray-300 text-sm">Payment History</span>
+          <span class="text-[10px] text-gray-500">money paid to shops</span>
+        </div>
+        <div id="paymentHistory" class="text-xs text-gray-400 max-h-44 overflow-y-auto scrollbar-thin"></div>
       </div>
     </div>
   </section>
@@ -1344,8 +1349,14 @@ tailwind.config = {
       <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="refresh-cw" class="w-5 h-5 text-sky-400"></i> Change From Another Device</h3>
       <span id="syncReviewTs" class="text-[10px] text-gray-500 whitespace-nowrap"></span>
     </div>
+    <div class="px-5 pt-3 pb-0">
+      <div class="flex items-center gap-1.5 text-[11px] text-sky-300">
+        <i id="syncReviewDeviceIcon" data-lucide="laptop" class="w-3.5 h-3.5 shrink-0"></i>
+        <span>Changed by <b id="syncReviewDevice" class="text-sky-200">…</b></span>
+      </div>
+    </div>
     <div class="px-5 py-4">
-      <p class="text-xs text-gray-400 mb-2">Your other device has different data. Choose which copy is the <b class="text-gray-300">official</b> one — your choice is synced to the cloud for every device. Nothing is merged.</p>
+      <p class="text-xs text-gray-400 mb-2">That device's copy differs from this one. Choose which copy is the <b class="text-gray-300">official</b> one — your choice is synced to the cloud for every device. Nothing is merged.</p>
       <div id="syncReviewDiff" class="rounded-xl bg-gray-950/60 border border-gray-800 px-3 py-1 max-h-[48vh] overflow-y-auto scrollbar-thin text-xs"></div>
       <div class="mt-3 text-[11px] text-gray-500 leading-snug">
         <span class="text-emerald-400 font-semibold">Accept</span> — the other device's data replaces this device's and becomes official everywhere.<br>
@@ -1465,31 +1476,32 @@ tailwind.config = {
 </div>
 
 
-    <script src="js/config.js?v=20260916"></script>
-    <script src="js/supabase.js?v=20260916"></script>
-    <script src="js/storage.js?v=20260916"></script>
-    <script src="js/google.js?v=20260916"></script>
-    <script src="js/helpers.js?v=20260916"></script>
-    <script src="js/pricing.js?v=20260916"></script>
-    <script src="js/usage.js?v=20260916"></script>
-    <script src="js/ledger.js?v=20260916"></script>
-    <script src="js/sales.js?v=20260916"></script>
-    <script src="js/dashboard.js?v=20260916"></script>
-    <script src="js/calendar.js?v=20260916"></script>
-    <script src="js/csv.js?v=20260916"></script>
-    <script src="js/sync-ui.js?v=20260916"></script>
-    <script src="js/sample-data.js?v=20260916"></script>
-    <script src="js/inventory.js?v=20260916"></script>
-    <script src="js/customers.js?v=20260916"></script>
-    <script src="js/suppliers.js?v=20260916"></script>
-    <script src="js/tools.js?v=20260916"></script>
-    <script src="js/pan-timers.js?v=20260916"></script>
-    <script src="js/cash.js?v=20260916"></script>
-    <script src="js/companies.js?v=20260916"></script>
-    <script src="js/auth.js?v=20260916"></script>
-    <script src="js/cloud.js?v=20260916"></script>
-    <script src="js/ai.js?v=20260916"></script>
-    <script src="js/init.js?v=20260916"></script>
+    <script src="js/config.js?v=20260918"></script>
+    <script src="js/device.js?v=20260918"></script>
+    <script src="js/supabase.js?v=20260918"></script>
+    <script src="js/storage.js?v=20260918"></script>
+    <script src="js/google.js?v=20260918"></script>
+    <script src="js/helpers.js?v=20260918"></script>
+    <script src="js/pricing.js?v=20260918"></script>
+    <script src="js/usage.js?v=20260918"></script>
+    <script src="js/ledger.js?v=20260918"></script>
+    <script src="js/sales.js?v=20260918"></script>
+    <script src="js/dashboard.js?v=20260918"></script>
+    <script src="js/calendar.js?v=20260918"></script>
+    <script src="js/csv.js?v=20260918"></script>
+    <script src="js/sync-ui.js?v=20260918"></script>
+    <script src="js/sample-data.js?v=20260918"></script>
+    <script src="js/inventory.js?v=20260918"></script>
+    <script src="js/customers.js?v=20260918"></script>
+    <script src="js/suppliers.js?v=20260918"></script>
+    <script src="js/tools.js?v=20260918"></script>
+    <script src="js/pan-timers.js?v=20260918"></script>
+    <script src="js/cash.js?v=20260918"></script>
+    <script src="js/companies.js?v=20260918"></script>
+    <script src="js/auth.js?v=20260918"></script>
+    <script src="js/cloud.js?v=20260918"></script>
+    <script src="js/ai.js?v=20260918"></script>
+    <script src="js/init.js?v=20260918"></script>
 
 </body>
 </html>

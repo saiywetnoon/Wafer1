@@ -260,7 +260,7 @@ async function cloudSyncNow() {
   // OFFICIAL (Accept = other device's data; Keep Mine = this device's data wins
   // and is pushed to the cloud). Never silent overwrites.
   const remoteTs = (remote && remote.exportedAt) ? Date.parse(remote.exportedAt) : 0;
-  const status = handleRemoteCopy(remoteState, remoteTs, 'Manual sync');
+  const status = handleRemoteCopy(remoteState, remoteTs, 'Manual sync', (remote && remote.device) || null);
   if (status === 'review') {
     updateGoogleSyncStatus('Choose which device’s data is the official copy — review the pop-up.', 'info');
   } else if (status === 'pushed') {

@@ -35,6 +35,7 @@ function renderSuppliers() {
   renderSupplierDropdowns();
   renderSupplierList();
   renderPurchaseHistory();
+  renderPaymentHistory();
   var d = $('purchaseDate'); if (d) d.value = d.value || today();
   var t = $('totalPayable'); if (t) t.textContent = fmtKs(totalPayable());
   var r = $('netReceivable'); if (r) r.textContent = fmtKs(totalReceivable());
@@ -85,12 +86,37 @@ function renderPurchaseHistory() {
     var items = (p.items || []).map(function (it) { return it.qty + ' × ' + it.name; }).join(', ');
     return '<div class="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-gray-700 last:border-0">' +
       '<div class="min-w-0"><div class="font-semibold text-gray-300">' + esc(p.date) + ' — ' + esc(sup) + '</div>' +
+      (p.createdAt ? '<div class="text-[10px] text-gray-500">Logged ' + esc(fmtDateTime(p.createdAt)) + '</div>' : '') +
       '<div class="text-gray-500 truncate">' + esc(items) + '</div>' +
       '<div class="text-gray-500">Total ' + fmtKs(p.itemTotal) + ' · Paid ' + fmtKs(paid) + '</div></div>' +
       '<div class="text-right shrink-0"><div class="' + (bal > 0 ? 'text-red-400 font-bold' : 'text-emerald-400 font-bold') + '">' + fmtKs(bal) + '</div></div>' +
       '</div>';
   }).join('');
 }
+
+/* Payment history — every payment made to a shop, newest first, with
+   the exact time it was recorded (older records show only the business date). */
+function renderPaymentHistory() {
+  var his = $('paymentHistory');
+  if (!his) return;
+  var payments = (state.payments || []).slice().sort(function (a, b) {
+    var ta = Date.parse(a.createdAt) || Date.parse(a.date + 'T12:00:00') || 0;
+    var tb = Date.parse(b.createdAt) || Date.parse(b.date + 'T12:00:00') || 0;
+    return tb - ta;
+  });
+  if (!payments.length) { his.innerHTML = '<div class="py-3 text-center text-gray-500">No payments recorded yet. Use the form above to pay a shop.</div>'; return; }
+  his.innerHTML = payments.map(function (p) {
+    var sup = supplierName(p.supplierId);
+    var when = p.createdAt ? fmtDateTime(p.createdAt) : (p.date ? fmtDateTime(p.date + 'T12:00:00') : '');
+    return '<div class="flex flex-wrap items-center justify-between gap-2 py-1.5 border-b border-gray-700 last:border-0">' +
+      '<div class="min-w-0"><div class="font-semibold text-gray-300">' + esc(sup) + '</div>' +
+      (when ? '<div class="text-[10px] text-gray-500">' + esc(when) + '</div>' : '') +
+      '</div>' +
+      '<div class="text-right shrink-0 font-semibold text-emerald-400">' + fmtKs(p.amount) + '</div>' +
+      '</div>';
+  }).join('');
+}
+
 /* ---------- Add / delete supplier ---------- */
 $('addSupplierBtn').addEventListener('click', function () {
   var name = validateText($('supplierName'));
@@ -209,6 +235,7 @@ $('savePurchaseBtn').addEventListener('click', function () {
       type: 'purchase', reason: 'Supplier purchase', referenceId: purchaseId });
   });
   if (!state.purchases) state.purchases = [];
+  var purchaseNowIso = new Date().toISOString();
   state.purchases.push({
     id: purchaseId,
     supplierId: supplierId,
@@ -216,7 +243,9 @@ $('savePurchaseBtn').addEventListener('click', function () {
     items: items,
     itemTotal: Math.round(itemTotal),
     paidNow: Math.round(paidNow),
-    note: ''
+    note: '',
+    createdAt: purchaseNowIso,
+    updatedAt: purchaseNowIso
   });
   saveState();
   renderAll();
@@ -279,7 +308,7 @@ $('recordSupplierPaymentBtn').addEventListener('click', function () {
       remaining -= apply;
     });
   if (!state.payments) state.payments = [];
-  state.payments.push({ id: uid(), supplierId: supplierId, date: date, amount: Math.round(amount) });
+  state.payments.push({ id: uid(), supplierId: supplierId, date: date, amount: Math.round(amount), createdAt: new Date().toISOString() });
   saveState();
   renderSuppliers();
   $('supplierPaymentAmount').value = '';

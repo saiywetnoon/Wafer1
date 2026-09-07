@@ -118,7 +118,12 @@ function stateDataCount(s) {
 
 /* Edits arriving from another device (realtime).
    Professional behaviour:
-   - Ignore echoes of THIS device's own writes (no re-render, no message).
+   - Ignore echoes of THIS tab's own writes (no re-render, no message).
+     Content comparison alone races while typing: an echo of an earlier
+     push arrives after newer local edits, looks "different", and popped
+     the "Change From Another Device" modal on the very browser that made
+     the change. The per-tab session id stamped on every push is the
+     reliable signal — if WE pushed it, the change is already local.
    - NEVER silently replace a different local copy. Pop the sync-review modal so
      the user sees exactly what changed and chooses Accept / Decline.
    - No toast spam — the modal (or a quiet status line) is the notification. */
@@ -127,10 +132,12 @@ function supabaseUpdate(uid) {
   SUPA.subscribeRealtime(uid, function (row) {
     if (!row || !row.payload || !row.payload.state) return;
     const remoteTs = Date.parse(row.updated_at) || 0;
-    // Echoes of our own writes are ignored inside handleRemoteCopy via
-    // statesEqual. Anything genuinely different gets MERGED (additive — no data
-    // loss); only true same-record conflicts open the review modal.
-    handleRemoteCopy(row.payload.state, remoteTs, 'Your other device just saved changes');
+    const dev = row.payload.device || null;
+    // Same-tab echo: this browser pushed this exact write a moment ago.
+    if (dev && dev.sessionId && typeof getSessionId === 'function' && dev.sessionId === getSessionId()) return;
+    // Anything genuinely different gets MERGED (additive — no data loss);
+    // only true same-record conflicts open the review modal.
+    handleRemoteCopy(row.payload.state, remoteTs, 'Your other device just saved changes', dev);
   });
 }
 function supabaseWatch(uid) { supabaseUpdate(uid); }
@@ -151,7 +158,7 @@ function startCloudPolling() {
       const remoteTs = remote.exportedAt ? Date.parse(remote.exportedAt) : 0;
       // Differs -> merge additively (no data loss); true conflicts go to the
       // review modal. Already-decided copies are handled silently.
-      handleRemoteCopy(remote.state, remoteTs || undefined, 'Background sync');
+      handleRemoteCopy(remote.state, remoteTs || undefined, 'Background sync', (remote && remote.device) || null);
     } catch (e) { /* poll is best-effort */ }
   }, 60000);
 }
@@ -425,8 +432,9 @@ function diffCollection(localArr, remoteArr) {
 
 /* The single entry point for "another copy exists that differs from this
    device". ONE authoritative copy wins everywhere — decided by the user.
+   `deviceInfo` (optional) names the browser/phone that saved the remote copy.
    Returns a status string for the caller. */
-function handleRemoteCopy(remoteState, remoteTs, source) {
+function handleRemoteCopy(remoteState, remoteTs, source, deviceInfo) {
   if (!remoteState) return 'noop';
   if (statesEqual(state, remoteState)) return 'aligned';
 
@@ -471,8 +479,11 @@ function handleRemoteCopy(remoteState, remoteTs, source) {
   }
 
   // Both sides have real data and differ -> ask the user which copy is official.
-  if (openSyncReview(remoteState, remoteTs || undefined, source)) {
-    if (typeof updateGoogleSyncStatus === 'function') updateGoogleSyncStatus(source + ': choose which device’s data is the official copy.', 'info');
+  if (openSyncReview(remoteState, remoteTs || undefined, source, deviceInfo)) {
+    if (typeof updateGoogleSyncStatus === 'function') {
+      const who = (typeof deviceLabelOf === 'function') ? deviceLabelOf(deviceInfo) : '';
+      updateGoogleSyncStatus((who ? 'Changed by ' + who + ' — ' : '') + 'choose which copy is the official one.', 'info');
+    }
     try { renderCloudStatus(); } catch (e) {}
     return 'review';
   }
@@ -569,24 +580,30 @@ function syncReviewTimeText(ts) {
 /* Open the accept / keep-mine decision modal. The user picks which copy is the
    OFFICIAL ledger: Accept → the other device's data replaces this one; Keep Mine
    → this device's data stays and is uploaded to the cloud. A copy the user
-   already decided about (this session or a previous reload) never reopens. */
-function openSyncReview(remoteState, remoteTs, source) {
+   already decided about (this session or a previous reload) never reopens.
+   `deviceInfo` names the exact browser/phone that saved the remote copy. */
+function openSyncReview(remoteState, remoteTs, source, deviceInfo) {
   if (!remoteState || typeof document === 'undefined') return false;
   var fp = stateFingerprint(remoteState);
   if (wasSyncDeclined(fp) || wasSyncAccepted(fp)) return false; // already answered
   var modal = document.getElementById('syncReviewModal');
   if (!modal) return false;
   if (syncReview.open) {
-    syncReview.pending = { state: remoteState, ts: remoteTs || 0, source: source || '' };
+    syncReview.pending = { state: remoteState, ts: remoteTs || 0, source: source || '', device: deviceInfo || null };
     return false;
   }
   syncReview.open = true;
-  syncReview.current = { state: remoteState, ts: remoteTs || 0, source: source || '', fp: fp };
+  syncReview.current = { state: remoteState, ts: remoteTs || 0, source: source || '', fp: fp, device: deviceInfo || null };
   try {
     var diffEl = document.getElementById('syncReviewDiff');
     if (diffEl) diffEl.innerHTML = buildSyncDiffHtml(state, remoteState);
     var tsEl = document.getElementById('syncReviewTs');
     if (tsEl) tsEl.textContent = syncReviewTimeText(remoteTs) || 'just now';
+    // Name the exact device that saved this copy ("Chrome · Windows (PC)").
+    var devEl = document.getElementById('syncReviewDevice');
+    if (devEl) devEl.textContent = (typeof deviceLabelOf === 'function' ? deviceLabelOf(deviceInfo) : '') || 'unknown device';
+    var devIcon = document.getElementById('syncReviewDeviceIcon');
+    if (devIcon) devIcon.setAttribute('data-lucide', (deviceInfo && deviceInfo.kind === 'phone') ? 'smartphone' : 'laptop');
     modal.classList.remove('hidden');
   } catch (e) {
     syncReview.open = false;
@@ -659,7 +676,7 @@ async function resolveSyncReview(accepted) {
   if (syncReview.pending) {
     var p = syncReview.pending;
     syncReview.pending = null;
-    setTimeout(function () { handleRemoteCopy(p.state, p.ts, p.source); }, 80);
+    setTimeout(function () { handleRemoteCopy(p.state, p.ts, p.source, p.device); }, 80);
   }
 }
 
@@ -821,7 +838,7 @@ async function cloudAfterSignIn() {
   // Both sides have real data and the copies differ — merge additively (no data
   // loss). Only true same-record conflicts open the review modal, and a copy
   // the user already decided about is handled silently.
-  const status = handleRemoteCopy(remoteState, remoteTs || undefined, 'Reconcile after sign-in');
+  const status = handleRemoteCopy(remoteState, remoteTs || undefined, 'Reconcile after sign-in', (remote && remote.device) || null);
   if (status === 'review') {
     updateGoogleSyncStatus('Online as ' + email + '. Choose which device’s data is the official copy.', 'info');
   } else if (status === 'pushed') {

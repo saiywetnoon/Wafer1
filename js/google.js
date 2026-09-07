@@ -57,6 +57,11 @@ function toGooglePayload() {
   return {
     app: 'daily-crispy-roll-ledger',
     exportedAt: new Date().toISOString(),
+    /* Who wrote this copy — browser id + exact tab session + a
+       human label ("Chrome · Windows (PC)"). Lets the sync engine
+       ignore this tab's own realtime echo and name the real device
+       in the "Change From Another Device" modal. */
+    device: (typeof getDeviceFact === 'function') ? getDeviceFact() : null,
     state
   };
 }

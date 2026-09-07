@@ -140,7 +140,7 @@ function adjustCustomerDebt(direction) {
     // lowers the ledger balance — extraDebt (the manual baseline) is left alone
     // so the authoritative recompute in normalizeCustomerBalances() stays exact.
     if (!state.customerPayments) state.customerPayments = [];
-    state.customerPayments.push({ id: uid(), customerId: id, date: today(), amount: Math.round(appliedAmount) });
+    state.customerPayments.push({ id: uid(), customerId: id, date: today(), amount: Math.round(appliedAmount), createdAt: new Date().toISOString() });
   } else {
     // Manual "debt added" charge — tracked on the baseline so it survives the
     // authoritative recompute in normalizeCustomerBalances().

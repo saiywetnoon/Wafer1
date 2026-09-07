@@ -151,7 +151,7 @@ function resetReview() { syncReview.open = false; syncReview.current = null; syn
 })();`;
 
 
-const src = read('config.js') + '\n' + read('storage.js') + '\n' +
+const src = read('config.js') + '\n' + read('device.js') + '\n' + read('storage.js') + '\n' +
   read('helpers.js') + '\n' + read('cloud.js') + '\n' + TEST_BODY;
 
 eval(src);
