@@ -157,24 +157,43 @@ function renderExpenses() {
   if (!expenses.length) { list.textContent = 'No one-time expenses recorded.'; return; }
   const total = expenses.reduce(function (s, e) { return s + (e.amount || 0); }, 0);
   list.innerHTML = expenses.slice().reverse().map(function (e) {
-    return '<div class="flex justify-between py-1 border-b border-gray-700 last:border-0"><span>' + esc(e.date) + ' · ' + esc(e.desc) + '</span><span class="text-red-400 font-semibold">' + fmtKs(e.amount) + '</span></div>';
+    const cat = e.category || 'Other';
+    const del = e.id ? '<button onclick="removeExpense(\'' + e.id + '\')" class="text-red-500 hover:text-red-400" title="Delete this expense"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>' : '';
+    return '<div class="flex items-center justify-between gap-2 py-1 border-b border-gray-700 last:border-0">' +
+      '<span class="min-w-0 truncate" title="' + esc(e.desc) + '"><span class="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-purple-500/15 border-purple-500/40 text-purple-300 mr-1">' + esc(cat) + '</span>' + esc(e.date) + ' · ' + esc(e.desc) + '</span>' +
+      '<span class="flex items-center gap-2 shrink-0"><span class="text-red-400 font-semibold">' + fmtKs(e.amount) + '</span>' + del + '</span></div>';
   }).join('') + '<div class="flex justify-between pt-2 font-bold"><span>Total</span><span class="text-red-400">' + fmtKs(total) + '</span></div>';
+  lucide.createIcons();
 }
 
 $('addExpenseBtn').addEventListener('click', function () {
   const date = $('expenseDate').value || today();
   const amount = parseFloat($('expenseAmount').value);
   const desc = $('expenseDesc').value.trim();
+  const category = $('expenseCategory') ? $('expenseCategory').value : 'Other';
   if (isNaN(amount) || amount <= 0) { showToast('Enter a valid amount.', 'error'); return; }
   if (!desc) { showToast('Enter a description.', 'error'); return; }
   if (!state.expenses) state.expenses = [];
-  state.expenses.push({ date: date, amount: amount, desc: desc });
+  state.expenses.push({ id: uid(), date: date, amount: amount, desc: desc, category: category });
   saveState();
   renderExpenses();
   $('expenseAmount').value = '';
   $('expenseDesc').value = '';
+  $('expenseCategory').value = 'Other';
   showToast('Expense added.');
 });
+
+function removeExpense(id) {
+  if (!confirm('Delete this expense?')) return;
+  const before = (state.expenses || []).length;
+  state.expenses = (state.expenses || []).filter(function (e) { return e.id !== id; });
+  if (state.expenses.length === before) { showToast('Expense not found.', 'error'); return; }
+  saveState();
+  renderExpenses();
+  if (typeof renderCash === 'function') renderCash();
+  if (typeof renderDashboard === 'function') renderDashboard();
+  showToast('Expense removed.');
+}
 
 /* ---------- Recurring Monthly Expenses ---------- */
 function renderRecurring() {

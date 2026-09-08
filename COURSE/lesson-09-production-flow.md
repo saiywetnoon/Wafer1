@@ -1,3 +1,4 @@
+> 🧒 **New to coding?** The whole course explained like you're 10 lives in [lesson-00-plain-english.md](lesson-00-plain-english.md) — read it first (no quizzes, come back here after.
 # Lesson 09 — The daily flow: production, packing, sales
 
 > Now we put it all together with the REAL business pipeline of your app:

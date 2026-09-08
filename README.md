@@ -300,6 +300,13 @@ configured in `js/config.js`, Supabase is the active backend.
   (sales + customer payments + manual adjustments in, minus stock paid, supplier
   payments, one-time expenses, labor, withdrawals out). Manual cash in/out for
   loans, owner draws, bank deposits, etc.
+- **Money Out — spent today & why** (`js/moneyout.js` pure aggregator
+  backed by panels in `js/cash.js`): every outward item per day — production
+  materials, labor, stock purchases paid, supplier payments, one-time
+  expenses and cash-out adjustments — grouped by category,, with the reason for
+  each. Today's card in Dashboard + a full date-filterable panel in the Cash
+  tab; expenses and cash-out adjustments can be deleted inline; one-time
+  expenses now carry a category..
 - **Recurring monthly costs** (Business Tools): fixed bills (rent, internet)
   auto-deducted from the monthly profit report.
 - **Monthly report now shows true profit**: subtracts one-time expenses, waste

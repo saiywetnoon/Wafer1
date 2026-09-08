@@ -23,6 +23,7 @@ approved account's data kept private.
 | Customers and debt | 🟡 | Customer records, standing orders, debt, and capped repayments exist; sales are not yet linked to customers. |
 | Suppliers and purchases | 🟡 | Supplier records, purchases, and payments exist; inventory movements are not fully unified. |
 | Cash drawer | ✅ | Opening cash, adjustments, debt repayments, expenses, and supplier payments feed cash reporting. |
+| Money-out detail (today's spend & why) | ✅ | Money Out panel in Cash (any day) + Today's card in Dashboard; every outward item per day, grouped by category with the reason for each; one-time expenses are categorized; expenses/cash-outs deletable inline. |
 | Production workflow | ✅ | Mix-first recording: ingredients saved before packaging, expected rolls estimated, actual bags/pieces updated in place after packing (no double deduction). |
 | AI root cause | ✅ | On-device diagnostic engine (yield, weight, labor, cost, waste, recipe, notes) + optional ChatGPT/DeepSeek narrative. |
 | Backups | 🟡 | Download/restore backup exists; automatic server-side version history does not. |
@@ -140,6 +141,14 @@ Legend: ✅ complete · 🟡 usable but incomplete · ⬜ not started
 - [ ] A mix-only (packing-pending) day reports no misleading findings.
 - [ ] The LLM prompt contains aggregate numbers only (no customer data).
 - [ ] Everything works offline with no API key.
+
+### 10. Money-out detail (what you spent today & why)
+
+- [x] **Money Out** panel in the Cash tab: a day picker, total-per-day, category chips, and itemized rows — each row shows the category, the reason ("why"),and the amount.
+- [x] Every outward item is aggregated per day: production materials, labor, stock purchases paid, supplier payments, one-time expenses and cash-out adjustments.
+- [x] **Today's Money Out** card in Dashboard (compact, latest 10 items) with a jump-to-Cash-tab button.
+- [x] One-time expenses carry a category (Equipment, Transport, Rent & Bills, Packaging, Raw Materials, Fuel & Energy, Marketing, Other)and can be deleted (including inline from the Money Out panel)。
+- [x] Node harness `_verify_money_out.js` covers per-day grouping, categories, legacy-expense fallback, deletable flags, per-month totals,anded empty-day behavior.
 
 ## Following release — Daily operations
 

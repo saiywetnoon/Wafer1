@@ -1,3 +1,4 @@
+> 🧒 **New to coding?** The whole course explained like you're 10 lives in [lesson-00-plain-english.md](lesson-00-plain-english.md) — read it first (no quizzes, come back here after.
 # Lesson 15 — Debugging: reading the machine's mind
 
 > A feature is broken. Now what? Real programming is mostly this. This lesson

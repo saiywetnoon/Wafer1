@@ -105,6 +105,8 @@ function renderCash() {
     }).join('') : '<div class="text-gray-500">No manual adjustments yet.</div>';
     lucide.createIcons();
   }
+  if ($('moneyOutDate') && !$('moneyOutDate').value) $('moneyOutDate').value = today();
+  renderMoneyOutList({ listId: 'moneyOutList', totalEl: 'moneyOutTotal', chipsEl: 'moneyOutChips', date: moneyOutDateValue() });
   renderCashCount();
 }
 
@@ -189,3 +191,85 @@ window.CashHooks = {
     return variance;
   }
 };
+
+/* ============================================================
+   MONEY OUT PANEL — itemized, categorized day-spend view.
+
+   Backed by moneyOutForDay()/moneyOutForMonth() in js/moneyout.js
+   (pure, DOM-free logic); this file owns the DOM rendering. Every
+   outward row shows its category badge, the reason ("why"), and
+   its amount; expenses and cash-out adjustments can be deleted here
+   (production/purchases/payments are managed on their own tabs).)
+   ============================================================ */
+
+function moneyOutDateValue() {
+  var el = $('moneyOutDate');
+  return (el && el.value) ? el.value : today();
+}
+
+function moneyOutRowHtml(r) {
+  var t = moneyOutType(r.type);
+  var refId = (r.deletable && r.ref && r.ref.id) ? String(r.ref.id).replace(/'/g, '').replace(/"/g, '') : '';
+  var delBtn = refId ? '<button onclick="deleteMoneyOutRow(\'' + r.type + '\',\'' + refId + '\')" class="text-red-500 hover:text-red-400" title="Delete this item"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>' : '';
+  return '<div class="flex items-start justify-between gap-2 py-1.5 border-b border-gray-700 last:border-0">' +
+    '<div class="min-w-0">' +
+      '<div class="flex items-center gap-1.5 flex-wrap"><span class="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ' + t.chip + '">' + t.label + '</span>' +
+      '<span class="text-xs font-semibold text-gray-200">' + esc(r.label) + '</span></div>' +
+      (r.detail ? '<div class="text-[10px] text-gray-500 truncate" title="' + esc(r.detail) + '">' + esc(r.detail) + '</div>' : '') +
+    '</div>' +
+    '<div class="flex items-center gap-2 shrink-0"><span class="text-xs font-bold text-red-400">' + fmtKs(r.amount) + '</span>' + delBtn + '</div></div>';
+}
+
+/* Render one money-out list into a container.
+   opts: { listId, totalEl?, chipsEl?, date?, maxRows?, emptyLabel? } */
+function renderMoneyOutList(opts) {
+  opts = opts || {};
+  var el = $(opts.listId); if (!el) return;
+  var dateStr = opts.date || today();
+  var d = moneyOutForDay(dateStr);
+  if (opts.totalEl) { var tel = $(opts.totalEl); if (tel) tel.textContent = fmtKs(d.total); }
+  if (opts.chipsEl) {
+
+    var cel = $(opts.chipsEl);
+    if (cel) {
+      var keys = Object.keys(MONEY_OUT_TYPES).filter(function (k) { return (d.byCategory[k] || 0) > 0; });
+      cel.innerHTML = keys.length ? keys.map(function (k) {
+        var t = moneyOutType(k);
+        return '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + t.chip + '">' + t.label + ' · ' + fmtKs(d.byCategory[k]) + '</span>';
+      }).join('') : '<span class="text-[10px] text-gray-500">No spending that day.</span>';
+    }
+  }
+  var maxRows = opts.maxRows || 0;
+  var shown = maxRows > 0 && d.rows.length > maxRows ? d.rows.slice(0, maxRows) : d.rows;
+
+  el.innerHTML = shown.length ? shown.map(moneyOutRowHtml).join('') +
+    (d.rows.length > shown.length ? '<div class="text-[10px] text-gray-500 pt-1">+' + (d.rows.length - shown.length) + ' more — open the Cash tab for the full list</div>' : '')
+    : '<div class="text-xs text-gray-500 py-1">' + (opts.emptyLabel || ('Nothing went out on ' + esc(dateStr) + ' — log a production batch, purchase, expense or cash-out.')) + '</div>';
+  lucide.createIcons();
+}
+
+/* Today's Money Out card on the Dashboard (compact). */
+function renderMoneyOutTodayDash() {
+  renderMoneyOutList({
+    listId: 'moneyOutTodayList',
+    totalEl: 'moneyOutTodayTotal',
+    chipsEl: 'moneyOutTodayChips',
+    date: today(),
+    maxRows: 10,
+    emptyLabel: 'No money out today yet — log a production batch, purchase, expense or cash-out to see it here.'
+  });
+}
+
+/* Delete an outgoing row that supports inline deletion (expense, cash-out). */
+function deleteMoneyOutRow(type, id) {
+  if (type === 'expense') { if (typeof removeExpense !== 'function') return; removeExpense(id); }
+  else if (type === 'cashout') { removeCashAdjustment(id); }
+  else return;
+  // Re-render both money-out surfaces (dashboard card + cash panel)。
+  renderMoneyOutTodayDash();
+  renderMoneyOutList({ listId: 'moneyOutList', totalEl: 'moneyOutTotal', chipsEl: 'moneyOutChips', date: moneyOutDateValue() });
+}
+
+$('moneyOutDate').addEventListener('change', function () {
+  renderMoneyOutList({ listId: 'moneyOutList', totalEl: 'moneyOutTotal', chipsEl: 'moneyOutChips', date: moneyOutDateValue() });
+});

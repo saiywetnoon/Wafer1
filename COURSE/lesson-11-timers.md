@@ -1,3 +1,4 @@
+> 🧒 **New to coding?** The whole course explained like you're 10 lives in [lesson-00-plain-english.md](lesson-00-plain-english.md) — read it first (no quizzes, come back here after.
 # Lesson 11 — Timers & real-time state
 
 > The frying-pan timers are one of the coolest parts of this app — and the

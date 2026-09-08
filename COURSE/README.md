@@ -8,6 +8,8 @@
 
 Each lesson is **1 hour-ish**. Do them in order. For each:
 
+0. **Just starting out?** Read [Lesson 00 — Plain English overview](lesson-00-plain-english.md) first — the whole course in everyday words, the characters (assistant, guard, packer…), no quizzes. Come back here after.
+
 1. **Read** the lesson, opening each referenced file as you go.
 2. **Open the snippets** and trace them yourself in VS Code (Ctrl+Click the
    function name to jump to its definition).

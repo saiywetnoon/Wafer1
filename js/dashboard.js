@@ -56,6 +56,7 @@ function renderDashboard() {
   renderSummary(entriesProdSales());
   renderMonthlyReport();
   renderDashboardAlerts();
+  if (typeof renderMoneyOutTodayDash === 'function') renderMoneyOutTodayDash();
 }
 // @@DASH2@@
 

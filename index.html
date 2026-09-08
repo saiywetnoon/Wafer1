@@ -517,6 +517,20 @@ tailwind.config = {
     </div>
 
     <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 mt-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="trending-down" class="w-5 h-5 text-red-400"></i> Today's Money Out</h3>
+        <button onclick="document.querySelector('[data-tab=&quot;cash&quot;]').click()" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-xs font-bold text-gray-200 transition">Full list in Cash tab</button>
+      </div>
+      <p class="text-xs text-gray-400 mb-3">Every outward item today — materials, labor, purchases paid, supplier payments, expenses and cash withdrawals — with the reason for each.</p>
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs text-gray-400">Spent today</span>
+        <span id="moneyOutTodayTotal" class="font-extrabold text-red-400 text-lg">0 Ks</span>
+      </div>
+      <div id="moneyOutTodayChips" class="flex flex-wrap gap-1.5 mb-3"></div>
+      <div id="moneyOutTodayList" class="text-xs"></div>
+    </div>
+
+    <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 mt-4">
       <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="calendar-range" class="w-5 h-5 text-emerald-400"></i> Monthly Profit Report</h3>
         <select id="reportMonth" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"></select>
@@ -1072,6 +1086,16 @@ tailwind.config = {
           <input id="expenseDate" type="date" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
           <input id="expenseAmount" type="number" min="0" step="100" placeholder="Amount (Ks)" class="px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
           <input id="expenseDesc" type="text" placeholder="Description (e.g. new fryer)" class="col-span-2 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+          <select id="expenseCategory" class="col-span-2 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+            <option value="Equipment">Equipment</option>
+            <option value="Transport">Transport</option>
+            <option value="Rent &amp; Bills">Rent &amp; Bills</option>
+            <option value="Packaging">Packaging</option>
+            <option value="Raw Materials">Raw Materials</option>
+            <option value="Fuel &amp; Energy">Fuel &amp; Energy</option>
+            <option value="Marketing">Marketing</option>
+            <option value="Other" selected>Other</option>
+          </select>
         </div>
         <button id="addExpenseBtn" class="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">Add Expense</button>
         <div id="expenseList" class="text-xs text-gray-400 mt-3 max-h-40 overflow-y-auto scrollbar-thin"></div>
@@ -1300,6 +1324,23 @@ tailwind.config = {
 
     <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 mb-6">
       <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="receipt-text" class="w-5 h-5 text-red-400"></i> Money Out — What Was Spent &amp; Why</h3>
+        <div class="flex items-center gap-2">
+          <label class="text-[10px] text-gray-400 font-semibold" for="moneyOutDate">Day</label>
+          <input id="moneyOutDate" type="date" class="px-2.5 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500">
+        </div>
+      </div>
+      <p class="text-xs text-gray-400 mb-3">Every outward item for the selected day in one place: production materials, labor, stock purchases paid, supplier payments, one-time expenses and cash-out adjustments. Expenses and cash-outs can be deleted here.</p>
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs text-gray-400">Total out</span>
+        <span id="moneyOutTotal" class="font-extrabold text-red-400 text-xl">0 Ks</span>
+      </div>
+      <div id="moneyOutChips" class="flex flex-wrap gap-1.5 mb-3"></div>
+      <div id="moneyOutList" class="text-xs max-h-80 overflow-y-auto scrollbar-thin"></div>
+    </div>
+
+    <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 mb-6">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
         <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="badge-check" class="w-5 h-5 text-emerald-400"></i> Daily Cash Count / Close</h3>
         <span class="text-[10px] text-gray-500">automated expected vs counted</span>
       </div>
@@ -1494,6 +1535,7 @@ tailwind.config = {
     <script src="js/inventory.js?v=20260919"></script>
     <script src="js/customers.js?v=20260919"></script>
     <script src="js/suppliers.js?v=20260919"></script>
+    <script src="js/moneyout.js?v=20260919"></script>
     <script src="js/tools.js?v=20260919"></script>
     <script src="js/pan-timers.js?v=20260919"></script>
     <script src="js/cash.js?v=20260919"></script>
