@@ -68,6 +68,9 @@ function renderMonthlyReport() {
   const entries = entriesProdSales();
   const months = new Set();
   entries.forEach(function (e) { months.add(e.date.slice(0, 7)); });
+  [state.expenses, state.purchases, state.payments, (state.cash && state.cash.adjustments)].forEach(function (arr) {
+    (arr || []).forEach(function (x) { if (x.date) months.add(String(x.date).slice(0, 7)); });
+  });
   const current = sel.value;
   sel.innerHTML = '<option value="">Select month...</option>';
   Array.from(months).sort().reverse().forEach(function (m) {
@@ -79,7 +82,8 @@ function renderMonthlyReport() {
   const m = sel.value;
   if (!m) { $('monthlyReport').textContent = 'Select a month to see its full profit report.'; return; }
   const monthEntries = entries.filter(function (e) { return e.date.slice(0, 7) === m; });
-  if (!monthEntries.length) { $('monthlyReport').textContent = 'No activity for this month.'; return; }
+  const moOut = moneyOutForMonth(m);
+  if (!monthEntries.length && !moOut.total) { $('monthlyReport').textContent = 'No activity for this month.'; return; }
   const rev = monthEntries.reduce(function (s, e) { return s + (e.revenue || 0); }, 0);
   const cogs = monthEntries.reduce(function (s, e) { return s + (e.cogs || 0); }, 0);
   const cap = monthEntries.reduce(function (s, e) { return s + (e.capital || 0); }, 0);
@@ -121,12 +125,23 @@ function renderMonthlyReport() {
     mtk('Rolled-not-Sold (stock)', fmt(Math.abs(surplusPcs)) + ' pcs', fmtKs(Math.round(surplusValue)) + ' still in ready-to-sell stock', surplusPcs > 0 ? 'text-amber-400' : 'text-emerald-400') +
     mtk('Labor', laborHrs.toFixed(1) + ' hrs', fmtKs(Math.round(laborCost)), 'text-red-400') +
     mtk('Other Costs', 'Expenses ' + fmtKs(Math.round(monthExpenses)), 'waste ' + fmtKs(Math.round(wasteValue)) + ' · fixed ' + fmtKs(Math.round(recurringTotal)), 'text-red-400') +
+    mtk('Total Money Out', fmtKs(moOut.total), monthlyMoneyOutSummary(moOut), 'text-red-400') +
     mtk('Best Day (sold)', best ? best.date : '—', best ? fmtKs(best.net) : '', 'text-emerald-400') +
     mtk('Worst Day (sold)', worst ? worst.date : '—', worst ? fmtKs(worst.net) : '', 'text-red-400') +
     '<div class="p-3 rounded-lg bg-emerald-600/20 border border-emerald-600/40 col-span-1 lg:col-span-2"><div class="text-xs text-gray-300">Net After ALL Costs (true monthly profit)</div><div class="font-bold ' + (netAfterAll >= 0 ? 'text-emerald-400' : 'text-red-400') + ' text-xl">' + fmtKs(Math.round(netAfterAll)) + '</div><div class="text-[10px] text-gray-400">sales − cost of what sold − labor − expenses − waste − fixed costs</div></div>' +
-    '</div>';
+    '</div>' +
+    (moOut.total > 0 ? '<div class="mt-3 p-3 rounded-lg bg-gray-800/60 border border-gray-700"><div class="text-xs font-bold text-gray-300 mb-2">Where the money went</div><div class="flex flex-wrap gap-2">' +
+      Object.keys(MONEY_OUT_TYPES).filter(function (k) { return (moOut.byCategory[k] || 0) > 0; }).map(function (k) {
+        return '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + MONEY_OUT_TYPES[k].chip + '">' + MONEY_OUT_TYPES[k].label + ' · ' + fmtKs(Math.round(moOut.byCategory[k])) + '</span>';
+      }).join('') + '</div></div>' : '');
 }
 $('reportMonth').addEventListener('change', renderMonthlyReport);
+function monthlyMoneyOutSummary(mo) {
+  const parts = Object.keys(MONEY_OUT_TYPES).filter(function (k) { return (mo.byCategory[k] || 0) > 0; })
+    .map(function (k) { return MONEY_OUT_TYPES[k].label + ' ' + fmtKs(Math.round(mo.byCategory[k])); });
+  if (!parts.length) return 'no outflows recorded';
+  return parts.length <= 3 ? parts.join(' · ') : parts.slice(0, 3).join(' · ') + ' +' + (parts.length - 3) + ' more';
+}
 function mtk(title, value, sub, color) {
   return '<div class="p-3 rounded-lg bg-gray-800/60"><div class="text-xs text-gray-400">' + title + '</div><div class="font-bold ' + (color || 'text-gray-100') + ' text-lg">' + value + '</div>' + (sub ? '<div class="text-[10px] text-gray-500">' + sub + '</div>' : '') + '</div>';
 }

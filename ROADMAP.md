@@ -149,6 +149,9 @@ Legend: ✅ complete · 🟡 usable but incomplete · ⬜ not started
 - [x] **Today's Money Out** card in Dashboard (compact, latest 10 items) with a jump-to-Cash-tab button.
 - [x] One-time expenses carry a category (Equipment, Transport, Rent & Bills, Packaging, Raw Materials, Fuel & Energy, Marketing, Other)and can be deleted (including inline from the Money Out panel)。
 - [x] Node harness `_verify_money_out.js` covers per-day grouping, categories, legacy-expense fallback, deletable flags, per-month totals,anded empty-day behavior.
+- [x] Calendar & Audit: the audit table has a **Money Out** column per day, day-cell tooltips show "· out X Ks", day details append the out amount, and spending-only days show a **↓k** chip on the grid.
+- [x] Monthly Profit Report now shows the month's **Total Money Out** and a full **"Where the money went"** category breakdown (materials, labor, purchases paid, supplier payments, one-time expenses, cash-outs); spending-only months are selectable.
+- [x] `_verify_money_out_ui.js` covers the Calendar + Money Out wiring and the monthly money-out report.
 
 ## Following release — Daily operations
 

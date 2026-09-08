@@ -26,13 +26,16 @@ function renderCalendar() {
     if (dateStr === todayStr) cls += ' today';
     if (dateStr === selectedDate) cls += ' selected';
     let sub = '';
+    const dayOut = moneyOutForDay(dateStr);
     if (day) {
       if (day.soldBags > 0) sub = (day.net >= 0 ? '+' : '-') + Math.abs(Math.round(day.net / 1000)) + 'k';
       else if (day.prodPieces > 0) sub = '↔ ' + fmt(day.prodPieces) + 'pcs';
     }
+    if (!sub && dayOut.total > 0) sub = '↓' + Math.max(1, Math.round(dayOut.total / 1000)) + 'k';
     const tip = dateStr +
       (day && day.prodPieces > 0 ? ' · rolled ' + fmt(day.prodPieces) + ' pcs' : '') +
-      (day && day.soldBags > 0 ? ' · sold ' + fmt(day.soldBags) + ' bags / ' + fmtKs(day.net) : '');
+      (day && day.soldBags > 0 ? ' · sold ' + fmt(day.soldBags) + ' bags / ' + fmtKs(day.net) : '') +
+      (dayOut.total > 0 ? ' · out ' + fmtKs(dayOut.total) : '');
     grid.innerHTML += '<div class="' + cls + '" data-date="' + dateStr + '" title="' + tip + '">' +
       '<span class="font-bold">' + d + '</span>' + (sub ? '<span class="text-[9px] opacity-80">' + sub + '</span>' : '') +
       '</div>';
@@ -145,6 +148,7 @@ function renderAuditTable() {
       '<td class="py-2 pr-2 tabular-nums text-right">' + fmt(e.prodPieces) + '</td>' +
       '<td class="py-2 pr-2 tabular-nums text-right">' + fmt(e.soldBags) + '</td>' +
       '<td class="py-2 pr-2 text-emerald-400 font-semibold tabular-nums text-right whitespace-nowrap">' + fmtKs(e.revenue) + '</td>' +
+      '<td class="py-2 pr-2 text-red-400 font-semibold tabular-nums text-right whitespace-nowrap">' + fmtKs(moneyOutForDay(e.date).total) + '</td>' +
       '<td class="py-2 pr-2 tabular-nums text-right whitespace-nowrap">' + ((e.laborMin || 0) / 60).toFixed(2) + '</td>' +
       '<td class="py-2 pr-2 ' + (e.net >= 0 ? 'text-emerald-400' : 'text-red-400') + ' font-bold tabular-nums text-right whitespace-nowrap">' + fmtKs(e.net) + '</td>' +
       '<td class="py-2 pr-2 tabular-nums text-right whitespace-nowrap">' + fmtKs(costPerBag) + '</td>' +
@@ -157,6 +161,8 @@ function auditDayDetail(e) {
   const parts = [];
   if (e.prodPieces > 0) parts.push('rolled ' + fmt(e.prodPieces) + ' pcs');
   if (e.soldBags > 0) parts.push('sold ' + fmt(e.soldBags) + ' bags / ' + fmtKs(e.net));
+  const dOut = moneyOutForDay(e.date);
+  if (dOut.total > 0) parts.push('out ' + fmtKs(dOut.total));
   if (!parts.length) return '<span class="text-gray-600">—</span>';
   return '<span class="text-[10px] text-gray-500">' + parts.join(', ') + '</span>';
 }
