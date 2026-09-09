@@ -30,6 +30,7 @@ let cloudBody = null, pushes = 0, applied = 0;
 let statuses = [];
 function authEmail() { return 'a@b.c'; }        // account mode -> no legacy binding
 function authToken() { return 'tok'; }
+function saleCreditAmount(sale) { return Math.max(0, (sale.amount || 0) - (sale.paidAmount === undefined ? (sale.amount || 0) : sale.paidAmount)); }
 function cloudSignedInEmail() { return 'a@b.c'; }
 function cloudAccountToken() { return 'tok'; }
 function cloudReady() { return true; }
@@ -118,11 +119,95 @@ function resetReview() { syncReview.open = false; syncReview.current = null; syn
   await cloudAfterSignIn();
   ok(pushes === 1, 'empty cloud + local data -> first sync pushes local');
 
+  // Phone-recorded customer repayment MUST lower the amount owed on the other
+  // device. The payment row merges in by id, but the customer record has NO
+  // updatedAt stamp so mergeRows keeps the stale local copy — the balance must
+  // be re-derived from the merged movement ledger instead. This is the exact
+  // "payment appears on the computer but the debt doesn't move" bug.
+  function mkDebtState(withPayment) {
+    const s = mkState(0, '2026-08-31T10:00:00Z');
+    s.customers = [{ id: 'c1', name: 'Aung', standingOrder: 0, price: 1300, phone: '', extraDebt: 0, debt: withPayment ? 6000 : 10000 }];
+    s.sales = [{ id: 's1', customerId: 'c1', date: '2026-08-30', bags: 8, pieces: 40, price: 1300, amount: 10000, paidAmount: 0, paymentStatus: 'credit' }];
+    if (withPayment) s.customerPayments = [{ id: 'cp1', customerId: 'c1', date: '2026-08-31', amount: 4000, createdAt: '2026-08-31T10:05:00Z' }];
+    return s;
+  }
+  state = mkDebtState(false);           // the computer BEFORE the phone payment
+  cloudBody = { ok: true, payload: payloadFromState(mkDebtState(true)) };  // the phone's copy
+  resetReview();
+  await cloudAfterSignIn();
+  const paymentSynced = (state.customerPayments || []).some(function (p) { return p.id === 'cp1'; });
+  const custAfter = state.customers.find(function (c) { return c.id === 'c1'; });
+  ok(paymentSynced, 'payment row from the phone appears on the computer after sync');
+  ok(custAfter && custAfter.debt === 6000, 'customer debt drops to 6000 after the phone payment syncs (got ' + (custAfter && custAfter.debt) + ')');
+
+  // Supplier payment recorded on the phone: the NEW payments row always merges
+  // in (new id), but the purchase it MUTATED carries the SAME updatedAt on both
+  // devices, so mergeRows drops the paid mutation. The payments-ledger replay
+  // must lift the purchase's paid so Total Payable drops — the exact "payment
+  // shows up but the amount I owe doesn't change" supplier-side bug.
+  function mkPayableState(withPayment) {
+    const s = mkState(0, '2026-08-31T10:00:00Z');
+    s.suppliers = [{ id: 's1', name: 'Sun Market', createdAt: '2026-08-01T08:00:00Z' }];
+    s.purchases = [{
+      id: 'pu1', supplierId: 's1', date: '2026-08-30', items: [{ name: 'Flour', qty: 20, unit: 'kg', price: 500 }],
+      itemTotal: 10000, paidNow: 0, paid: withPayment ? 4000 : 0, note: '',
+      createdAt: '2026-08-30T09:00:00Z', updatedAt: '2026-08-30T09:00:00Z' // phone payment did NOT re-stamp
+    }];
+    if (withPayment) s.payments = [{ id: 'pay1', supplierId: 's1', date: '2026-08-31', amount: 4000, createdAt: '2026-08-31T10:05:00Z' }];
+    return s;
+  }
+  state = mkPayableState(false);            // the computer BEFORE the phone payment
+  cloudBody = { ok: true, payload: payloadFromState(mkPayableState(true)) };  // the phone's copy
+  resetReview();
+  await cloudAfterSignIn();
+  const payRowSynced = (state.payments || []).some(function (p) { return p.id === 'pay1'; });
+  const pu = state.purchases.find(function (p) { return p.id === 'pu1'; });
+  ok(payRowSynced, 'supplier payment row from the phone appears on the computer after sync');
+  ok(pu && pu.paid === 4000, 'purchase paid lifted to 4000 by replaying the payments ledger (got ' + (pu && pu.paid) + ')');
+  ok(typeof totalPayable === 'function' && totalPayable() === 6000, 'Total Payable drops 10000 -> 6000 (got ' + (typeof totalPayable === 'function' ? totalPayable() : 'n/a') + ')');
+
+  // ============ SUPABASE transport: a phone edit arrives via realtime ============
+  // The user's backend is Supabase: a phone change comes in as a full ledger row on
+  // the realtime channel (supabaseUpdate -> handleRemoteCopy -> mergeRemoteIntoLocal).
+  // Prove the fix fires there too: payments merge in AND balances re-derive.
+  let rtCallback = null;
+  SUPA.subscribeRealtime = function (uid, cb) { rtCallback = cb; return {}; };
+  supabaseUpdate('uid-test');
+
+  function phoneStateWithPayments() {
+    const s = mkState(0, '2026-08-31T10:06:00Z');
+    s.customers = [{ id: 'c1', name: 'Aung', standingOrder: 0, price: 1300, phone: '', extraDebt: 0, debt: 6000 }];
+    s.sales = [{ id: 's1', customerId: 'c1', date: '2026-08-30', bags: 8, pieces: 40, price: 1300, amount: 10000, paidAmount: 0, paymentStatus: 'credit' }];
+    s.customerPayments = [{ id: 'cp1', customerId: 'c1', date: '2026-08-31', amount: 4000, createdAt: '2026-08-31T10:05:00Z' }];
+    s.suppliers = [{ id: 's1', name: 'Sun Market', createdAt: '2026-08-01T08:00:00Z' }];
+    s.purchases = [{ id: 'pu1', supplierId: 's1', date: '2026-08-30', items: [{ name: 'Flour', qty: 20, unit: 'kg', price: 500 }], itemTotal: 10000, paidNow: 0, paid: 4000, note: '', createdAt: '2026-08-30T09:00:00Z', updatedAt: '2026-08-30T09:00:00Z' }];
+    s.payments = [{ id: 'pay1', supplierId: 's1', date: '2026-08-31', amount: 4000, createdAt: '2026-08-31T10:05:00Z' }];
+    return s;
+  }
+  const phoneCopy = phoneStateWithPayments();
+  // This computer BEFORE the phone's payments: same records, no payment rows, old balances.
+  state = JSON.parse(JSON.stringify(phoneCopy));
+  state.customerPayments = [];
+  state.payments = [];
+  state.customers[0].debt = 10000;
+  state.purchases[0].paid = 0;
+
+  // Fire the Supabase realtime event as supabase.js delivers it (payload.new row).
+  rtCallback({ updated_at: '2026-08-31T10:07:00Z', payload: { device: { id: 'dev-phone', sessionId: 'sess-phone', label: 'Phone' }, state: phoneCopy } });
+
+  const rtCust = state.customers.find(function (c) { return c.id === 'c1'; });
+  const rtPu = state.purchases.find(function (p) { return p.id === 'pu1'; });
+  ok((state.customerPayments || []).some(function (p) { return p.id === 'cp1'; }), 'SUPABASE realtime: customer payment row merged in');
+  ok((state.payments || []).some(function (p) { return p.id === 'pay1'; }), 'SUPABASE realtime: supplier payment row merged in');
+  ok(rtCust && rtCust.debt === 6000, 'SUPABASE realtime: customer debt drops to 6000 (got ' + (rtCust && rtCust.debt) + ')');
+  ok(rtPu && rtPu.paid === 4000, 'SUPABASE realtime: purchase paid lifted to 4000 (got ' + (rtPu && rtPu.paid) + ')');
+  ok(typeof totalPayable === 'function' && totalPayable() === 6000, 'SUPABASE realtime: Total Payable drops to 6000 (got ' + (typeof totalPayable === 'function' ? totalPayable() : 'n/a') + ')');
+
   console.log(fail === 0 ? 'ALL RECONCILE CHECKS PASSED' : (fail + ' FAILED'));
 })();`;
 
 
 const src = read('config.js') + '\n' + read('device.js') + '\n' + read('storage.js') + '\n' +
-  read('helpers.js') + '\n' + read('cloud.js') + '\n' + TEST_BODY;
+  read('helpers.js') + '\n' + read('cloud.js') + '\n' + read('suppliers.js') + '\n' + TEST_BODY;
 
 eval(src);

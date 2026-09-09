@@ -90,7 +90,7 @@ per tab:
 
 ```html
 <!-- ===================== SUPPLIERS / PURCHASES & PAYABLES ===================== -->
-<section id="tab-suppliers" class="tab-panel hidden">
+<section id="tab-suppliers" class="tab-panel hidden"> # is tab-panel hidden defined? like if using that class , what is that function
 ```
 
 These "signposts" are how a large file stays navigable. **Whenever you make a
@@ -102,11 +102,16 @@ big change, add a similar comment.** Future-you will thank present-you.
 
 1. Open `index.html`. Find **three** `<section>` elements, and write down what
    tab content each one holds.
+   (<head> <script> <body> etc )
 2. Find the supplier "Shop Name" input (`id="supplierName"`). What `type` is
    it? Where is it on the page (which section)?
+   it is label?
+   it is in the tab suppliers. 
 3. Count how many `<script src="js/...">` tags are at the bottom. That's how
    many JS files the app loads. (Answer: about 25.)
+   27
 4. Change the `<title>` to `My Crispy Roll Ledger` and refresh. What changed?
+Done
 5. **Challenge:** add a new `<p>` element inside the Suppliers section with
    `id="myNote"` and some text, then see it appear. (Leave it there — you'll
    use it again.)

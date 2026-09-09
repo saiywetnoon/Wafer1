@@ -60,6 +60,43 @@ const newestIdx = paymentEl.innerHTML.indexOf('100,000');
 const olderIdx = paymentEl.innerHTML.indexOf('56,000');
 ok(newestIdx > -1 && olderIdx > -1 && newestIdx < olderIdx, 'payment history is sorted newest-first');
 
+/* --- normalizeSupplierPayables: the payments ledger lowers payable even when
+   the purchase mutation was dropped by the sync merge (same-updatedAt clash).
+   Must be idempotent and never REDUCE a recorded paid (legacy safety). --- */
+state = {
+  suppliers: [{ id: 's1', name: 'Sun Market', createdAt: '2026-08-01T08:00:00Z' }],
+  purchases: [],
+  payments: [],
+  customers: [], customerPayments: [], sales: [], production: [], prices: [], inventoryMovements: [], inventory: {},
+  expenses: [], recurringExpenses: [], waste: [], priceHistory: [], recipes: [],
+  cash: { opening: 0, adjustments: [] }, entries: {}, draft: null, updatedAt: null, stock: { pieces: 0, cost: 0 },
+  settings: { hourlyWage: 1500 }, inventoryMovementVersion: 1
+};
+state.purchases.push({ id: 'pu1', supplierId: 's1', date: '2026-09-01', items: [{ name: 'Flour', qty: 20 }], itemTotal: 10000, paidNow: 0, paid: 0 });
+state.payments.push({ id: 'pay1', supplierId: 's1', date: '2026-09-02', amount: 4000, createdAt: '2026-09-02T10:00:00Z' });
+normalizeSupplierPayables();
+ok(state.purchases[0].paid === 4000, 'payments ledger lifts the dropped purchase mutation (paid 0 -> 4000)');
+ok(totalPayable() === 6000, 'Total Payable drops to 6000 after normalizeSupplierPayables (got ' + totalPayable() + ')');
+const paidSnapshot = JSON.stringify(state.purchases);
+normalizeSupplierPayables();
+ok(JSON.stringify(state.purchases) === paidSnapshot, 'normalizeSupplierPayables is idempotent');
+state.purchases[0].paid = 5000;
+normalizeSupplierPayables();
+ok(state.purchases[0].paid === 5000, 'never reduces a recorded paid below the ledger (legacy safety)');
+state.purchases[0].paid = 0;
+state.payments = [];
+normalizeSupplierPayables();
+ok(state.purchases[0].paid === 0, 'no payments -> no forced allocation');
+// Oldest-first allocation across two purchases, with a partial payment.
+state.purchases[0].paid = 0;
+state.purchases[0].date = '2026-09-05';      // pu1 is the NEWER (bigger) purchase
+state.purchases.push({ id: 'pu2', supplierId: 's1', date: '2026-09-01', items: [{ name: 'Sugar', qty: 10 }], itemTotal: 1000, paidNow: 0, paid: 0 });
+state.payments = [{ id: 'pay2', supplierId: 's1', date: '2026-09-06', amount: 1500, createdAt: '2026-09-06T10:00:00Z' }];
+normalizeSupplierPayables();
+ok(state.purchases[0].paid === 500 && state.purchases[1].paid === 1000,
+  'oldest-first allocation: older 1000 purchase settled fully, remainder 500 to newer (got ' + state.purchases[0].paid + ',' + state.purchases[1].paid + ')');
+ok(totalPayable() === 9500, 'Total Payable reflects oldest-first allocation (got ' + totalPayable() + ')');
+
 console.log(fail === 0 ? 'ALL SUPPLIER TIMESTAMP CHECKS PASSED' : (fail + ' FAILED'));
 `;
 

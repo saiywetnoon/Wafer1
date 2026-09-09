@@ -512,6 +512,29 @@ function mergeRemoteIntoLocal(r) {
     if (JSON.stringify(merged) !== JSON.stringify(state[f] || [])) { state[f] = merged; changed = true; }
   });
 
+  // Customer debt is DERIVED — normalizeCustomerBalances() is the single source
+  // of truth (sales credit minus payments received, plus a manual baseline).
+  // The merge above can receive a NEW payment row while the remote customer
+  // record is kept stale: customer rows carry no updatedAt stamp, so mergeRows()
+  // treats the same-id customer as "not newer" and keeps the local copy. Without
+  // this re-derive a phone-recorded repayment would SHOW UP in the statement /
+  // cash on the computer while "Total Customer Debt" / "Customer debt owed to
+  // you" never dropped. Recompute after the collections merge so both agree.
+  if (typeof normalizeCustomerBalances === 'function') {
+    var beforeCustomers = JSON.stringify(state.customers || []);
+    normalizeCustomerBalances();
+    if (JSON.stringify(state.customers || []) !== beforeCustomers) changed = true;
+  }
+  // Supplier payables are ALSO derived — the payments ledger is the merge-safe
+  // truth (new rows always arrive), while the `paid` mutation on the purchase
+  // can be dropped by same-timestamp clashes. Replay so the phone's payment
+  // lowers "Total Payable (to shops)" and the per-supplier balance here too.
+  if (typeof normalizeSupplierPayables === 'function') {
+    var beforeSupplierPaid = JSON.stringify(state.purchases || []);
+    normalizeSupplierPayables();
+    if (JSON.stringify(state.purchases || []) !== beforeSupplierPaid) changed = true;
+  }
+
   // Inventory movement ledger — reuse the existing id-dedupe merge.
   if (Array.isArray(r.inventoryMovements) && r.inventoryMovements.length) {
 
@@ -875,6 +898,7 @@ function applyCloudRemote(remote, remoteTs, force) {
   ]);
 
   if (typeof normalizeCustomerBalances === 'function') normalizeCustomerBalances();
+  if (typeof normalizeSupplierPayables === 'function') normalizeSupplierPayables();
   if (typeof migrateInventoryMovements === 'function') migrateInventoryMovements();
   // The first local render may have populated the form with local defaults; let
   // the cloud copy provide today's / previous production recipe instead.

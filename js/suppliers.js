@@ -30,8 +30,57 @@ function supplierBalance(id) {
   }, 0);
 }
 
+/* Replay the payments ledger onto purchases (oldest purchase first — the same
+   allocation the payment form uses) and lift each purchase's `paid` to cover
+   what the ledger proves was settled. The payments ledger is the merge-safe
+   source of truth: a payment recorded on the phone arrives on the computer as
+   a brand-new row (never dropped), whereas the purchase record it mutated can
+   be dropped by the sync merge because the payment handler used to change
+   `paid` WITHOUT re-stamping updatedAt — a same-timestamp clash keeps this
+   device's copy and "Total Payable" never dropped. This replay is idempotent
+   and never REDUCES a recorded `paid`, so legacy manual balances stay safe. */
+function normalizeSupplierPayables() {
+  state.purchases = state.purchases || [];
+  state.payments = state.payments || [];
+  var out = state.purchases.map(function (p) {
+    return {
+      p: p,
+      supplierId: p.supplierId,
+      date: String(p.date || ''),
+      bal: Math.max(0, toMoney(p.itemTotal) - toMoney(p.paidNow)),
+      allocated: 0
+    };
+  });
+  var pays = (state.payments || []).slice().sort(function (a, b) {
+    return String(a && (a.createdAt || a.date) || '').localeCompare(String(b && (b.createdAt || b.date) || ''));
+  });
+  pays.forEach(function (pay) {
+    if (!pay || !pay.supplierId) return;
+    var remaining = Math.max(0, toMoney(pay.amount));
+    out
+      .filter(function (o) { return o.supplierId === pay.supplierId; })
+      .sort(function (a, b) { return a.date.localeCompare(b.date); })
+      .forEach(function (o) {
+        if (remaining <= 0 || o.bal <= 0) return;
+        var apply = Math.min(o.bal, remaining);
+        o.bal -= apply;
+        remaining -= apply;
+        o.allocated += apply;
+      });
+  });
+  out.forEach(function (o) {
+    var recorded = toMoney(o.p.paid);
+    var target = Math.round(o.allocated);
+    if (target > recorded) o.p.paid = target;
+  });
+}
+
 /* ---------- Master render ---------- */
 function renderSuppliers() {
+  // Self-heal: replay the payments ledger so a phone-recorded payment that
+  // synced in as a row (but whose purchase mutation was dropped by the merge)
+  // still lowers Total Payable / the per-supplier balance on this device.
+  if (typeof normalizeSupplierPayables === 'function') normalizeSupplierPayables();
   renderSupplierDropdowns();
   renderSupplierList();
   renderPurchaseHistory();
@@ -303,6 +352,12 @@ $('recordSupplierPaymentBtn').addEventListener('click', function () {
       var apply = Math.min(bal, remaining);
       p.paid = (p.paid || 0) + apply;
       remaining -= apply;
+      // Re-stamp the purchase so the merge on other devices recognises this
+      // payment as an edit (same-id clashes are won by the newest updatedAt).
+      // Without this the phone's payment shows up as a `payments` row on the
+      // computer while the purchase carrying the reduced balance is dropped as
+      // "not newer" — Total Payable never drops.
+      if (apply > 0) p.updatedAt = new Date().toISOString();
     });
   if (!state.payments) state.payments = [];
   state.payments.push({ id: uid(), supplierId: supplierId, date: date, amount: Math.round(amount), createdAt: new Date().toISOString() });

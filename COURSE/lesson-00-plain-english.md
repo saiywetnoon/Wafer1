@@ -45,7 +45,7 @@ Line by line:
 The whole line means:**"Fetch! Hand me the thing named `id`."** Real world: you shout to the shop assistant "hand me the jar labeled *Flour*" — and she brings the jar.
 
 
-## 2. The Door Guard — `validateOptionalNum` (ledger.js, lines  ️9–16
+## 2. The Door Guard — `validateOptionalNum` (ledger.js, lines  ️9–16 
 
 ```js
 function validateOptionalNum(input) {

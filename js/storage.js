@@ -116,6 +116,10 @@ function loadState() {
         normalizeCustomerBalances();
         saveState();
       }
+      if (typeof normalizeSupplierPayables === 'function') {
+        normalizeSupplierPayables();
+        saveState();
+      }
     }
   } catch (e) { console.warn('Failed to load state', e); }
 }
