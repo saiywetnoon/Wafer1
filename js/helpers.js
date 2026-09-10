@@ -54,12 +54,15 @@ function salesList() {
 }
 
 /* Aggregate money + quantities across ALL production and sales.
-   SAME-DAY profit model: net = total revenue − total production cost. */
+   Profit = total revenue − the COGS of the goods ACTUALLY SOLD (average-cost
+   COGS stamped per sale by rebuildStockAndCogs). Unsold rolls keep their cost
+   in ready-to-sell stock; they only contribute to profit when they are sold. */
 function financeTotalsAll() {
   var prod = prodList();
   var sales = salesList();
   var totalCapital = prod.reduce(function (s, p) { return s + (p.capital || 0); }, 0);
   var totalRevenue = sales.reduce(function (s, sl) { return s + (sl.amount || 0); }, 0);
+  var totalCogs = sales.reduce(function (s, sl) { return s + (sl.cogs || 0); }, 0);
   return {
     capital: totalCapital,
     productionBags: prod.reduce(function (s, p) { return s + (p.bags || 0); }, 0),
@@ -67,22 +70,26 @@ function financeTotalsAll() {
     laborMin: prod.reduce(function (s, p) { return s + (p.laborMinutes || 0); }, 0),
     laborCost: prod.reduce(function (s, p) { return s + (p.laborCost || 0); }, 0),
     revenue: totalRevenue,
-    cogs: totalCapital,
+    cogs: totalCogs,
     salesBags: sales.reduce(function (s, sl) { return s + (sl.bags || 0); }, 0),
     salesPieces: sales.reduce(function (s, sl) { return s + (sl.pieces || 0); }, 0),
-    net: totalRevenue - totalCapital
+    net: totalRevenue - totalCogs
   };
 }
 
-/* Rebuild finished-goods stock and each sale's cost-of-goods by replaying
-   production (adds pieces+cost) and sales (subtracts pieces at average cost)
-   in date order. Run after any create / edit / delete so cogs stays correct
-   even when today's production sells over several days. */
-function rebuildStockAndCogs() {
+/* Core replay: walk every production / sale / waste event in date order and
+   compute (a) the finished-goods stock balance and (b) each sale's COGS — the
+   AVERAGE COST of the pieces actually in stock when that sale happened.
+   Production on ANY date can cover sales on LATER dates, so selling a batch
+   over several customers/days books each sale only its proportional cost.
+   This is a pure function (never touches global state), which lets the sale
+   form reuse it for a live what-if preview. It mutates the supplied sale/waste
+   objects to stamp cogs / avgCost / net. */
+function replayStocksAndCogs(production, sales, waste) {
   var events = [];
-  (state.production || []).forEach(function (p) { events.push({ date: p.date, type: 0, p: p }); });
-  (state.sales || []).forEach(function (s) { events.push({ date: s.date, type: 1, s: s }); });
-  (state.waste || []).forEach(function (w) { events.push({ date: w.date, type: 2, w: w }); });
+  (production || []).forEach(function (p) { events.push({ date: p.date, type: 0, p: p }); });
+  (sales || []).forEach(function (s) { events.push({ date: s.date, type: 1, s: s }); });
+  (waste || []).forEach(function (w) { events.push({ date: w.date, type: 2, w: w }); });
   events.sort(function (a, b) {
     if (a.date !== b.date) return a.date < b.date ? -1 : 1;
     return a.type - b.type; // production before sales on the same day
@@ -105,7 +112,6 @@ function rebuildStockAndCogs() {
       var availableQty = stock.pieces;
       var costQty = Math.max(0, Math.min(qty, availableQty));
       var cost = Math.round(costQty * avg);
-      var overSold = (qty || 0) - costQty;   // pieces beyond produced stock
       if (ev.type === 1) {
         item.cogs = cost;
         item.avgCost = Math.round(avg * 100) / 100;
@@ -118,9 +124,32 @@ function rebuildStockAndCogs() {
       stock.cost = Math.max(0, stock.cost - cost);
     }
   });
+  return { stock: { pieces: Math.round(stock.pieces), cost: Math.round(stock.cost) } };
+}
+
+/* Rebuild ready-to-sell stock and stamp every sale's COGS/net by replaying
+   history. Run after any create / edit / delete so profit stays correct even
+   when today's production sells over several days. */
+function rebuildStockAndCogs() {
+  var out = replayStocksAndCogs(state.production, state.sales, state.waste);
   if (!state.stock) state.stock = { pieces: 0, cost: 0 };
-  state.stock.pieces = Math.round(stock.pieces);
-  state.stock.cost = Math.round(stock.cost);
+  state.stock.pieces = out.stock.pieces;
+  state.stock.cost = out.stock.cost;
+}
+
+/* What-if preview used by the sale form: how much COGS would this sale carry
+   once it is part of the ledger replay? Editing keeps its id so the previous
+   version is replaced instead of being double-charged. */
+function projectedSaleCogs(record) {
+  if (!record) return { cogs: 0, avgCost: 0, net: 0 };
+  var production = (state.production || []).map(function (p) { return Object.assign({}, p); });
+  var sales = (state.sales || []).filter(function (s) { return s.id !== record.id; })
+    .map(function (s) { return Object.assign({}, s); });
+  var waste = (state.waste || []).map(function (w) { return Object.assign({}, w); });
+  var draft = Object.assign({}, record, { cogs: 0, avgCost: 0, net: 0 });
+  sales.push(draft);
+  replayStocksAndCogs(production, sales, waste);
+  return { cogs: draft.cogs || 0, avgCost: draft.avgCost || 0, net: draft.net || 0 };
 }
 
 /* Validate a proposed sale/waste record against stock at its actual date.
@@ -186,8 +215,10 @@ function stockAvgCostPerPiece() {
 
 /* One combined array keyed by date with what was ROLLED and what was SOLD,
    so the dashboard/calendar/monthly have a single view of the day.
-   A day's profit = that day's sales − that day's production cost (same-day
-   matching). No pooled averages, no unsold-roll money dragged into today. */
+   A day's profit = that day's sales revenue − the AVERAGE-COST COGS of the
+   goods actually sold that day (each sale's cogs is stamped by the replay).
+   Rolling 100 today and selling 40 does NOT book the unsold 60 as a loss —
+   their cost stays in ready-to-sell stock until those pieces are sold. */
 function entriesProdSales() {
   var map = {};
   (state.production || []).forEach(function (p) {
@@ -200,41 +231,26 @@ function entriesProdSales() {
     if (!map[s.date]) map[s.date] = { date: s.date, prodBags: 0, prodPieces: 0, capital: 0, laborMin: 0, laborCost: 0, soldBags: 0, soldPieces: 0, revenue: 0, cogs: 0, net: 0 };
     var d = map[s.date];
     d.soldBags += (s.bags || 0); d.soldPieces += (s.pieces || 0); d.revenue += (s.amount || 0);
+    d.cogs += (s.cogs || 0);
   });
-  // Same-day profit model: net = that day's revenue − that day's production cost.
   Object.keys(map).forEach(function (k) {
-    map[k].cogs = map[k].capital || 0;
-    map[k].net = (map[k].revenue || 0) - (map[k].capital || 0);
+    map[k].net = (map[k].revenue || 0) - (map[k].cogs || 0);
   });
   return Object.keys(map).sort().map(function (k) { return map[k]; });
 }
 
 /* ---------- Cash-sync-safe / metrics helpers ---------- */
-/* Same-day production lookup: the cost the user actually spent on the day's
-   batch. A day's profit is computed as that day's sales MINUS that day's
-   production cost — not a pooled average that drags unsold rolls or other
-   days' batches into today. */
-function productionCostOn(date) {
-  var pieces = 0, capital = 0;
-  (state.production || []).forEach(function (p) {
-    if (p.date === date) { pieces += (p.pieces || 0); capital += (p.capital || 0); }
-  });
-  return { pieces: pieces, capital: capital };
-}
-/* Per-sale profit the way the shop thinks about it: sale amount minus the cost
-   of the rolls made THAT same day. Pieces sold beyond that day's production are
-   old stock (their cost was already counted on the day they were made). */
+/* Per-sale profit = sale amount − that sale's COGS. COGS is the average cost
+   of the pieces actually in stock when the sale was made, stamped by
+   rebuildStockAndCogs. This is the model in the README: rolling 100 and
+   selling 40 books the profit of the 40 sold; the unsold 60 stay as stock.
+   It NEVER charges the day's whole batch cost against one sale, so splitting
+   a 25-bag batch across customers cannot invent a loss. */
 function saleProfit(s) {
   if (!s) return 0;
   var amount = s.amount || 0;
-  var day = productionCostOn(s.date);
-  var pieces = s.pieces || 0;
-  var cost = 0;
-  if (day.pieces > 0) {
-    var rate = day.capital / day.pieces;
-    cost = Math.round(Math.min(pieces, day.pieces) * rate);
-  }
-  return Math.round(amount - cost);
+  var cogs = (typeof s.cogs === 'number' && s.cogs >= 0) ? s.cogs : 0;
+  return Math.round(amount - cogs);
 }
 function storageUsedKB() {
   try {

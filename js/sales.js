@@ -141,14 +141,21 @@ function updateSaleLive() {
   if (status === 'paid' || isNaN(paid)) paid = status === 'credit' ? 0 : amount;
   paid = Math.max(0, Math.min(amount, paid));
   const onHand = (state.stock && state.stock.pieces) || 0;
-  // Same-day cost basis: price this sale from the rolls made on ITS own date.
+  // Projected COGS: replay the ledger with this sale added and take the cost
+  // those pieces actually carry (average cost of the stock on that date) — the
+  // exact number the saved row receives from rebuildStockAndCogs. Selling from
+  // stock made earlier (or splitting a batch across customers) never books the
+  // whole batch's cost against a single sale.
   const costDate = $('saleDate') ? $('saleDate').value : (typeof today === 'function' ? today() : '');
-  const dayProd = productionCostOn(costDate);
-  const costQty = dayProd.pieces > 0 ? Math.min(pieces, dayProd.pieces) : 0;
-  const cogs = dayProd.pieces > 0 ? Math.round(costQty * (dayProd.capital / dayProd.pieces)) : 0;
+  const editingId = document.getElementById('editSaleId') ? document.getElementById('editSaleId').value : '';
+  const est = projectedSaleCogs({
+    id: editingId || null,
+    date: costDate, bags: bagsShown, pieces: pieces, price: price, amount: amount
+  });
+  const cogs = est.cogs;
   const profit = Math.round(amount - cogs);
   if ($('saleAmountLive')) $('saleAmountLive').textContent = fmtKs(amount);
-  if ($('saleCogsLive')) $('saleCogsLive').textContent = fmtKs(cogs) + ' @ ' + (dayProd.pieces > 0 ? Math.round(dayProd.capital / dayProd.pieces) : 0) + '/pc';
+  if ($('saleCogsLive')) $('saleCogsLive').textContent = fmtKs(cogs) + ' @ ' + (est.avgCost > 0 ? Math.round(est.avgCost) : 0) + '/pc';
   if ($('saleProfitLive')) { $('saleProfitLive').textContent = fmtKs(profit); $('saleProfitLive').className = 'font-bold ' + (profit >= 0 ? 'text-emerald-400' : 'text-red-400'); }
   if ($('saleStockLive')) $('saleStockLive').textContent = fmt(onHand) + ' pieces ready';
   if ($('salePiecesBag')) $('salePiecesBag').textContent = bagsShown > 0 ? (pieces / bagsShown).toFixed(1) : '—';
@@ -227,26 +234,33 @@ function renderSalesTab() {
   if (!tbody) return;
   const list = salesList().slice().reverse();
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-gray-500">No sales logged yet. Record a bag sale here — it deducts from ready-to-sell stock.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="py-6 text-center text-gray-500">No sales logged yet. Record a bag sale here — it deducts from ready-to-sell stock.</td></tr>';
     return;
   }
   tbody.innerHTML = list.map(function (s) {
     const customer = saleCustomer(s.customerId);
     const credit = saleCreditAmount(s);
     const paid = s.paidAmount === undefined ? s.amount : s.paidAmount;
-    return '<tr class="border-b border-gray-800">' +
-      '<td class="py-2 pr-2 whitespace-nowrap">' + esc(s.date) + '</td>' +
-      '<td class="py-2 pr-2 text-xs">' + esc(customer ? customer.name : 'Walk-in') + '</td>' +
-      '<td class="py-2 pr-2">' + fmt(s.bags) + '</td>' +
-      '<td class="py-2 pr-2">' + fmt(s.pieces) + '</td>' +
-      '<td class="py-2 pr-2">' + (s.bags > 0 ? (s.pieces / s.bags).toFixed(1) : '—') + '</td>' +
-      '<td class="py-2 pr-2 text-emerald-400 font-semibold">' + fmtKs(s.amount) + '</td>' +
-      '<td class="py-2 pr-2 text-xs"><span class="text-emerald-400">' + fmtKs(paid) + '</span>' + (credit ? ' <span class="text-red-400">/ ' + fmtKs(credit) + '</span>' : '') + '</td>' +
-      '<td class="py-2 pr-2 ' + ((saleProfit(s) >= 0) ? 'text-emerald-400' : 'text-red-400') + ' font-bold">' + fmtKs(saleProfit(s)) + '</td>' +
-      '<td class="py-2"><div class="flex gap-2">' +
-      '<button onclick="printSaleReceipt(\'' + s.id + '\')" class="text-emerald-400 hover:text-emerald-300 transition" title="Print receipt"><i data-lucide="receipt" class="w-4 h-4"></i></button>' +
-      '<button onclick="selectSaleToEdit(\'' + s.id + '\')" class="text-amber-400 hover:text-amber-300 transition" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>' +
-      '<button onclick="removeSale(\'' + s.id + '\')" class="text-red-400 hover:text-red-300 transition" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
+    const profit = saleProfit(s);
+    const loss = profit < 0;
+    const customerCell = customer
+      ? '<span class="text-gray-200">' + esc(customer.name) + '</span>'
+      : '<span class="text-gray-500">Walk-in</span>';
+    const chip = '<span class="' + (loss ? 'chip-loss' : 'chip-profit') + '" title="Sale amount − cost of the pieces sold (COGS)">' + (loss ? '−' : '+') + fmtKs(Math.abs(profit)) + '</span>';
+    return '<tr class="border-b border-gray-800 hover:bg-gray-800/40">' +
+      '<td class="py-2 pr-3 whitespace-nowrap tabular-nums text-gray-200">' + esc(s.date) + '</td>' +
+      '<td class="py-2 pr-3 text-xs">' + customerCell + '</td>' +
+      '<td class="py-2 pr-3 tabular-nums text-right">' + fmt(s.bags) + '</td>' +
+      '<td class="py-2 pr-3 tabular-nums text-right text-gray-400">' + fmt(s.pieces) + '</td>' +
+      '<td class="py-2 pr-3 tabular-nums text-right text-gray-400">' + (s.bags > 0 ? (s.pieces / s.bags).toFixed(1) : '—') + '</td>' +
+      '<td class="py-2 pr-3 tabular-nums text-right whitespace-nowrap text-gray-300">' + fmtKs(s.bags > 0 ? Math.round((s.amount || 0) / s.bags) : (s.price || 0)) + '</td>' +
+      '<td class="py-2 pr-3 tabular-nums text-right whitespace-nowrap text-emerald-400 font-semibold">' + fmtKs(s.amount) + '</td>' +
+      '<td class="py-2 pr-3 tabular-nums text-right whitespace-nowrap"><span class="text-emerald-500">' + fmtKs(paid) + '</span>' + (credit ? ' <span class="text-red-400">/ ' + fmtKs(credit) + '</span>' : '') + '</td>' +
+      '<td class="py-2 pr-3 text-right whitespace-nowrap">' + chip + '</td>' +
+      '<td class="py-2 text-right"><div class="flex gap-1 items-center justify-end">' +
+      '<button onclick="printSaleReceipt(\'' + s.id + '\')" class="p-1.5 rounded-lg text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition" title="Print receipt"><i data-lucide="receipt" class="w-4 h-4"></i></button>' +
+      '<button onclick="selectSaleToEdit(\'' + s.id + '\')" class="p-1.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>' +
+      '<button onclick="removeSale(\'' + s.id + '\')" class="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
       '</div></td></tr>';
   }).join('');
   lucide.createIcons();

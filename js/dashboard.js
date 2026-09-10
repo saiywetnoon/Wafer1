@@ -35,7 +35,11 @@ function renderDashboard() {
   const todaySales = salesList().filter(function (s) { return s.date === todayStr; });
   const revenueToday = todaySales.reduce(function (s, x) { return s + (x.amount || 0); }, 0);
   const capitalToday = todayProduction.reduce(function (s, p) { return s + (p.capital || 0); }, 0);
-  const netToday = revenueToday - capitalToday;
+  // Today's gain = today's revenue minus the COGS of the goods actually sold
+  // today. Rolling 25 bags today and selling 10 books only those 10 bags'
+  // cost — the unsold 15 stay in ready-to-sell stock instead of showing a loss.
+  const cogsToday = todaySales.reduce(function (s, x) { return s + (x.cogs || 0); }, 0);
+  const netToday = revenueToday - cogsToday;
   const ratio = t.capital > 0 ? (t.net / t.capital) * 100 : 0;
   $('kpiRevenue').textContent = fmtKs(revenueToday);
   $('kpiCapital').textContent = fmtKs(capitalToday);

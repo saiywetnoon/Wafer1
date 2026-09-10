@@ -21,6 +21,12 @@
   .cal-day.selected { outline: 2px solid #10B981; }
   input[type=number]::-webkit-inner-spin-button { opacity: 1; }
   .price-input, .usage-input { font-variant-numeric: tabular-nums; }
+  /* Profit / loss chips used in the Recent Sales table. Profit is the sale
+     amount minus the average-cost COGS of the pieces actually sold, so these
+     cannot show a fake loss when a batch is sold over several customers. */
+  .chip-profit, .chip-loss { display: inline-block; padding: 1px 8px; border-radius: 9999px; font-size: 12px; font-weight: 700; line-height: 1.6; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .chip-profit { background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.35); color: #34D399; }
+  .chip-loss { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.35); color: #F87171; }
 
 /* ============================================================
    FRYING PAN TIMERS — 3 independent pan timers

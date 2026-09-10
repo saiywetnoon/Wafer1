@@ -446,8 +446,8 @@ tailwind.config = {
         <table class="w-full text-sm responsive-table">
           <thead>
             <tr class="text-left text-xs text-gray-400 border-b border-gray-700">
-              <th class="py-2 pr-2">Date</th><th class="py-2 pr-2">Customer</th><th class="py-2 pr-2">Bags</th><th class="py-2 pr-2">Pieces</th><th class="py-2 pr-2">Pcs/Bag</th>
-              <th class="py-2 pr-2">Amount</th><th class="py-2 pr-2">Paid / Credit</th><th class="py-2 pr-2">Profit</th><th class="py-2">Action</th>
+              <th class="py-2 pr-2">Date</th><th class="py-2 pr-2">Customer</th><th class="py-2 pr-2 text-right">Bags</th><th class="py-2 pr-2 text-right">Pieces</th><th class="py-2 pr-2 text-right">Pcs/Bag</th>
+              <th class="py-2 pr-2 text-right">Rate/Bag</th><th class="py-2 pr-2 text-right">Amount</th><th class="py-2 pr-2 text-right">Paid / Credit</th><th class="py-2 pr-2 text-right">Profit</th><th class="py-2 text-right">Action</th>
             </tr>
           </thead>
           <tbody id="salesBody"></tbody>
@@ -473,7 +473,7 @@ tailwind.config = {
       <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
         <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="trending-up" class="w-4 h-4 text-emerald-400"></i> Net Daily Gain</div>
         <div id="kpiNet" class="text-lg font-extrabold text-emerald-400">0 Ks</div>
-        <div class="text-[10px] text-gray-500 mt-1">revenue − capital</div>
+        <div class="text-xs text-gray-500 mt-1">revenue − cost of goods actually sold</div>
       </div>
       <div class="card bg-gray-900 rounded-xl p-4 border border-gray-800">
         <div class="flex items-center gap-2 text-gray-400 text-xs font-semibold mb-2"><i data-lucide="percent" class="w-4 h-4 text-amber-400"></i> Cumulative Profit/Capital</div>
