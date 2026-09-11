@@ -1,9 +1,15 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" data-build="v1.12.6">
+<html lang="en" class="dark" data-build="v1.13.0">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Crispy Roll Ledger — Cloud-Synced Daily Record-Keeping</title>
+<meta name="theme-color" content="#b45309">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Crispy Roll">
+<link rel="manifest" href="manifest.webmanifest">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://unpkg.com/lucide@1.34.0"></script>
@@ -38,7 +44,7 @@ tailwind.config = {
 
 <link rel="stylesheet" href="css/styles.css">
   <link rel="icon" href="hkop_kop_favicon.ico">
-  <link rel="apple-touch-icon" href="hkop_kop_favicon.ico">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
@@ -64,6 +70,12 @@ tailwind.config = {
       <span class="sidebar-glyph" id="sidebarToggleGlyph">«</span>
     </button>
     <div class="topbar-actions">
+      <button id="langToggleBtn" data-noi18n onclick="toggleAppLang()" class="topbar-btn text-amber-300" title="Switch language to Myanma (Burmese)">
+        <i data-lucide="languages" class="w-4 h-4 shrink-0"></i> <span id="langToggleLabel">မြန်မာ</span>
+      </button>
+      <button id="installAppBtn" data-noi18n class="hidden topbar-btn text-emerald-300" title="Install app on this device">
+        <i data-lucide="download" class="w-4 h-4 shrink-0"></i> <span id="installAppLabel">Install</span>
+      </button>
       <button id="companyNameBtn" onclick="openCompanySwitch()" title="Switch workspace" class="topbar-btn">
         <i data-lucide="building-2" class="w-4 h-4 text-amber-400 shrink-0"></i> <span id="companyName" class="truncate">—</span>
       </button>
@@ -1418,6 +1430,9 @@ tailwind.config = {
 
 <!-- ===================== ACCOUNT LOGIN / SIGN UP ===================== -->
 <div id="authScreen" class="fixed inset-0 z-[200] bg-gray-950 overflow-y-auto">
+  <button id="authLangToggleBtn" data-noi18n onclick="toggleAppLang()" class="fixed top-4 right-4 z-[210] topbar-btn text-amber-300" title="Switch language to Myanma (Burmese)">
+    <i data-lucide="languages" class="w-4 h-4 shrink-0"></i> <span id="authLangToggleLabel">မြန်မာ</span>
+  </button>
   <div class="min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-md py-8">
       <div class="flex flex-col items-center gap-3 mb-6">
@@ -1517,12 +1532,14 @@ tailwind.config = {
 </div>
 
 
-    <script src="js/config.js?v=20260919"></script>
+    <script src="js/config.js?v=20261003"></script>
+    <script src="js/i18n.js?v=20261003"></script>
+    <script src="js/pwa.js?v=20261003"></script>
     <script src="js/device.js?v=20260919"></script>
     <script src="js/supabase.js?v=20260919"></script>
     <script src="js/storage.js?v=20260920"></script>
     <script src="js/google.js?v=20260919"></script>
-    <script src="js/helpers.js?v=20260919"></script>
+    <script src="js/helpers.js?v=20261003"></script>
     <script src="js/pricing.js?v=20260919"></script>
     <script src="js/usage.js?v=20260919"></script>
     <script src="js/ledger.js?v=20260919"></script>
@@ -1543,7 +1560,7 @@ tailwind.config = {
     <script src="js/auth.js?v=20260919"></script>
     <script src="js/cloud.js?v=20260920"></script>
     <script src="js/ai.js?v=20260919"></script>
-    <script src="js/init.js?v=20260919"></script>
+    <script src="js/init.js?v=20261003"></script>
 
 </body>
 </html>

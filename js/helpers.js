@@ -494,6 +494,10 @@ function csvRow(values) { return values.map(csvCell).join(','); }
 
 /* ---------- Toast ---------- */
 function showToast(message, type) {
+  // Translate toast text when the Myanma language is active.
+  if (typeof t === 'function' && typeof getAppLang === 'function' && getAppLang() === 'my') {
+    message = t(message);
+  }
   type = type || 'success';
   const colors = { success: 'bg-emerald-600', error: 'bg-red-600', info: 'bg-amber-500' };
   const icons = { success: 'check-circle', error: 'alert-circle', info: 'info' };

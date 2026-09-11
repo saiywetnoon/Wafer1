@@ -28,6 +28,8 @@ function renderAll() {
   if (typeof refreshTabBadges === 'function') { try { refreshTabBadges(); } catch (e) { /* best-effort */ } }
   if (typeof refreshNotifications === 'function') { try { refreshNotifications(); } catch (e) { /* best-effort */ } }
   lucide.createIcons();
+  // Keep the active language applied to freshly rendered content.
+  if (typeof applyLanguageToDom === 'function') { try { applyLanguageToDom(); } catch (e) { /* best-effort */ } }
 }
 
 /* ============================================================
