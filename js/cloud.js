@@ -72,7 +72,11 @@ async function supabaseGet() {
   const uid = SUPA.user && SUPA.user.id;
   if (!uid) return { ok: false, error: 'Not signed in.' };
   const row = await SUPA.getLedger(uid);
-  if (!row) return { ok: false, payload: null };
+  // A row with `.error` means the READ FAILED — never mistake that for "the
+  // cloud is empty" (an emptiness bug let devices overwrite a populated cloud
+  // with a stale local copy). `null` means a clean, CONFIRMED empty ledger.
+  if (row && row.error) return { ok: false, error: row.error };
+  if (!row) return { ok: true, payload: null };
   return { ok: true, payload: row.payload, exportedAt: row.updatedAt };
 }
 /* True when two states are effectively identical. Ignores bookkeeping stamps
@@ -955,6 +959,23 @@ async function cloudAfterSignIn() {
   const remoteCount = remoteState ? stateDataCount(remoteState) : 0;
   const remoteTs = remote && remote.exportedAt ? Date.parse(remote.exportedAt) : 0;
   const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
+
+  // Could not READ the cloud (network / RLS / expired session). Never treat this
+  // as "cloud empty": showing the local copy is fine, but pushing local data
+  // over an unreadable cloud is how synced records get lost. Keep the account
+  // copy untouched and retry shortly.
+  if (!res || res.ok === false || res.error) {
+    updateGoogleSyncStatus('Online as ' + email + ' — could not reach the cloud yet. It will retry automatically.', 'info');
+    renderCloudStatus();
+    if (!window.__cloudReconcileRetry) {
+      window.__cloudReconcileRetry = true;
+      setTimeout(function () {
+        window.__cloudReconcileRetry = false;
+        try { cloudAfterSignIn(); } catch (e) { console.warn('cloud reconcile retry failed', e); }
+      }, 8000);
+    }
+    return true;
+  }
 
   // Same content both sides -> nothing to do.
   if (remoteState && statesEqual(state, remoteState)) {

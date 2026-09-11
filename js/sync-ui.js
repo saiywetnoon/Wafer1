@@ -235,6 +235,39 @@ function renderCloudStatus() {
       ? 'Not signed in. Sign in with Google (header button) to sync this workspace from any device.'
       : 'Not signed in. Log in to sync your ledger to any device.';
   }
+  try { renderDeviceSyncStatus(); } catch (e) { /* best-effort */ }
+}
+
+/* Live device + account facts for the "This Device & Account" card. */
+function renderDeviceSyncStatus() {
+  const set = function (id, v) { const el = $(id); if (el) el.textContent = v || '—'; };
+  set('deviceSyncEmail', cloudSignedInEmail() || 'Not signed in');
+  set('deviceSyncLabel', (typeof getDeviceLabel === 'function') ? getDeviceLabel() : '');
+  set('deviceSyncEngine', SUPA.configured() ? 'Supabase (real-time auto-sync)' : 'Legacy Apps Script');
+  set('deviceSyncRealtime', (SUPA.configured() && SUPA.user && SUPA.user.id) ? 'Listening' : '—');
+  set('deviceSyncBuild', (typeof __LEDGER_BUILD !== 'undefined') ? __LEDGER_BUILD : '');
+  let last = '—';
+  try {
+    const l = cloudLastSyncAt();
+    if (l) { const d = new Date(l); last = isNaN(d.getTime()) ? '—' : d.toLocaleString(); }
+  } catch (e) {}
+  set('deviceSyncLast', last);
+}
+
+/* Re-create the realtime subscription (e.g. after a flaky connection) where
+   supported, then force an immediate pull/merge. */
+async function reconnectRealtime() {
+  if (SUPA.configured() && SUPA.user && SUPA.user.id) {
+    try {
+      if (typeof SUPA.unsubscribeRealtime === 'function') SUPA.unsubscribeRealtime();
+      if (typeof supabaseWatch === 'function') supabaseWatch(SUPA.user.id);
+      updateGoogleSyncStatus('Live updates reconnected.', 'success');
+    } catch (e) { updateGoogleSyncStatus('Could not reconnect live updates — ' + e.message, 'info'); }
+    await cloudSyncNow();
+    return;
+  }
+  updateGoogleSyncStatus('Re-syncing…', 'info');
+  await cloudSyncNow();
 }
 
 async function cloudSyncNow() {
@@ -242,6 +275,13 @@ async function cloudSyncNow() {
   if (!cloudReady()) { showToast(cloudNeedsUrl() ? 'Add your Apps Script URL below to go online.' : 'Sign in first.', 'error'); return; }
   updateGoogleSyncStatus('Syncing…', 'info');
   const res = await cloudGet();
+  // A failed read is NOT an empty cloud — stop and tell the user instead of
+  // pushing this device's copy over data we could not even read.
+  if (!res || res.ok === false || res.error) {
+    updateGoogleSyncStatus('Could not reach the cloud — check internet and sign-in, then try Sync Now again.', 'info');
+    renderCloudStatus();
+    return;
+  }
   const remote = (res && res.ok) ? res.payload : null;
   const remoteState = (remote && remote.state) ? remote.state : null;
   const localCount = stateDataCount(state);
@@ -326,4 +366,5 @@ async function restoreCloudBackup(fileName) {
 $('cloudSyncNowBtn').addEventListener('click', function () { cloudSyncNow(); lucide.createIcons(); });
 $('cloudUploadBtn').addEventListener('click', function () { cloudUploadNow(); lucide.createIcons(); });
 $('cloudBackupBtn').addEventListener('click', function () { cloudBackupNow(); lucide.createIcons(); });
+if ($('reconnectLiveBtn')) $('reconnectLiveBtn').addEventListener('click', function () { reconnectRealtime(); lucide.createIcons(); });
 

@@ -118,10 +118,19 @@ const SUPA = {
     return { ok: true };
   },
   async getLedger(userId) {
-    const sb = this.init(); if (!sb) return null;
+    const sb = this.init(); if (!sb) return { error: 'unconfigured' };
     const { data, error } = await sb
       .from('ledgers').select('payload,updated_at').eq('user_id', userId).maybeSingle();
-    if (error || !data) return null;
+    if (error) {
+      // Distinguish a REAL read failure (RLS / network / session) from a clean
+      // "no row yet". A failed read must never look like an empty cloud —
+      // that used to let a device push its local copy OVER a populated cloud
+      // it simply could not read at that moment.
+      const msg = String((error && (error.message || error.code)) || 'read failed');
+      if (/no rows|PGRST116|406|not found/i.test(msg)) return null;
+      return { error: msg };
+    }
+    if (!data) return null;
     return { payload: data.payload, updatedAt: data.updated_at };
   },
 

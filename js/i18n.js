@@ -155,6 +155,9 @@ const I18N_MY = {
   'Notifications & alerts': 'အသိပေးချက်များနှင့် သတိပေးချက်များ',
   'Install': 'ထည့်သွင်းမည်',
   'Install app': 'အက်ပ်ထည့်သွင်းမည်',
+  'Sync Now': 'ယခု Sync လုပ်မည်',
+  'Reconnect / Sync Now': 'ပြန်ချိတ် / Sync လုပ်မည်',
+  'This Device & Account': 'ဤစက်ပစ္စည်းနှင့် အကောင့်',
   // ---------- Navigation ----------
   'Operations': 'လုပ်ငန်းများ',
   'Production': 'ထုတ်လုပ်မှု',
