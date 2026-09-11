@@ -325,7 +325,7 @@ function updateLive() {
   const onHand = (state.stock && state.stock.pieces) || 0;
   $('liveStockAfter').textContent = fmt(onHand + parts) + ' ready';
 }
-['logBagsProduced', 'logPieces', 'logWeightPerRoll', 'logNotes', 'logLabor', 'hourlyWage', 'additionalCost', 'logRollsPerBag'].forEach(function (id) {
+['logBagsProduced', 'logPieces', 'logWeightPerRoll', 'logNotes', 'logLabor', 'hourlyWage', 'additionalCost', 'logRollsPerBag', 'logUseBy'].forEach(function (id) {
   const el = $(id);
   if (el) el.addEventListener('input', function (ev) {
     // The user typed in the Bags field — mark it MANUAL so the live auto-fill

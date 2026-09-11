@@ -245,7 +245,7 @@ function triggerGoogleSync() {
       console.warn('auto cloud push failed', e);
       pendingCloudPushQueued = false;
     }
-  }, 700);
+  }, 300);
 }
 
 /* ---------- Backend-mode diagnostic (visible + console) ----------

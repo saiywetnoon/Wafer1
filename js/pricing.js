@@ -18,10 +18,34 @@ function renderPriceTable() {
       '</tr>';
   }).join('');
   document.querySelectorAll('.price-input').forEach(function (inp) {
+    /* LIVE capture — every keystroke goes straight into state and syncs to the
+       cloud within a second, on any device. The base value is remembered so a
+       price-history entry is written only when the field is COMMITTED (blur),
+       never while you are mid-typing. */
+    inp.addEventListener('focusin', function () {
+      try { inp.__base = state.prices[parseInt(inp.dataset.idx, 10)][inp.dataset.field]; }
+      catch (e) { inp.__base = undefined; }
+    });
+    inp.addEventListener('input', function () {
+      const idx = parseInt(inp.dataset.idx, 10);
+      const field = inp.dataset.field;
+      const ing = state.prices && state.prices[idx];
+      if (!ing) return;
+      if (field === 'price' || field === 'weightPerUnit') {
+        const v = parseFloat(inp.value);
+        ing[field] = (!isNaN(v) && v >= 0) ? v : (inp.value === '' ? null : ing[field]);
+      } else {
+        ing.remark = inp.value;
+      }
+      ing.updatedAt = new Date().toISOString();
+      persistState();
+      if (typeof updateUsageCosts === 'function') updateUsageCosts();
+    });
     inp.addEventListener('change', function () {
       const idx = parseInt(inp.dataset.idx, 10);
       const field = inp.dataset.field;
-      const oldVal = state.prices[idx][field];
+      const oldVal = (inp.__base !== undefined) ? inp.__base : state.prices[idx][field];
+      delete inp.__base;
       if (field === 'price' || field === 'weightPerUnit') {
         const v = parseFloat(inp.value);
         const newVal = (!isNaN(v) && v >= 0) ? v : (inp.value === '' ? null : oldVal);
