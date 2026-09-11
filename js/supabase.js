@@ -7,8 +7,10 @@
 
    Tables (see _supabase-setup.sql):
      profiles(id uuid pk, email text, role text, status text, created_at)
-     ledgers  (user_id uuid pk, payload jsonb, updated_at timestamptz)
-   Row-Level Security keeps each user's profile + ledger private.
+     shared_ledgers (workspace_id text pk, payload jsonb, updated_at timestamptz)
+   All approved accounts share the same business workspace. This is deliberate:
+   a phone, tablet and cashier PC may use different approved logins but must
+   always see one ledger.
    ============================================================ */
 
 const SUPA = {
@@ -17,6 +19,7 @@ const SUPA = {
   profile: { role: 'user', status: 'pending' },
   _hl: null,       // realtime listener handle
   _onAuth: null,   // auth-state-change callback
+  workspaceId: 'main',
 
   /* True only when the dev has pasted URL + anon key in config.js. */
   configured() {
@@ -102,7 +105,7 @@ const SUPA = {
     if (!u || !u.id) return { error: 'session expired — sign in again to sync' };
     const now = new Date().toISOString();
     const { error } = await sb
-      .from('ledgers').upsert({ user_id: u.id, payload: payload, updated_at: now }, { onConflict: 'user_id' });
+      .from('shared_ledgers').upsert({ workspace_id: this.workspaceId, payload: payload, updated_at: now }, { onConflict: 'workspace_id' });
     if (error) {
       const msg = String((error && (error.message || error.code)) || 'write failed');
       // If the backend says our token is bad, confirm it server-side and drop
@@ -120,7 +123,7 @@ const SUPA = {
   async getLedger(userId) {
     const sb = this.init(); if (!sb) return { error: 'unconfigured' };
     const { data, error } = await sb
-      .from('ledgers').select('payload,updated_at').eq('user_id', userId).maybeSingle();
+      .from('shared_ledgers').select('payload,updated_at').eq('workspace_id', this.workspaceId).maybeSingle();
     if (error) {
       // Distinguish a REAL read failure (RLS / network / session) from a clean
       // "no row yet". A failed read must never look like an empty cloud —
@@ -130,17 +133,25 @@ const SUPA = {
       if (/no rows|PGRST116|406|not found/i.test(msg)) return null;
       return { error: msg };
     }
-    if (!data) return null;
-    return { payload: data.payload, updatedAt: data.updated_at };
+    if (data) return { payload: data.payload, updatedAt: data.updated_at };
+    // One-time seamless migration from the old per-user ledger. The first
+    // existing account to open this version seeds the shared workspace; later
+    // accounts read that shared row. Private legacy rows are left untouched.
+    const legacy = await sb.from('ledgers').select('payload,updated_at').eq('user_id', userId).maybeSingle();
+    if (legacy && !legacy.error && legacy.data) {
+      return { payload: legacy.data.payload, updatedAt: legacy.data.updated_at, legacy: true };
+    }
+    if (legacy && legacy.error) return { error: String(legacy.error.message || legacy.error.code || 'legacy read failed') };
+    return null;
   },
 
   /* ---- realtime: other devices' edits arrive by themselves ---- */
   subscribeRealtime(userId, cb) {
     const sb = this.init(); if (!sb) return null;
     if (this._hl) { try { sb.removeChannel(this._hl); } catch (e) {} }
-    const chan = sb.channel('led-' + userId)
+    const chan = sb.channel('shared-led-' + this.workspaceId)
       .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'ledgers', filter: 'user_id=eq.' + userId },
+          { event: '*', schema: 'public', table: 'shared_ledgers', filter: 'workspace_id=eq.' + this.workspaceId },
           function (payload) { if (cb) { try { cb(payload.new); } catch (e) {} } })
       .subscribe();
     this._hl = chan;

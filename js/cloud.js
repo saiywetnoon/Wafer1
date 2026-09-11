@@ -77,7 +77,7 @@ async function supabaseGet() {
   // with a stale local copy). `null` means a clean, CONFIRMED empty ledger.
   if (row && row.error) return { ok: false, error: row.error };
   if (!row) return { ok: true, payload: null };
-  return { ok: true, payload: row.payload, exportedAt: row.updatedAt };
+  return { ok: true, payload: row.payload, exportedAt: row.updatedAt, legacy: !!row.legacy };
 }
 /* True when two states are effectively identical. Ignores bookkeeping stamps
    (updatedAt/version), the draft's capture time, and — crucially — the DERIVED
@@ -1010,6 +1010,7 @@ async function cloudAfterSignIn() {
   const res = await cloudGet();
   const remote = res && res.ok ? res.payload : null;
   const remoteState = remote && remote.state ? remote.state : null;
+  const remoteIsLegacy = !!(remote && remote.legacy);
   const remoteCount = remoteState ? stateDataCount(remoteState) : 0;
   const remoteTs = remote && remote.exportedAt ? Date.parse(remote.exportedAt) : 0;
   const localTs = state.updatedAt ? Date.parse(state.updatedAt) : 0;
@@ -1033,6 +1034,16 @@ async function cloudAfterSignIn() {
 
   // Same content both sides -> nothing to do.
   if (remoteState && statesEqual(state, remoteState)) {
+    if (remoteIsLegacy) {
+      const migrated = await cloudPush();
+      if (!migrated || !migrated.ok) {
+        updateGoogleSyncStatus('Could not create the shared workspace yet; retrying automatically.', 'info');
+        return false;
+      }
+      updateGoogleSyncStatus('Created the shared workspace. All approved accounts now see this ledger.', 'success');
+      renderCloudStatus();
+      return true;
+    }
     updateGoogleSyncStatus('Online as ' + email + '. Your ledger is up to date.', 'success');
     renderCloudStatus();
     return true;
@@ -1047,6 +1058,7 @@ async function cloudAfterSignIn() {
       showToast('Loaded your ' + remoteCount + ' records from the cloud.', 'success');
       try { loadDraftIfNewer(); } catch (e) {}
     }
+    if (remoteIsLegacy) await cloudPush();
     renderCloudStatus();
     return true;
   }

@@ -946,6 +946,10 @@
         state.settings = Object.assign({}, state.settings || {}, {
           rollsPerBag: (settings.rollsPerBag > 0) ? settings.rollsPerBag : defaultRollsPerBag()
         });
+        // Pan settings use their own local timer store.  The packing rule also
+        // belongs to the ledger, however, so it must explicitly use the
+        // ledger save path or this change stays on this browser only.
+        if (typeof saveState === 'function') saveState();
       }
     } catch (e) { /* best-effort; ledger derive has its own fallback */ }
   }

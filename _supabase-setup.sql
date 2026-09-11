@@ -125,7 +125,7 @@ create policy profiles_update on public.profiles
   for update using (public.is_admin())
   with check (public.is_admin());
 
--- 5) Ledgers: strictly per-user (even the admin cannot read another row).
+-- 5) Legacy private ledgers (kept only so existing data can be migrated).
 alter table public.ledgers enable row level security;
 drop policy if exists ledgers_select on public.ledgers;
 create policy ledgers_select on public.ledgers
@@ -136,9 +136,28 @@ create policy ledgers_insert on public.ledgers
 drop policy if exists ledgers_update on public.ledgers;
 create policy ledgers_update on public.ledgers
   for update using (auth.uid() = user_id and public.is_approved())
-  with check (auth.uid() = user_id and public.is_approved());
+with check (auth.uid() = user_id and public.is_approved());
 
--- 6) Enable realtime so edits on one device appear on others instantly.
+-- 6) One shared business ledger. Every approved account can read and edit the
+-- same row, so staff can use separate logins on their own phones/PCs while
+-- seeing the same production, sales, stock, customers and cash data.
+create table if not exists public.shared_ledgers (
+  workspace_id text primary key,
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz default now()
+);
+alter table public.shared_ledgers enable row level security;
+drop policy if exists shared_ledgers_select on public.shared_ledgers;
+create policy shared_ledgers_select on public.shared_ledgers
+  for select using (public.is_approved());
+drop policy if exists shared_ledgers_insert on public.shared_ledgers;
+create policy shared_ledgers_insert on public.shared_ledgers
+  for insert with check (public.is_approved());
+drop policy if exists shared_ledgers_update on public.shared_ledgers;
+create policy shared_ledgers_update on public.shared_ledgers
+  for update using (public.is_approved()) with check (public.is_approved());
+
+-- 7) Enable realtime so edits on one device appear on others instantly.
 -- Supabase creates this publication for a project; never drop/recreate it,
 -- because that can remove other tables already using realtime.
 do $$
@@ -155,11 +174,20 @@ begin
   ) then
     alter publication supabase_realtime add table public.ledgers;
   end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'shared_ledgers'
+  ) then
+    alter publication supabase_realtime add table public.shared_ledgers;
+  end if;
 end;
 $$;
 alter table public.ledgers replica identity full;
+alter table public.shared_ledgers replica identity full;
 
--- 7) Recalculate updated_at automatically on every upsert.
+-- 8) Recalculate updated_at automatically on every upsert.
 create or replace function public.touch_ledger()
 returns trigger language plpgsql as $$
 begin
@@ -169,4 +197,7 @@ end;
 $$;
 drop trigger if exists ledger_touch on public.ledgers;
 create trigger ledger_touch before insert or update on public.ledgers
+  for each row execute procedure public.touch_ledger();
+drop trigger if exists shared_ledger_touch on public.shared_ledgers;
+create trigger shared_ledger_touch before insert or update on public.shared_ledgers
   for each row execute procedure public.touch_ledger();
