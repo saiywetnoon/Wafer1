@@ -113,7 +113,7 @@ function renderInventory() {
   if (ivEl) ivEl.textContent = fmtKs(Math.round(inventoryValue()));
   renderIngredientWasteOptions();
   renderInventoryMovements();
-  lucide.createIcons();
+  safeIcons();
 }
 
 function addStockFor(name) {

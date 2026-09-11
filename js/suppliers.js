@@ -89,7 +89,7 @@ function renderSuppliers() {
   var t = $('totalPayable'); if (t) t.textContent = fmtKs(totalPayable());
   var r = $('netReceivable'); if (r) r.textContent = fmtKs(totalReceivable());
   var n = $('netPosition'); if (n) n.textContent = fmtKs(totalReceivable() - totalPayable());
-  lucide.createIcons();
+  safeIcons();
 }
 
 function renderSupplierDropdowns() {
@@ -229,14 +229,14 @@ function addItemRow(name) {
     el.addEventListener('input', function () { clearError(el); });
     el.addEventListener('change', function () { clearError(el); });
   });
-  lucide.createIcons();
+  safeIcons();
 }
 
 function removeItemRow(btn) {
   var row = btn.closest('.purchase-item');
   if (row) row.remove();
   recalcPurchaseTotal();
-  lucide.createIcons();
+  safeIcons();
 }
 
 function recalcPurchaseTotal() {

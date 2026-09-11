@@ -234,7 +234,7 @@ async function openAdminConsole() {
   setAdminMsg(users.length ? '' : 'No accounts yet. Share your app link so members can request an account.');
   if (!users.length) { list.innerHTML = '<div class="text-xs text-gray-500">No accounts yet. Share your app link and users can request an account.</div>'; return; }
   list.innerHTML = users.map(function (u) { return adminRow(u); }).join('');
-  lucide.createIcons();
+  safeIcons();
 }
 function adminRow(u) {
   const st = u.status || 'pending';

@@ -392,8 +392,8 @@ async function restoreCloudBackup(fileName) {
   }
 }
 
-$('cloudSyncNowBtn').addEventListener('click', function () { cloudSyncNow(); lucide.createIcons(); });
-$('cloudUploadBtn').addEventListener('click', function () { cloudUploadNow(); lucide.createIcons(); });
-$('cloudBackupBtn').addEventListener('click', function () { cloudBackupNow(); lucide.createIcons(); });
-if ($('reconnectLiveBtn')) $('reconnectLiveBtn').addEventListener('click', function () { reconnectRealtime(); lucide.createIcons(); });
+$('cloudSyncNowBtn').addEventListener('click', function () { cloudSyncNow(); safeIcons(); });
+$('cloudUploadBtn').addEventListener('click', function () { cloudUploadNow(); safeIcons(); });
+$('cloudBackupBtn').addEventListener('click', function () { cloudBackupNow(); safeIcons(); });
+if ($('reconnectLiveBtn')) $('reconnectLiveBtn').addEventListener('click', function () { reconnectRealtime(); safeIcons(); });
 

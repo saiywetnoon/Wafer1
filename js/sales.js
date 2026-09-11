@@ -110,7 +110,7 @@ function saveSale() {
   document.getElementById('editSaleId').value = '';
   var btn = $('addSaleBtn');
   btn.innerHTML = '<i data-lucide="badge-dollar-sign" class="w-4 h-4"></i> Log Sale';
-  lucide.createIcons();
+  safeIcons();
   showToast(isUpdate ? 'Sale updated for ' + date : 'Sale logged for ' + date + ' — ' + fmt(bags) + ' bags (' + fmtKs(amount) + ').');
   pulseSuccess(btn);
   triggerGoogleSync();
@@ -194,7 +194,7 @@ function selectSaleToEdit(id) {
   $('salePaidNow').value = s.paidAmount === undefined ? s.amount : s.paidAmount;
   $('saleDueDate').value = s.dueDate || '';
   $('addSaleBtn').innerHTML = '<i data-lucide="save" class="w-4 h-4"></i> Update Sale';
-  lucide.createIcons();
+  safeIcons();
   updateSaleLive();
   document.querySelector('[data-tab="sales"]').click();
   showToast('Editing sale from ' + s.date + ' — adjust then click Update Sale.', 'info');
@@ -272,7 +272,7 @@ function renderSalesTab() {
       '<button onclick="removeSale(\'' + s.id + '\')" class="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
       '</div></td></tr>';
   }).join('');
-  lucide.createIcons();
+  safeIcons();
 wireResponsiveTables();
 }
 

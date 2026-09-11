@@ -85,7 +85,7 @@ function loadEntryIntoForm(date) {
     $('logNotes').value = '';
     refreshSaveButton();
   }
-  lucide.createIcons();
+  safeIcons();
   state.prices.forEach(function (ing) {
     const qty = draftUsage[ing.name] !== undefined ? draftUsage[ing.name] : (DEFAULT_USAGE[ing.name] || 0);
     const input = document.querySelector('.usage-input[data-name="' + ing.name + '"]');

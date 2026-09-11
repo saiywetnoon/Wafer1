@@ -310,7 +310,7 @@ function renderProduction() {
       '<button onclick="deleteProduction(\'' + p.id + '\')" class="text-red-400 hover:text-red-300 transition" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>' +
       '</div></td></tr>';
   }).join('');
-  lucide.createIcons();
+  safeIcons();
 wireResponsiveTables();
 }
 

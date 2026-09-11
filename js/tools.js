@@ -163,7 +163,7 @@ function renderExpenses() {
       '<span class="min-w-0 truncate" title="' + esc(e.desc) + '"><span class="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border bg-purple-500/15 border-purple-500/40 text-purple-300 mr-1">' + esc(cat) + '</span>' + esc(e.date) + ' · ' + esc(e.desc) + '</span>' +
       '<span class="flex items-center gap-2 shrink-0"><span class="text-red-400 font-semibold">' + fmtKs(e.amount) + '</span>' + del + '</span></div>';
   }).join('') + '<div class="flex justify-between pt-2 font-bold"><span>Total</span><span class="text-red-400">' + fmtKs(total) + '</span></div>';
-  lucide.createIcons();
+  safeIcons();
 }
 
 $('addExpenseBtn').addEventListener('click', function () {
@@ -209,7 +209,7 @@ function renderRecurring() {
       '<button onclick="removeRecurring(\'' + r.id + '\')" class="text-red-500 hover:text-red-400" title="Remove"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></span></div>';
   }).join('') + '<div class="flex justify-between pt-2 font-bold text-xs"><span>Total fixed / month</span><span class="text-red-400">' + fmtKs(total) + '</span></div>'
     : '<div class="text-gray-500">No recurring costs added. Add rent, internet, or other fixed monthly bills here.</div>';
-  lucide.createIcons();
+  safeIcons();
 }
 
 $('addRecurringBtn').addEventListener('click', function () {

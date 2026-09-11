@@ -16,6 +16,13 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
   if (c === '"') return '&' + 'quot;';
   return '&' + '#39;';
 });
+/* Icon renderer that can NEVER crash the app. Icons are cosmetic — if the icon
+   CDN is blocked or slow (common on some mobile networks), the app must still
+   boot and work; only the little icons are missing. */
+function safeIcons() {
+  try { if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons(); }
+  catch (e) { /* icons are cosmetic */ }
+}
 /* Human-readable "9/5/2026, 3:42 PM" from an ISO string (safe for any device). */
 const fmtDateTime = (iso) => {
   if (!iso) return '';
@@ -560,7 +567,7 @@ function showToast(message, type) {
   el.className = 'toast ' + (colors[type] || 'bg-emerald-600') + ' text-white rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 text-sm font-semibold';
   el.innerHTML = '<i data-lucide="' + (icons[type] || 'info') + '" class="w-5 h-5 shrink-0"></i><span>' + esc(message) + '</span>';
   $('toastContainer').appendChild(el);
-  lucide.createIcons();
+  safeIcons();
   setTimeout(function () {
     el.classList.add('out');
     setTimeout(function () { el.remove(); }, 300);
@@ -760,7 +767,7 @@ function refreshNotifications() {
       list.innerHTML = items.slice(0, 7).map(function (it) {
         return '<div class="notif-item" data-tab="' + it.tab + '"><i data-lucide="' + it.icon + '" class="w-4 h-4 notif-' + it.kind + '"></i><span>' + esc(it.text) + '</span></div>';
       }).join('');
-      if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
+      if (window.lucide) { try { safeIcons(); } catch (e) {} }
     }
   }
 }

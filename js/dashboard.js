@@ -156,6 +156,8 @@ function mtk(title, value, sub, color) {
    (avoids destroy/recreate churn on other tabs)
    ============================================================ */
 function renderCharts() {
+  // Chart.js is cosmetic — a missing/blocked chart CDN must never break the app.
+  if (typeof Chart === 'undefined') return;
   const pane = $('tab-dashboard');
   if (pane && pane.classList.contains('hidden')) return; // not on today — skip
   const gridColor = 'rgba(255,255,255,0.08)';

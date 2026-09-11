@@ -104,7 +104,7 @@ function renderCash() {
         '<span class="flex items-center gap-2 shrink-0"><span class="' + (a.amount >= 0 ? 'text-emerald-400' : 'text-red-400') + ' font-semibold">' + (a.amount >= 0 ? '+' : '-') + fmtKs(Math.abs(a.amount)) + '</span>' +
         '<button onclick="removeCashAdjustment(\'' + a.id + '\')" class="text-red-500 hover:text-red-400" title="Delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button></span></div>';
     }).join('') : '<div class="text-gray-500">No manual adjustments yet.</div>';
-    lucide.createIcons();
+    safeIcons();
   }
   if ($('moneyOutDate') && !$('moneyOutDate').value) $('moneyOutDate').value = today();
   renderMoneyOutList({ listId: 'moneyOutList', totalEl: 'moneyOutTotal', chipsEl: 'moneyOutChips', date: moneyOutDateValue() });
@@ -246,7 +246,7 @@ function renderMoneyOutList(opts) {
   el.innerHTML = shown.length ? shown.map(moneyOutRowHtml).join('') +
     (d.rows.length > shown.length ? '<div class="text-[10px] text-gray-500 pt-1">+' + (d.rows.length - shown.length) + ' more — open the Cash tab for the full list</div>' : '')
     : '<div class="text-xs text-gray-500 py-1">' + (opts.emptyLabel || ('Nothing went out on ' + esc(dateStr) + ' — log a production batch, purchase, expense or cash-out.')) + '</div>';
-  lucide.createIcons();
+  safeIcons();
 }
 
 /* Today's Money Out card on the Dashboard (compact). */

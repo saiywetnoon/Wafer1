@@ -86,7 +86,7 @@ function refreshSaveButton() {
   if (sb.dataset.savelabel !== label) {
     sb.dataset.savelabel = label;
     sb.innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> ' + label;
-    if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
+    if (window.lucide) { try { safeIcons(); } catch (e) {} }
   }
 }
 

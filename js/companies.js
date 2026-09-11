@@ -90,7 +90,7 @@ function renderCompanyScreen() {
       (c.id !== 'default' ? '<button onclick="deleteCompany(\'' + c.id + '\')" class="px-2 py-1 rounded bg-red-700/60 hover:bg-red-600 text-red-100 text-[10px] font-bold">Delete</button>' : '') +
       '</div></div>';
   }).join('') || '<div class="text-gray-500 text-xs">No workspaces yet — create one below.</div>';
-  lucide.createIcons();
+  safeIcons();
 }
 
 function showCompanyScreen(opts) {

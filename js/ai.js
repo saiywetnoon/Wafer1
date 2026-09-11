@@ -929,7 +929,7 @@ function buildProfileForDate(date) {
     btn.disabled = true;
     var original = btn.innerHTML;
     btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Asking…';
-    if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
+    if (window.lucide) { try { safeIcons(); } catch (e) {} }
     askLLM(res.profile, res.findings).then(function (answer) {
       var box = $('aiNarrative');
       if (box) {
@@ -951,7 +951,7 @@ function buildProfileForDate(date) {
     }).finally(function () {
       btn.disabled = false;
       btn.innerHTML = original;
-      if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
+      if (window.lucide) { try { safeIcons(); } catch (e) {} }
     });
   }
 

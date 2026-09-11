@@ -788,7 +788,7 @@ function openSyncReview(remoteState, remoteTs, source, deviceInfo) {
     syncReview.current = null;
     return false;
   }
-  try { if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons(); } catch (e) {}
+  try { if (typeof lucide !== 'undefined' && lucide.createIcons) safeIcons(); } catch (e) {}
   return true;
 }
 

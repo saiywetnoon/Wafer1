@@ -42,7 +42,7 @@ function renderCustomers() {
     $('standingRevenueTotal').textContent = fmtKs(standingRev);
     $('totalDebt').textContent = fmtKs(totalDebt);
   }
-  lucide.createIcons();
+  safeIcons();
 }
 
 function deleteCustomer(id) {
