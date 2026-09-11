@@ -429,6 +429,61 @@ function mergeMovements(local, remote) {
     return m && m.id ? m.id : [m.ingredientName, m.date, m.qty, m.type].join('|');
   });
 }
+
+/* ---------- Deletion tombstones (so DELETES sync across devices too) ----------
+   The additive merge unions records by id — which is why a sale or production
+   batch deleted on one device used to RESURRECT itself on the other device's
+   next merge, leaving the two copies permanently disagreeing on sales and
+   stock. Now every delete also writes a small tombstone (collection|id -> time)
+   into state.deletions. Tombs are merged just like records, and any collection
+   is filtered against them after every merge, so a delete made on ANY device
+   applies everywhere. */
+function deletionKey(collection, id) { return collection + '|' + String(id); }
+function isMarkedDeleted(collection, id) {
+  return !!(state.deletions && id != null && state.deletions[deletionKey(collection, id)]);
+}
+function markDeleted(collection, id) {
+  if (id == null) return;
+  if (!state.deletions) state.deletions = {};
+  state.deletions[deletionKey(collection, id)] = new Date().toISOString();
+}
+/* Clear a tombstone — used when a user deliberately re-adds a price-list
+   ingredient (name-keyed) that they had removed earlier. */
+function unmarkDeleted(collection, id) {
+  if (id == null || !state.deletions) return;
+  delete state.deletions[deletionKey(collection, id)];
+}
+/* Filter every collection against the tombstone map. Returns true when any
+   record was dropped (so the merge knows the state changed and must re-push). */
+function applyDeletionTombstones() {
+  if (!state.deletions) return false;
+  var changed = false;
+  function keep(collection, arr) {
+    if (!Array.isArray(arr)) return arr;
+    var out = arr.filter(function (r) {
+      if (!r) return true;
+      var rid = r.id !== undefined && r.id !== null ? r.id
+        : (r.name !== undefined && r.name !== null ? r.name : null);
+      if (rid == null) return true;
+      return !isMarkedDeleted(collection, rid);
+    });
+    if (out.length !== arr.length) changed = true;
+    return out;
+  }
+  ['production', 'sales', 'waste', 'customers', 'suppliers', 'purchases', 'payments',
+    'customerPayments', 'expenses', 'recurringExpenses', 'recipes',
+    'inventoryMovements', 'prices'].forEach(function (c) {
+    state[c] = keep(c, state[c]);
+  });
+  if (state.cash && Array.isArray(state.cash.adjustments)) {
+    var before = state.cash.adjustments.length;
+    state.cash.adjustments = state.cash.adjustments.filter(function (a) {
+      return !isMarkedDeleted('cashAdjustments', a && a.id);
+    });
+    if (state.cash.adjustments.length !== before) changed = true;
+  }
+  return changed;
+}
 function inventoryUsageShortage(oldUsage, newUsage) {
   const names = new Set(Object.keys(oldUsage || {}).concat(Object.keys(newUsage || {})));
   let shortage = null;

@@ -100,6 +100,7 @@ function addIngredientRow() {
     remark: unitPrompt ? 'per unit' : ''
   };
   state.prices.push(ing);
+  if (typeof unmarkDeleted === 'function') unmarkDeleted('prices', trimmed);
   saveState();
   renderPriceTable();
   renderUsageTable();
@@ -112,6 +113,7 @@ function removeIngredientAt(idx) {
   if (!ing) return;
   if (!confirm('Remove ingredient "' + ing.name + '"? Past entries keep their historical usage data.')) return;
   state.prices.splice(idx, 1);
+  if (ing && typeof markDeleted === 'function') markDeleted('prices', ing.name);
   saveState();
   renderPriceTable();
   renderUsageTable();

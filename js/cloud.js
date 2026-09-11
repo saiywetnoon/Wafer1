@@ -111,6 +111,7 @@ function stateDataCount(s) {
   if (Array.isArray(s.recipes)) n += s.recipes.length;
   if (Array.isArray(s.customers)) n += s.customers.length;
   if (Array.isArray(s.suppliers)) n += s.suppliers.length;
+  if (s.deletions && typeof s.deletions === 'object') n += Object.keys(s.deletions).length;
   if (s.cash && Array.isArray(s.cash.adjustments)) n += s.cash.adjustments.length;
   if (s.inventory && typeof s.inventory === 'object') n += Object.keys(s.inventory).length;
   if (Array.isArray(s.inventoryMovements)) n += s.inventoryMovements.length;
@@ -508,6 +509,17 @@ function mergeRemoteIntoLocal(r) {
   if (!r) return false;
   var changed = false;
 
+  // Deletion tombstones merge additively too — a delete made on ANY device
+  // must reach every other device so removed sales/production never resurrect.
+  if (r.deletions && typeof r.deletions === 'object') {
+    if (!state.deletions) state.deletions = {};
+    var anyNew = false;
+    Object.keys(r.deletions).forEach(function (k) {
+      if (!state.deletions[k]) { state.deletions[k] = r.deletions[k]; anyNew = true; }
+    });
+    if (anyNew) changed = true;
+  }
+
   // Record collections — union by id (remote-only rows added; same-id
   // clashes → newest edit wins automatically).
   ['production', 'sales', 'customers', 'suppliers', 'purchases', 'payments',
@@ -551,6 +563,10 @@ function mergeRemoteIntoLocal(r) {
     var mv = Math.max(state.inventoryMovementVersion || 0, r.inventoryMovementVersion);
     if (mv !== (state.inventoryMovementVersion || 0)) { state.inventoryMovementVersion = mv; changed = true; }
   }
+
+  // Purge any records either device has tombstoned (deleted) before the
+  // derived balances (stock, customer debt, supplier payables) are rebuilt.
+  if (typeof applyDeletionTombstones === 'function' && applyDeletionTombstones()) changed = true;
 
   // Legacy daily entries (date-keyed object).
   if (r.entries) {
@@ -900,6 +916,9 @@ function applyCloudRemote(remote, remoteTs, force) {
     'production', 'sales', 'customers', 'suppliers', 'purchases', 'payments',
     'customerPayments', 'expenses', 'recurringExpenses', 'waste', 'priceHistory', 'recipes'
   ]);
+
+  // A fresh device pulling the cloud must also respect every tombstone.
+  if (typeof applyDeletionTombstones === 'function') applyDeletionTombstones();
 
   if (typeof normalizeCustomerBalances === 'function') normalizeCustomerBalances();
   if (typeof normalizeSupplierPayables === 'function') normalizeSupplierPayables();

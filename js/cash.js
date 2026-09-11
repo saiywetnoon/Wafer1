@@ -33,6 +33,7 @@ function removeCashAdjustment(id) {
   if (!confirm('Delete this cash adjustment?')) return;
   if (!state.cash) return;
   state.cash.adjustments = (state.cash.adjustments || []).filter(function (a) { return a.id !== id; });
+  if (typeof markDeleted === 'function') markDeleted('cashAdjustments', id);
   saveState();
   renderCash();
 }

@@ -346,6 +346,7 @@ function deleteProduction(id) {
   if (!confirm('Delete this production batch?')) return;
   if (p.usage) reconcileProductionInventory(p.usage, {}, p.date, p.id);
   state.production = state.production.filter(function (x) { return x.id !== id; });
+  if (typeof markDeleted === 'function') markDeleted('production', id);
   rebuildStockAndCogs();
   saveState();
   renderAll();

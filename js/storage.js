@@ -20,6 +20,7 @@ let state = {
   waste: [],       // [{ date, qty }] pieces scrapped
   priceHistory: [],// [{ date, name, old, new }]
   recipes: [],     // [{ name, usage }] reusable production formulas
+  deletions: {},   // { '<collection>|<id>': ISO time } tombstone map, part of the synced state
   cash: { opening: 0, adjustments: [] }, // [{ id, date, amount, label }]
   draft: null,   // the LIVE production-form draft — synced to the cloud like any other field
   updatedAt: null

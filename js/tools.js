@@ -187,6 +187,7 @@ function removeExpense(id) {
   if (!confirm('Delete this expense?')) return;
   const before = (state.expenses || []).length;
   state.expenses = (state.expenses || []).filter(function (e) { return e.id !== id; });
+  if (typeof markDeleted === 'function') markDeleted('expenses', id);
   if (state.expenses.length === before) { showToast('Expense not found.', 'error'); return; }
   saveState();
   renderExpenses();
@@ -228,6 +229,7 @@ $('addRecurringBtn').addEventListener('click', function () {
 function removeRecurring(id) {
   if (!confirm('Remove this recurring expense?')) return;
   state.recurringExpenses = (state.recurringExpenses || []).filter(function (r) { return r.id !== id; });
+  if (typeof markDeleted === 'function') markDeleted('recurringExpenses', id);
   saveState();
   renderRecurring();
 }

@@ -54,6 +54,7 @@ function deleteCustomer(id) {
   }
   if (!confirm('Remove this customer?')) return;
   state.customers = (state.customers || []).filter(function (c) { return c.id !== id; });
+  if (typeof markDeleted === 'function') markDeleted('customers', id);
   saveState();
   renderCustomers();
   showToast('Customer removed.');

@@ -138,7 +138,9 @@ function removeStockItem(name) {
   const label = ing ? ing.name : name;
   if (!confirm('Remove "' + label + '" from stock?\n\nIts stock history (movements) will be cleared and it will be treated as a daily-usage item (like water / electricity). It stays in your Price List and Usage table, and you can bring it back later with "Add Stock".')) return;
   if (state.inventory) delete state.inventory[name];
+  const removedMoves = (state.inventoryMovements || []).filter(function (m) { return m.ingredientName === name; });
   state.inventoryMovements = (state.inventoryMovements || []).filter(function (m) { return m.ingredientName !== name; });
+  if (typeof markDeleted === 'function') removedMoves.forEach(function (m) { markDeleted('inventoryMovements', m.id); });
   if (ing) ing.stock = false;
   saveState();
   renderInventory();

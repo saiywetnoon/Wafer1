@@ -205,6 +205,7 @@ function removeSale(id) {
   const sale = state.sales.find(function (item) { return item.id === id; });
   if (sale) applySaleCreditChange(sale, null);
   state.sales = state.sales.filter(function (s) { return s.id !== id; });
+  if (sale && typeof markDeleted === 'function') markDeleted('sales', id);
   rebuildStockAndCogs();
   saveState();
   renderAll();

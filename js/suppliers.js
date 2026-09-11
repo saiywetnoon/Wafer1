@@ -185,6 +185,7 @@ function deleteSupplier(id) {
   var label = s ? s.name : 'this supplier';
   if (!confirm('Delete "' + label + '" from your suppliers?\n\nTheir purchase and payment history is kept so your totals stay correct — the shop just stops being listed.')) return;
   state.suppliers = (state.suppliers || []).filter(function (x) { return x.id !== id; });
+  if (typeof markDeleted === 'function') markDeleted('suppliers', id);
   saveState();
   renderSuppliers();
   showToast('Supplier "' + label + '" deleted.');
