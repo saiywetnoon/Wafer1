@@ -33,6 +33,7 @@ async function cloudSyncNow() {
   if (!res || !res.ok) { updateGoogleSyncStatus('Could not read Supabase. Retrying automatically.', 'error'); return; }
   if (res.payload && res.payload.state) handleRemoteCopy(res.payload.state, Date.parse(res.exportedAt) || undefined, 'Manual sync', res.payload.device || null); else await cloudPush();
   renderCloudStatus();
+  try { compareCloudAndDevice(); } catch (e) { /* best-effort */ }
 }
 async function reconnectRealtime() {
   if (SUPA.configured()) { try { await SUPA.sessionUser(); } catch (e) {} }
@@ -100,3 +101,45 @@ if ($('cloudBackupBtn')) $('cloudBackupBtn').addEventListener('click', downloadF
 if ($('reconnectLiveBtn')) $('reconnectLiveBtn').addEventListener('click', reconnectRealtime);
 if ($('forceOverwriteCloudBtn')) $('forceOverwriteCloudBtn').addEventListener('click', cloudForceOverwriteCloud);
 if ($('forcePullCloudBtn')) $('forcePullCloudBtn').addEventListener('click', cloudForcePullFromCloud);
+if ($('cloudTruthBtn')) $('cloudTruthBtn').addEventListener('click', compareCloudAndDevice);
+
+/* "Compare Cloud vs This Device" — shows what the CLOUD actually holds next to
+   what THIS device holds, so a stale cloud is visible instead of a mystery. */
+function cloudTruthRow(label, cloudVal, localVal) {
+  var same = String(cloudVal) === String(localVal);
+  return '<div class="flex justify-between items-center gap-2 py-1 border-b border-gray-800 last:border-0">' +
+    '<span class="text-gray-300">' + esc(label) + '</span>' +
+    '<span class="text-right ' + (same ? 'text-emerald-400' : 'text-red-400') + '">' +
+    (same ? esc(cloudVal) : 'cloud: ' + esc(cloudVal) + ' · this device: ' + esc(localVal)) +
+    '</span></div>';
+}
+async function compareCloudAndDevice() {
+  if (SUPA.configured()) { try { await SUPA.sessionUser(); } catch (e) {} }
+  const out = $('cloudTruth');
+  if (!out) return;
+  if (!cloudReady()) { out.innerHTML = '<div class="text-[10px] text-amber-400">Sign in first.</div>'; return; }
+  out.innerHTML = '<div class="text-[10px] text-gray-500">Reading the cloud…</div>';
+  const res = await cloudGet();
+  if (!res || !res.ok) { out.innerHTML = '<div class="text-[10px] text-red-400">Could not read the cloud: ' + esc((res && res.error) || 'unknown error') + '</div>'; return; }
+  const c = (res.payload && res.payload.state) || null;
+  if (!c) { out.innerHTML = '<div class="text-[10px] text-amber-400">The cloud is EMPTY. On the device with the real data press "Overwrite Cloud With This Device" (or Upload Now), then Sync Now here.</div>'; return; }
+  const cloudAt = res.payload && res.payload.exportedAt ? new Date(res.payload.exportedAt).toLocaleString() : '—';
+  const eggC = (c.prices || []).find(function (p) { return p.name === 'Egg'; });
+  const eggL = (state.prices || []).find(function (p) { return p.name === 'Egg'; });
+  function prodSummary(a) {
+    a = a || [];
+    if (!a.length) return '—';
+    return a.map(function (p) { return p.date + (p.pieces > 0 ? ' ✓' + p.pieces + 'pcs' : ' ⏳packing'); }).join(', ');
+  }
+  const lines = [];
+  lines.push('<div class="text-[10px] text-gray-500 pb-1">Cloud last saved: ' + esc(cloudAt) + '</div>');
+  lines.push(cloudTruthRow('Egg price', String(eggC ? eggC.price : '—'), String(eggL ? eggL.price : '—')));
+  lines.push(cloudTruthRow('Production', prodSummary(c.production), prodSummary(state.production)));
+  lines.push(cloudTruthRow('Price-history rows', String((c.priceHistory || []).length), String((state.priceHistory || []).length)));
+  lines.push(cloudTruthRow('Sales rows', String((c.sales || []).length), String((state.sales || []).length)));
+  lines.push(cloudTruthRow('Purchases rows', String((c.purchases || []).length), String((state.purchases || []).length)));
+  lines.push(cloudTruthRow('Customers', String((c.customers || []).length), String((state.customers || []).length)));
+  lines.push(cloudTruthRow('Suppliers', String((c.suppliers || []).length), String((state.suppliers || []).length)));
+  out.innerHTML = '<div class="max-h-56 overflow-y-auto">' + lines.join('') + '</div>';
+  try { if (typeof safeIcons === 'function') safeIcons(); } catch (e) {}
+}

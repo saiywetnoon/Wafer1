@@ -160,6 +160,7 @@ const I18N_MY = {
   'Numbers wrong on another device? One-time force copy': 'အခြားစက်တွင် ဂဏန်းများ မှားနေပါသလား? တစ်ကြိမ် အတင်းကော်ပီပြုလုပ်ရန်',
   'Overwrite Cloud With This Device': 'ဤစက်မှ Cloud ကို အစားထိုးမည်',
   'Load Cloud Onto This Device': 'Cloud ကို ဤစက်ထဲ ထည့်သွင်းမည်',
+  'Compare Cloud vs This Device': 'Cloud နှင့် ဤစက်ကို နှိုင်းယှဉ်ကြည့်မည်',
   'Forgot password?': 'စကားဝှက် မေ့သွားပါသလား?',
   'Backup & Restore': 'အရန်သိမ်းခြင်းနှင့် ပြန်လည်ရယူခြင်း',
   'Download Full Backup': 'အပြည့်အစုံ Backup ဒေါင်းလုဒ်လုပ်မည်',

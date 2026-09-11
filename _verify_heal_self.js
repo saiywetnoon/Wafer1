@@ -126,6 +126,16 @@ async function cloudPush() { pushes++; return { ok: true }; }
   const st2 = handleRemoteCopy(baseState(), Date.parse('2026-09-12T08:00:00.000Z'), 'Reconcile after sign-in', null);
   ok(st2 === 'pushed' && pushes === 1, 'empty cloud + local data pushes local once');
 
+  // ---- 6) A FINISHED production row (pieces>0) beats a PACKING mix (pieces=0)
+  // even when the mix row carries a NEWER timestamp (another device poked it).
+  reset();
+  state.production = [{ id: 'pr1', date: '2026-09-12', pieces: 125, bags: 25, capital: 5000, updatedAt: '2026-09-12T10:00:00.000Z' }];
+  const packRemote = baseState();
+  packRemote.production = [{ id: 'pr1', date: '2026-09-12', pieces: 0, bags: 0, capital: 5000, updatedAt: '2026-09-12T11:00:00.000Z' }];
+  handleRemoteCopy(packRemote, Date.parse('2026-09-12T11:05:00.000Z'), 'Realtime', null);
+  ok(state.production.length === 1 && state.production[0].pieces === 125, 'finished production (125 pcs) is NOT downgraded to PACKING by a newer-timestamp mix');
+  ok(pushes === 1, 'protecting the finished row still pushes the merged result so the cloud converges');
+
   console.log(fail ? 'HEAL-SELF CHECKS: ' + fail + ' FAILED' : 'ALL HEAL-SELF CHECKS PASSED (' + pass + ')');
   process.exit(fail ? 1 : 0);
 })();

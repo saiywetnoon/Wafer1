@@ -478,7 +478,20 @@ if (!isNaN(tl) && !isNaN(tr)) return tr > tl;
 if (!isNaN(tr)) return true;   // local is legacy (no stamp) → remote wins
 return false;                       // neither stamped → keep local (don't disturb the view
 }
-function mergeRows(localArr, remoteArr) {
+/* Production batches: a FINISHED row (real pieces counted) must always beat a
+   PACKING row (mix-only, pieces=0) — even if the packing row carries a NEWER
+   timestamp. Otherwise a device that merely viewed/typed on the mix can make
+   every other device (including brand-new logins) show "⏳ PACKING" again for
+   a batch that was already finished. When both sides are in the SAME state
+   (both finished or both packing), the newest edit still wins. */
+function productionRemoteWins(localIt, remoteIt) {
+  var lp = parseFloat(localIt && localIt.pieces) || 0;
+  var rp = parseFloat(remoteIt && remoteIt.pieces) || 0;
+  if ((lp > 0) !== (rp > 0)) return rp > 0;   // finished beats packing
+  return remoteWins(localIt, remoteIt);
+}
+function mergeRows(localArr, remoteArr, winsFn) {
+winsFn = winsFn || remoteWins;
 var localArr2 = Array.isArray(localArr) ? localArr : [];
 var remoteArr2 = Array.isArray(remoteArr) ? remoteArr : [];
 var out = localArr2.map(function (it) { return JSON.parse(JSON.stringify(it)); });
@@ -491,7 +504,7 @@ remoteArr2.forEach(function (rit) {
   if (i === undefined) {
     out.push(JSON.parse(JSON.stringify(rit)));
     indexMap[k] = out.length - 1;
-  } else if (JSON.stringify(out[i]) !== JSON.stringify(rit) && remoteWins(out[i], rit)) {
+  } else if (JSON.stringify(out[i]) !== JSON.stringify(rit) && winsFn(out[i], rit)) {
     out[i] = JSON.parse(JSON.stringify(rit));
   }
 });
@@ -532,10 +545,13 @@ function mergeRemoteIntoLocal(r) {
   }
 
   // Record collections — union by id (remote-only rows added; same-id
-  // clashes → newest edit wins automatically).
+  // clashes → newest edit wins automatically). Production has one extra rule:
+  // a FINISHED batch (pieces>0) always beats a PACKING/mix batch (pieces=0),
+  // so a stale mix on another device can never downgrade real finished work.
   ['production', 'sales', 'customers', 'suppliers', 'purchases', 'payments',
     'customerPayments', 'expenses', 'recurringExpenses', 'waste', 'priceHistory', 'recipes'].forEach(function (f) {
-    var merged = mergeRows(state[f] || [], r[f] || []);
+    var winsFor = (f === 'production') ? productionRemoteWins : remoteWins;
+    var merged = mergeRows(state[f] || [], r[f] || [], winsFor);
     if (JSON.stringify(merged) !== JSON.stringify(state[f] || [])) { state[f] = merged; changed = true; }
   });
 

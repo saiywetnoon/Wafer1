@@ -31,15 +31,23 @@ function renderPriceTable() {
       const field = inp.dataset.field;
       const ing = state.prices && state.prices[idx];
       if (!ing) return;
+      const prior = (inp.__base !== undefined) ? inp.__base : ing[field];
       if (field === 'price' || field === 'weightPerUnit') {
         const v = parseFloat(inp.value);
-        ing[field] = (!isNaN(v) && v >= 0) ? v : (inp.value === '' ? null : ing[field]);
+        const nv = (!isNaN(v) && v >= 0) ? v : (inp.value === '' ? null : ing[field]);
+        ing[field] = nv;
+        // Only stamp the newest-edit time when the value ACTUALLY changed from
+        // what it was when the field was focused. Stamping on every keystroke
+        // (even an unchanged retype) gave that keystroke the newest timestamp,
+        // so a stale price typed again on another device silently beat the real
+        // price set here.
+        if (nv !== prior) ing.updatedAt = new Date().toISOString();
+        persistState();
+        if (typeof updateUsageCosts === 'function') updateUsageCosts();
       } else {
-        ing.remark = inp.value;
+        if (inp.value !== ing.remark) ing.remark = inp.value;
+        persistState();
       }
-      ing.updatedAt = new Date().toISOString();
-      persistState();
-      if (typeof updateUsageCosts === 'function') updateUsageCosts();
     });
     inp.addEventListener('change', function () {
       const idx = parseInt(inp.dataset.idx, 10);
