@@ -1,0 +1,11 @@
+## Git prefers LF in the repository regardless of OS.
+## On Windows the working copy can still use CRLF (git handles it via this rule
+## + core.autocrlf), but the stored blobs stay LF so diffs stay clean.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.webp binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
