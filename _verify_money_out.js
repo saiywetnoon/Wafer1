@@ -6,7 +6,7 @@ const path = require('path');
 const vm = require('vm');
 
 const src = fs.readFileSync(
-  path.join('d:\\wafer\\Wafer_documentary\\dail-ledger v1.6\\js', 'moneyout.js'),
+  path.join('d:\\wafer\\Wafer_documentary\\dail-ledger v1.7\\js', 'moneyout.js'),
   'utf8');
 
 function prod(id, date, capital, laborMinutes, laborCost, bags, pieces, notes) {

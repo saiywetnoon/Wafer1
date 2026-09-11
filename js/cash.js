@@ -48,7 +48,7 @@ function financeTotals() {
   var adjustIn = cashAdjustments().reduce(function (s, a) { return s + (a.amount > 0 ? a.amount : 0); }, 0);
   var cashIn = sales + customerPay + adjustIn;
 
-  var purchasesPaid = (state.purchases || []).reduce(function (s, p) { return s + ((p.paidNow || 0) + (p.paid || 0)); }, 0);
+  var purchasesPaid = (state.purchases || []).reduce(function (s, p) { return s + (p.paidNow || 0); }, 0);
   var supplierPay = (state.payments || []).reduce(function (s, p) { return s + (p.amount || 0); }, 0);
   var oneTime = (state.expenses || []).reduce(function (s, e) { return s + (e.amount || 0); }, 0);
   var labor = (state.production || []).reduce(function (s, p) { return s + (p.laborCost || 0); }, 0);

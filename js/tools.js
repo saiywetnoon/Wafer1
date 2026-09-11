@@ -362,7 +362,7 @@ $('printReportBtn').addEventListener('click', function () {
   w.document.write('<p>Generated: ' + new Date().toLocaleString() + '</p>');
   w.document.write('<table><tr><th>Date</th><th>Capital</th><th>Rolled (bags)</th><th>Rolled (pcs)</th><th>Expected</th><th>Sold (bags)</th><th>Revenue</th><th>Net (sold)</th><th>Notes</th></tr>');
   entries.forEach(function (e) {
-    w.document.write('<tr><td>' + e.date + '</td><td>' + fmtKs(e.capital) + '</td><td>' + fmt(e.prodBags) + '</td><td>' + fmt(e.prodPieces) + '</td>' + (e.expectedRolls ? '<td>' + fmt(e.expectedRolls) + '</td>' : '<td>—</td>') + '<td>' + fmt(e.soldBags) + '</td><td>' + fmtKs(e.revenue) + '</td><td class="' + (e.net >= 0 ? 'pos' : 'neg') + '">' + fmtKs(e.net) + '</td>' + (e.notes ? '<td>' + esc(e.notes) + '</td>' : '<td>—</td>') + '</tr>');
+    w.document.write('<tr><td>' + esc(e.date) + '</td><td>' + fmtKs(e.capital) + '</td><td>' + fmt(e.prodBags) + '</td><td>' + fmt(e.prodPieces) + '</td>' + (e.expectedRolls ? '<td>' + fmt(e.expectedRolls) + '</td>' : '<td>—</td>') + '<td>' + fmt(e.soldBags) + '</td><td>' + fmtKs(e.revenue) + '</td><td class="' + (e.net >= 0 ? 'pos' : 'neg') + '">' + fmtKs(e.net) + '</td>' + (e.notes ? '<td>' + esc(e.notes) + '</td>' : '<td>—</td>') + '</tr>');
   });
   w.document.write('</table></body></html>');
   w.document.close();

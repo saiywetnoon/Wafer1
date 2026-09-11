@@ -870,7 +870,7 @@ function buildProfileForDate(date) {
     if (keyWrap) keyWrap.style.display = needKey ? '' : 'none';
     var keyHint = $('aiKeyHint');
     if (keyHint) keyHint.textContent = needKey
-      ? 'Stored only on this device — never uploaded or synced. Get a key at platform.openai.com or platform.deepseek.com.'
+      ? 'Stored only on this device (plain text in browser storage) — never uploaded or synced to the cloud. Get a key at platform.openai.com or platform.deepseek.com.'
       : 'No key needed — this free provider works out of the box. The key field is hidden.';
   }
 

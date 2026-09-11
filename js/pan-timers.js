@@ -58,6 +58,24 @@
   var STORAGE_VERSION = 3;
   var TICK_MS = 200;                  // UI refresh; accuracy from endAt, not ticks
 
+  /* Pan-timer state is scoped per workspace/account, so two logins (or the
+     multi-company flow) on one device never share each other's cooking state.
+     Old global-key data is still read as a fallback so a refresh upgrade keeps
+     running timers. */
+  function panStorageKey() {
+    try {
+      var scope = (typeof ACTIVE_COMPANY !== 'undefined' && ACTIVE_COMPANY && ACTIVE_COMPANY.id) ? String(ACTIVE_COMPANY.id) : 'default';
+      return STORAGE_KEY + '_' + scope;
+    } catch (e) { return STORAGE_KEY; }
+  }
+  function panReadRaw() {
+    var k = panStorageKey();
+    var raw = null;
+    try { raw = localStorage.getItem(k); } catch (e) { raw = null; }
+    if (raw === null && k !== STORAGE_KEY) { try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { raw = null; } }
+    return raw;
+  }
+
   /* Default settings + live (mutable) settings object. Everything adjustable
      from the ⚙ Fry Timer Settings panel lives here and is persisted.
      - panOverrides lets EACH pan keep its own timing (fold/final) and its own
@@ -1024,13 +1042,12 @@
           return { id: p.id, duration: p.duration, remaining: p.remaining, running: p.running, endAt: p.endAt, stage: p.stage, reported: !!reportedRun[p.id] };
         })
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(panStorageKey(), JSON.stringify(data));
     } catch (e) { /* storage unavailable — timers keep working in memory */ }
   }
 
   function load() {
-    var raw = null;
-    try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return; }
+    var raw = panReadRaw();
     if (!raw) return;
     var data = null;
     try { data = JSON.parse(raw); } catch (e) { return; }

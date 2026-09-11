@@ -75,17 +75,47 @@ $('demoBtn').addEventListener('click', function () {
 /* ============================================================
    CLEAR ALL
    ============================================================ */
+function wipeLedgerCollection(name) {
+  const arr = state[name];
+  if (Array.isArray(arr)) {
+    arr.forEach(function (it) {
+      if (it && it.id != null && typeof markDeleted === 'function') markDeleted(name, it.id);
+    });
+  }
+  state[name] = [];
+}
+
 $('clearBtn').addEventListener('click', function () {
-  const hasAny = Object.keys(state.entries).length || (state.production && state.production.length) || (state.sales && state.sales.length);
+  const hasAny = Object.keys(state.entries).length || (state.production && state.production.length) || (state.sales && state.sales.length) || (state.inventoryMovements && state.inventoryMovements.length) || (state.customers && state.customers.length) || (state.suppliers && state.suppliers.length) || (state.expenses && state.expenses.length) || ((state.purchases || []).length);
   if (!hasAny) { showToast('No data to clear.', 'info'); return; }
-  if (!confirm('Clear ALL production, sales and stock? This cannot be undone.')) return;
-  state.entries = {};
-  state.production = [];
-  state.sales = [];
+  if (!confirm('Clear ALL business records (production, sales, stock, purchases, payments, expenses, customers, suppliers, cash, recipes, price history)?\n\nThis cannot be undone.')) return;
+  // Every cleared record also gets a deletion tombstone so the additive cloud
+  // merge cannot resurrect it from another device's copy.
+  wipeLedgerCollection('production');
+  wipeLedgerCollection('sales');
+  wipeLedgerCollection('purchases');
+  wipeLedgerCollection('payments');
+  wipeLedgerCollection('customerPayments');
+  wipeLedgerCollection('expenses');
+  wipeLedgerCollection('recurringExpenses');
+  wipeLedgerCollection('waste');
+  wipeLedgerCollection('priceHistory');
+  wipeLedgerCollection('recipes');
+  wipeLedgerCollection('customers');
+  wipeLedgerCollection('suppliers');
+  if (state.inventoryMovements) {
+    state.inventoryMovements.forEach(function (m) { if (m && m.id != null && typeof markDeleted === 'function') markDeleted('inventoryMovements', m.id); });
+  }
+  state.inventoryMovements = [];
+  state.inventory = {};
+  state.inventoryMovementVersion = 1;
+  state.cash = { opening: 0, adjustments: [] };
   state.stock = { pieces: 0, cost: 0 };
+  state.entries = {};
+  if (typeof clearDraft === 'function') { try { clearDraft(); } catch (e) {} }
   saveState();
   triggerGoogleSync();
   renderAll();
-  showToast('All data cleared.');
+  showToast('All data cleared. This empty state was synced to the cloud.');
 });
 

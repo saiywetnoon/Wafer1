@@ -6,7 +6,7 @@
    (cloudGet/cloudPush) plus UI side-effects. */
 const fs = require('fs');
 const path = require('path');
-const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.6\\js';
+const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.7\\js';
 const read = (f) => fs.readFileSync(path.join(dir, f), 'utf8');
 
 const localStorageData = {};

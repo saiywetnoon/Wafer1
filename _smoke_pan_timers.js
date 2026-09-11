@@ -230,6 +230,13 @@ global.localStorage = {
   setItem(k, v) { store[k] = String(v); },
   removeItem(k) { delete store[k]; }
 };
+/* Mirrors pan-timers' per-workspace storage key so the persistence checks read
+   what the module actually wrote. */
+function panKey() {
+  let scope = 'default';
+  try { scope = (typeof ACTIVE_COMPANY !== 'undefined' && global.ACTIVE_COMPANY && global.ACTIVE_COMPANY.id) ? global.ACTIVE_COMPANY.id : 'default'; } catch (e) { /* keep default */ }
+  return 'panTimers_v1_' + scope;
+}
 
 /* Deterministic clock + manual interval pump (no real timers). */
 let fakeNow = 1_000_000_000_000;
@@ -320,7 +327,7 @@ check('pan 2 resumed and finished — lift lid & roll', PanTimers.getPans()[1].s
 check('pan 1 stayed isolated while pan 2 ran', PanTimers.getPans()[0].stage === 0 && !PanTimers.getPans()[0].running);
 
 /* == persistence round-trip == */
-const saved = JSON.parse(store['panTimers_v1']);
+const saved = JSON.parse(store[panKey()]);
 check('persistence saved all 3 pans', saved.pans.length === 3);
 check('persistence reflected final states (pan1 reset, pan2 done)', saved.pans[0].stage === 0 && saved.pans[0].running === false && saved.pans[1].stage === 3);
 
@@ -384,7 +391,7 @@ check('alert toggles respected', PanTimers.getSettings().toast === false && PanT
 check('ready pans adopted the new 55 s batch', PanTimers.getPans()[0].duration === 55 && PanTimers.getPans()[1].duration === 55);
 check('customized pan 3 kept its 120 s duration', PanTimers.getPans()[2].duration === 120);
 check('per-pan override survived the settings save round-trip', PanTimers.getSettings().panOverrides.pan3 && (PanTimers.getSettings().panOverrides.pan3.fold + PanTimers.getSettings().panOverrides.pan3.final) === 120);
-check('stored payload is v3 with settings', JSON.parse(store['panTimers_v1']).v === 3 && !!JSON.parse(store['panTimers_v1']).settings);
+check('stored payload is v3 with settings', JSON.parse(store[panKey()]).v === 3 && !!JSON.parse(store[panKey()]).settings);
 
 /* fold now fires at 40 s elapsed on the new 55 s batch */
 document.dispatch('keydown', { code: 'Digit1', key: '1', shiftKey: false, target: { tagName: 'BODY', isContentEditable: false } });

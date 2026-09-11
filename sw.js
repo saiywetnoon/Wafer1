@@ -10,7 +10,7 @@
      serve stale files from this cache.
    Bump CACHE_VERSION whenever the shell changes.
    ============================================================ */
-const CACHE_VERSION = 'crp-shell-v2';
+const CACHE_VERSION = 'crp-shell-v3';
 const APP_SHELL = [
   './',
   './index.html',

@@ -9,7 +9,7 @@
    Loads the real modules in browser order and stubs only the edges. */
 const fs = require('fs');
 const path = require('path');
-const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.6\\js';
+const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.7\\js';
 const read = (f) => fs.readFileSync(path.join(dir, f), 'utf8');
 
 const localStorageData = {};
@@ -50,6 +50,7 @@ function renderAll() {}
 function loadDraftIfNewer() {}
 async function cloudGet() { return { ok: false }; }
 async function cloudPush() { return { ok: true }; }
+function toGooglePayload() { return { app: 'daily-crispy-roll-ledger', exportedAt: new Date().toISOString(), device: getDeviceFact(), state: JSON.parse(JSON.stringify(state)) }; }
 
 function mkState(prodCount, updatedAt) {
   const s = { version: 2, prices: JSON.parse(JSON.stringify(DEFAULT_PRICES)), entries: {},
@@ -124,6 +125,6 @@ function freshModalStub() {
 })();`;
 
 const src = read('config.js') + '\n' + read('device.js') + '\n' + read('storage.js') + '\n' +
-  read('helpers.js') + '\n' + read('google.js') + '\n' + read('cloud.js') + '\n' + TEST_BODY;
+  read('helpers.js') + '\n' +  read('cloud.js') + '\n' + TEST_BODY;
 
 eval(src);

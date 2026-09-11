@@ -6,7 +6,7 @@
    - non-control targets (divs etc.) are ignored. */
 const fs = require('fs');
 const path = require('path');
-const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.6 - Copy\\js';
+const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.7\\js';
 const liveSrc = fs.readFileSync(path.join(dir, 'live-sync.js'), 'utf8');
 
 const handlers = {};

@@ -201,3 +201,21 @@ create trigger ledger_touch before insert or update on public.ledgers
 drop trigger if exists shared_ledger_touch on public.shared_ledgers;
 create trigger shared_ledger_touch before insert or update on public.shared_ledgers
   for each row execute procedure public.touch_ledger();
+-- ============================================================
+-- IMPORTANT — accounts created BEFORE this script first ran
+-- ------------------------------------------------------------
+-- The auto-approve trigger above (handle_new_user) only fires for NEW
+-- sign-ups. If you already had users when you first ran this SQL, they have
+-- NO profile row -> is_approved() is false -> they are locked out and do not
+-- even appear in the Admin console. Run this ONCE to backfill them:
+--
+--   insert into public.profiles (id, email, role, status, created_at)
+--   select id, email, 'user',
+--          case when not exists (select 1 from public.profiles) then 'admin' else 'pending' end,
+--          now()
+--   from auth.users
+--   where id not in (select id from public.profiles)
+--   on conflict (id) do nothing;
+--
+-- Then open the Admin console on an admin device and approve the pending ones.
+-- ============================================================

@@ -312,7 +312,7 @@ $('savePurchaseBtn').addEventListener('click', function () {
       updated.push({ name: it.name, old: parseFloat(ing.price) || 0, neu: pricePer });
     }
   });
-  if (updated.length) {
+  if (updated.length && confirm('Offer to update the Price List to the actual paid price?\n\n' + updated.map(function (u) { return u.name + ': ' + Math.round(u.old) + ' → ' + Math.round(u.neu); }).join('\n') + '\n\nThis changes future ingredient costs and is recorded in Price History.')) {
   updated.forEach(function (u) {
     var ing = priceItemByName(u.name);
     if (!ing) return;

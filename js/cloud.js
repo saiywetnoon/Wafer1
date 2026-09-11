@@ -85,9 +85,45 @@ function stateDataCount(s) {
   if (Array.isArray(s.customers)) n += s.customers.length;
   if (Array.isArray(s.suppliers)) n += s.suppliers.length;
   if (s.deletions && typeof s.deletions === 'object') n += Object.keys(s.deletions).length;
-  if (s.cash && Array.isArray(s.cash.adjustments)) n += s.cash.adjustments.length;
-  if (s.inventory && typeof s.inventory === 'object') n += Object.keys(s.inventory).length;
+  // Only inventory entries that actually carry data count. renderInventory()
+  // seeds a zero/empty entry for every stock item on a fresh device — counting
+  // those passive placeholders made genuinely new browsers look like they had
+  // data and silently skipped the fresh-device pull.
+  if (s.inventory && typeof s.inventory === 'object') {
+    Object.keys(s.inventory).forEach(function (k) {
+      var it = s.inventory[k];
+      if (it && ((parseFloat(it.stock) || 0) !== 0 || (parseFloat(it.lowAlert) || 0) > 0)) n++;
+    });
+  }
   if (Array.isArray(s.inventoryMovements)) n += s.inventoryMovements.length;
+  // The price list, price history, settings and cash opening are real data too:
+  // a device that ONLY customised prices must never be treated as "empty" —
+  // that used to make the cloud copy silently overwrite those price edits.
+  // Pristine defaults are NOT data.
+  if (Array.isArray(s.prices)) {
+    n += s.prices.filter(function (p) {
+      if (!p || !p.name) return false;
+      var defArr = (typeof DEFAULT_PRICES !== 'undefined' && Array.isArray(DEFAULT_PRICES)) ? DEFAULT_PRICES : [];
+      var def = null;
+      for (var i = 0; i < defArr.length; i++) { if (defArr[i] && defArr[i].name === p.name) { def = defArr[i]; break; } }
+      if (!def) return true; // a brand-new ingredient is customised data
+      return (parseFloat(p.price) || 0) !== (parseFloat(def.price) || 0)
+        || (p.unit || '') !== (def.unit || '')
+        || (p.remark || '') !== (def.remark || '')
+        || (p.weightPerUnit || 0) !== (def.weightPerUnit || 0);
+    }).length;
+  }
+  if (Array.isArray(s.priceHistory)) n += s.priceHistory.length;
+  if (s.cash) {
+    if (Array.isArray(s.cash.adjustments)) n += s.cash.adjustments.length;
+    if (parseFloat(s.cash.opening) > 0) n += 1;
+  }
+  if (s.settings) {
+    if ((parseFloat(s.settings.hourlyWage) || 1500) !== 1500) n += 1;
+    var rpbOf = parseInt(s.settings.rollsPerBag, 10);
+    if (rpbOf > 0 && rpbOf !== (typeof DEFAULT_ROLLS_PER_BAG !== 'undefined' ? DEFAULT_ROLLS_PER_BAG : 5)) n += 1;
+    if (s.settings.panOverrides && typeof s.settings.panOverrides === 'object' && Object.keys(s.settings.panOverrides).length) n += 1;
+  }
   // A synced production-form draft is real data too — it must make a fresh
   // device pull it instead of overwriting the cloud with an empty local state.
   if (s.draft && s.draft.date && s.draft.usage && typeof draftHasRealContent === 'function' && draftHasRealContent(s.draft)) n += 1;
@@ -251,43 +287,16 @@ function initSyncFlushers() {
 }
 async function cloudGet() {
   if (SUPA.configured()) return supabaseGet();
-  const url = cloudEndpoint();
-  if (!url) return { ok: false, error: 'No Apps Script URL configured.' };
-  if (!cloudAccountToken()) return { ok: false, error: 'Sign in first.' };
-  try {
-    const u = new URL(url);
-    u.searchParams.set('action', 'get');
-    u.searchParams.set('token', authToken());
-    u.searchParams.set('idToken', cloudRawIdToken());
-    const resp = await fetch(u.toString(), { method: 'GET' });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    return await resp.json();
-  } catch (e) {
-    console.error('cloud GET failed', e);
-    return { ok: false, error: String(e) };
-  }
+  return { ok: false, error: 'No cloud backend configured.' };
 }
 /* ---------- Legacy Apps-Script helper (only used when not configured) ---------- */
-async function cloudPost(action, extra) {
-  const url = cloudEndpoint();
-  if (!url) return { ok: false, message: 'No Apps Script URL configured.' };
-  const authTokenValue = authToken();
-  const idToken = cloudRawIdToken();
-  if (!authTokenValue && !idToken) return { ok: false, message: 'Sign in first.' };
-  const body = Object.assign({ action: action, token: authTokenValue, idToken: idToken }, extra || {});
-  try {
-    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    return await resp.json();
-  } catch (e) {
-    console.error('cloud POST ' + action + ' failed', e);
-    return { ok: false, error: String(e) };
-  }
+async function cloudPost() {
+  return { ok: false, message: 'Legacy Apps Script backend was removed — Supabase is the only cloud.' };
 }
-async function cloudBackup() { return SUPA.configured() ? { ok: false, message: 'Use Download backup instead (Supabase).' } : cloudPost('backup', { payload: toGooglePayload() }); }
-async function cloudList() { return SUPA.configured() ? { ok: true, backups: [] } : cloudPost('list'); }
-async function cloudRestore() { return SUPA.configured() ? { ok: false, message: 'Use Download backup instead (Supabase).' } : cloudPost('restore', { fileName: '' }); }
-async function cloudClear() { return SUPA.configured() ? { ok: true, message: 'Cleared.' } : cloudPost('clear'); }
+async function cloudBackup() { return { ok: false, message: 'Use Download Full Backup instead (Supabase).' }; }
+async function cloudList() { return { ok: true, backups: [] }; }
+async function cloudRestore() { return { ok: false, message: 'Use Restore From Backup instead (Supabase).' }; }
+async function cloudClear() { return { ok: false, message: 'Clearing is done via Clear All Data (Supabase).' }; }
 
 /* ============================================================
    REMOTE-CHANGE REVIEW — safe merge + accept / decline
@@ -971,22 +980,8 @@ async function cloudAfterSignIn() {
   if (!email || !cloudAccountToken()) return false;
   renderCloudStatus();
   if (!cloudReady()) {
-    updateGoogleSyncStatus(cloudNeedsUrl()
-      ? 'Signed in. Add your Apps Script URL in the Online/Cloud card to go online.'
-      : 'Signed in. Syncing your account…', 'info');
+    updateGoogleSyncStatus('Signed in. Syncing your account…', 'info');
     return false;
-  }
-  // Legacy Google-account binding only (not used in account mode).
-  if (!authEmail()) {
-    const bound = cloudBoundEmail();
-    if (!bound) {
-      setCloudBoundEmail(email); // first time -> bind this account to this workspace
-      updateGoogleSyncStatus('Bound this workspace to ' + email + '. Syncing now…', 'info');
-    } else if (bound.toLowerCase() !== email.toLowerCase()) {
-      updateGoogleSyncStatus('This workspace is bound to ' + bound + '. Sign into that Google account to sync it.', 'info');
-      renderCloudStatus();
-      return false;
-    }
   }
   const localCount = stateDataCount(state);
   const res = await cloudGet();

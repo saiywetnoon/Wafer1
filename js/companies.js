@@ -126,7 +126,7 @@ function deleteCompany(id) {
   if (id === 'default') { showToast('The main workspace cannot be deleted.', 'info'); return; }
   const c = companies.find(function (x) { return x.id === id; });
   if (!c) return;
-  if (!confirm('Delete "' + c.name + '" and ALL its data from this browser? This cannot be undone.')) return;
+  if (!confirm('Delete "' + c.name + '" and its LOCAL data from this browser? This cannot be undone.\n\nNote: the shared cloud copy is NOT deleted — signing back in on this browser pulls it again. To start empty for real, use Clear All Data in Business Tools first, or ask the owner to reset the shared cloud from the device that has the backup.')) return;
   const wasActive = getActiveCompanyId() === id;
   try { localStorage.removeItem(STORAGE_KEY + '_' + id); } catch (e) {}
   try { localStorage.removeItem(DRAFT_STORAGE_KEY + '_' + id); } catch (e) {}

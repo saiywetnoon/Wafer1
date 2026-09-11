@@ -102,6 +102,47 @@ async function authLogout() {
   else { await authPost('logout', {}); }
   clearAuthUser();
 }
+/* ---------- Password recovery (Supabase) ---------- */
+async function authRequestPasswordReset(email) {
+  email = String(email || '').trim();
+  if (!email) { setAuthMsg('Enter your account email first.', 'error'); return false; }
+  if (SUPA.configured()) {
+    const r = await SUPA.resetPassword(email);
+    if (r && r.ok) {
+      setAuthMsg('A password-reset email is on its way. Open its link, then enter your new password here.', 'success');
+      return true;
+    }
+    setAuthMsg((r && r.error) || 'Could not send the reset email. Check that Supabase email (SMTP/sender) is configured.', 'info');
+    return false;
+  }
+  setAuthMsg('Password reset needs the Supabase backend.', 'info');
+  return false;
+}
+async function authApplyPasswordReset() {
+  const p1 = prompt('Choose a new password (at least 6 characters):');
+  if (!p1 || String(p1).length < 6) { setAuthMsg('Password must be at least 6 characters.', 'error'); return false; }
+  const p2 = prompt('Retype the new password:');
+  if (p1 !== p2) { setAuthMsg('The two passwords do not match.', 'error'); return false; }
+  const r = SUPA.configured() ? await SUPA.updatePassword(p1) : { error: 'Supabase required.' };
+  if (r && r.ok) {
+    setAuthMsg('Password updated. Sign in with your new password.', 'success');
+    try { location.hash = ''; } catch (e) {}
+    return true;
+  }
+  setAuthMsg((r && r.error) || 'Could not update the password.', 'error');
+  return false;
+}
+/* Supabase sends the password-reset link with a recovery token in the URL hash
+   (#access_token=…&type=recovery). Give the client a moment to ingest it, then
+   ask for the new password. */
+function maybeRecoveryFlow() {
+  try {
+    const h = (window.location && location.hash) || '';
+    if (!h || !/type=recovery/.test(h)) return;
+    setTimeout(function () { try { authApplyPasswordReset(); } catch (e) { console.warn('recovery flow failed', e); } }, 1500);
+  } catch (e) { /* best-effort */ }
+}
+maybeRecoveryFlow();
 // @@AUTH2@@
 
 /* ============================================================
@@ -300,6 +341,7 @@ document.querySelectorAll('.auth-tab-btn').forEach(function (b) {
 if ($('authLoginBtn')) $('authLoginBtn').addEventListener('click', function (e) { e.preventDefault(); doAuthLogin(); });
 if ($('authSignupBtn')) $('authSignupBtn').addEventListener('click', function (e) { e.preventDefault(); doAuthSignup(); });
 if ($('authLogoutBtn')) $('authLogoutBtn').addEventListener('click', doAuthLogout);
+if ($('authForgotBtn')) $('authForgotBtn').addEventListener('click', function () { authRequestPasswordReset(($('authEmail') || {}).value); });
 if ($('adminBtn')) $('adminBtn').addEventListener('click', openAdminConsole);
 if ($('adminCloseBtn')) $('adminCloseBtn').addEventListener('click', function () { $('adminModal').classList.add('hidden'); });
 if ($('authPassword')) $('authPassword').addEventListener('keydown', function (e) {

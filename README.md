@@ -268,8 +268,10 @@ The recommended live setup is **Netlify + Supabase**:
 
 - Netlify hosts this static app (`index.html`, `css/`, and `js/`).
 - Supabase Auth provides email/password accounts and sessions.
-- Supabase Postgres stores each approved user's private ledger.
-- Supabase Realtime updates a signed-in user's other devices after a save.
+- Supabase Postgres stores ONE shared ledger JSON row (`shared_ledgers`) that
+  every approved account reads and writes, so a phone, a PC and a staff tablet
+  see the same business data.
+- Supabase Realtime updates every signed-in device after a save.
 
 The Google Apps Script modules remain in the repository as a legacy fallback
 and for existing installations. When the Supabase URL and publishable key are

@@ -5,7 +5,7 @@
    - A fresh device pulling the cloud also respects every tombstone. */
 const fs = require('fs');
 const path = require('path');
-const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.6 - Copy\\js';
+const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.7\\js';
 const read = (f) => fs.readFileSync(path.join(dir, f), 'utf8');
 
 global.window = global;

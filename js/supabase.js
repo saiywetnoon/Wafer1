@@ -81,6 +81,18 @@ const SUPA = {
     try { await sb.auth.signOut(); } catch (e) { console.warn(e); }
   },
 
+  /* ---- password recovery ---- */
+  async resetPassword(email) {
+    const sb = this.init(); if (!sb) return { error: 'SUPABASE_NOT_CONFIGURED' };
+    const r = await sb.auth.resetPasswordForEmail(String(email || '').trim());
+    return (r && r.error) ? { error: r.error.message || 'reset failed' } : { ok: true };
+  },
+  async updatePassword(password) {
+    const sb = this.init(); if (!sb) return { error: 'SUPABASE_NOT_CONFIGURED' };
+    const r = await sb.auth.updateUser({ password: String(password || '') });
+    return (r && r.error) ? { error: r.error.message || 'update failed' } : { ok: true };
+  },
+
   /* ---- profile row (role + approval status) ---- */
   async getProfile() {
     const sb = this.init();
