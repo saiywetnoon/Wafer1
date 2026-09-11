@@ -667,7 +667,16 @@ function handleRemoteCopy(remoteState, remoteTs, source, deviceInfo) {
     try { renderCloudStatus(); } catch (e) {}
     return 'merged';
   }
-  return 'aligned';
+  // The copies DIFFERED, yet the merge changed nothing. That means this device
+  // already holds the newest version of every clashing record (the remote is
+  // older/staler on each differing row). Push the local copy so the cloud —
+  // which can otherwise sit behind an older write forever — converges. Without
+  // this, one partly-synced device that overwrote the shared row makes EVERY
+  // other device show stale prices / stock indefinitely, which is exactly the
+  // "my price/stock is real here but nowhere else" symptom.
+  try { cloudPush(); } catch (e) {}
+  try { renderCloudStatus(); } catch (e) {}
+  return 'pushed';
 }
 
 /* Human-readable list of what a remote copy changes compared to local.
