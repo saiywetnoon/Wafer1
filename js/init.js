@@ -225,8 +225,11 @@ async function loadFromSheetsApi() {
 // When the workspace is ONLINE (cloud mode), push to the account's cloud copy.
 function triggerGoogleSync() {
   clearTimeout(googleSyncTimer);
+  // Mark this as pending as soon as the edit is queued, not 300ms later in
+  // the callback.  Closing/reloading in that small gap used to leave a change
+  // only in localStorage until the user happened to open this device again.
+  pendingCloudPushQueued = true;
   googleSyncTimer = setTimeout(async function () {
-    pendingCloudPushQueued = true;
     try {
       if (googleAuthUser && googleSheetsId) syncToSheetsApi();
       // 1) A Supabase session can silently expire after boot; restore it before

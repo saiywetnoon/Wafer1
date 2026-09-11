@@ -60,7 +60,7 @@
     var host = window.location.hostname;
     if (window.location.protocol === 'https:' || host === 'localhost' || host === '127.0.0.1') {
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('sw.js').catch(function (err) {
+        navigator.serviceWorker.register('sw.js?v=2').catch(function (err) {
           console.warn('[PWA] service worker registration failed', err);
         });
       });

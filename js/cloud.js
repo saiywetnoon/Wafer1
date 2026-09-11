@@ -175,6 +175,15 @@ function startCloudPolling() {
    different cloud copy, the sync-review modal asks the user Accept/Decline. */
 var SYNC_QUEUE_KEY = 'dailyCrispyRollLedger_syncQueue';
 var CLOUD_LAST_SYNC_KEY = 'dailyCrispyRollLedger_lastCloudSync';
+/* A ledger write is a complete JSON snapshot.  Never let two snapshots race:
+   with overlapping requests an OLD request can finish after a NEW request and
+   put stale data back into the one cloud row.  This was especially easy to
+   trigger while typing because live-sync schedules a save for every edit.
+   Calls made during a write request one additional pass; that pass creates its
+   payload only after the earlier request finishes, so it always contains the
+   newest complete state. */
+var cloudPushInFlight = null;
+var cloudPushRequested = false;
 /* True while the most recent push did NOT reach the cloud (this session).
    Keeps the status pill in a visible "Sync failed — retrying" state instead
    of showing a lie ("Synced") for hours. */
@@ -187,7 +196,7 @@ function syncQueueIsDirty() { try { return !!localStorage.getItem(SYNC_QUEUE_KEY
 function cloudLastSyncAt() { try { return localStorage.getItem(CLOUD_LAST_SYNC_KEY) || ''; } catch (e) { return ''; } }
 function cloudMarkLastSync() { try { localStorage.setItem(CLOUD_LAST_SYNC_KEY, new Date().toISOString()); } catch (e) {} }
 
-async function cloudPush() {
+async function cloudPushOnce() {
   // A dead Supabase session is the #1 silent cause of "nothing has synced since
   // lunch". Refresh the cached session BEFORE pushing so an expired token is
   // either healed or reported instead of quietly returning a 401.
@@ -211,6 +220,26 @@ async function cloudPush() {
     }
   }
   return res;
+}
+/* Serialize whole-ledger writes.  This is intentionally the public cloudPush
+   entry point so manual upload, auto-save, retry, and merge reconciliation all
+   share the same protection. */
+function cloudPush() {
+  cloudPushRequested = true;
+  if (cloudPushInFlight) return cloudPushInFlight;
+  cloudPushInFlight = (async function () {
+    var lastResult = { ok: false, error: 'No cloud write was started.' };
+    try {
+      while (cloudPushRequested) {
+        cloudPushRequested = false;
+        lastResult = await cloudPushOnce();
+      }
+      return lastResult;
+    } finally {
+      cloudPushInFlight = null;
+    }
+  })();
+  return cloudPushInFlight;
 }
 /* Try to send any queued changes now that we are (back) online. */
 async function flushPendingSync() {
