@@ -100,7 +100,7 @@ function handleGoogleCredential(response) {
   }
 }
 
-$('googleSignOutBtn').addEventListener('click', function () {
+if ($('googleSignOutBtn')) $('googleSignOutBtn').addEventListener('click', function () {
   googleAuthUser = null;
   googleSheetsId = null;
   this.classList.add('hidden');
@@ -231,9 +231,8 @@ function triggerGoogleSync() {
   pendingCloudPushQueued = true;
   googleSyncTimer = setTimeout(async function () {
     try {
-      if (googleAuthUser && googleSheetsId) syncToSheetsApi();
-      // 1) A Supabase session can silently expire after boot; restore it before
-      //    deciding we are offline, so saves keep reaching the cloud.
+      // A Supabase session can silently expire after boot; restore it before
+      // deciding we are offline, so saves keep reaching the cloud.
       if (SUPA.configured() && !(SUPA.user && SUPA.user.id)) {
         try { await SUPA.sessionUser(); } catch (e) { /* restore is best-effort */ }
       }
@@ -315,7 +314,6 @@ async function appStart() {
   loadState();
   loadDraftIfNewer();
   renderAll();
-  initGoogleSignIn();
   // Supabase: subscribe to live updates so other devices appear automatically.
   if (SUPA.configured() && SUPA.user && SUPA.user.id) {
     try { supabaseWatch(SUPA.user.id); } catch (e) { console.warn('realtime not available', e); }

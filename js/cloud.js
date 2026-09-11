@@ -2,37 +2,15 @@
    CLOUD — online / access-from-anywhere layer
    ============================================================
    A single provider-agnostic interface the app uses to go online.
-   Today it is backed by Google (Apps Script multi-tenant cloud in
-   google-sync.gs). To swap in another provider later (e.g.
-   Supabase), implement the same cloudPush/pull/backup/list/restore
-   methods and keep every other module unchanged.
+   Backed by Supabase: a shared workspace row, Supabase Auth and Realtime.
 
    Model:
-   - A workspace is "bound" to a verified Google-account email
-     (stored per-company as cfg.cloud.email).
-   - When the signed-in Google account matches the bound email the
-     workspace is ONLINE: data auto-pulls on open and auto-pushes
-     on every change, from any device.
-   - If nothing is bound yet, signing in auto-binds and then
-     decides whether to pull (cloud has newer/any data) or push
-     (this device starts the cloud copy).
+   - Every approved Supabase account accesses the same workspace.
+   - Changes auto-push and auto-pull across every approved device.
    ============================================================ */
 
-function cloudRawIdToken() { return (googleAuthUser && googleAuthUser.rawCredential) || ''; }
-/* Account session token first (new login), legacy Google id token second. */
-function cloudAccountToken() { return authToken() || cloudRawIdToken(); }
-function cloudSignedInEmail() { return authEmail() || ((googleAuthUser && googleAuthUser.email) || ''); }
-function cloudCfg() { return getGoogleSyncConfig(); }
-function cloudBoundEmail() { return (cloudCfg().cloud || {}).email || ''; }
-/* The backend URL: the login screen's saved URL wins, otherwise the old per-company config. */
-function cloudEndpoint() { return authServerUrl() || cloudCfg().sheetUrl || ''; }
-
-function setCloudBoundEmail(email) {
-  const cfg = getGoogleSyncConfig();
-  if (!cfg.cloud) cfg.cloud = {};
-  cfg.cloud.email = (email || '').toLowerCase();
-  setGoogleSyncConfig(cfg);
-}
+function cloudAccountToken() { return authToken(); }
+function cloudSignedInEmail() { return authEmail(); }
 
 /* Is this workspace currently ONLINE? In Supabase mode it's online the moment
    a user session exists (no deployment URL needed). */
@@ -40,27 +18,22 @@ function cloudIsOnline() {
   if (SUPA.configured()) {
     return !!(SUPA.user && SUPA.user.id);
   }
-  const email = cloudSignedInEmail();
-  const token = cloudAccountToken();
-  if (!token || !email || !cloudEndpoint()) return false;
-  if (authEmail()) return true;
-  const bound = cloudBoundEmail();
-  return !bound || bound.toLowerCase() === email.toLowerCase();
+  return false;
 }
 /* Is a cloud deployment reachable at all? */
 function cloudIsAvailable() {
   if (SUPA.configured()) return true;
-  return !!cloudEndpoint() && !!cloudAccountToken();
+  return false;
 }
 /* Can sync / upload / download run RIGHT NOW?
    Supabase mode needs NO deployment URL — the logged-in session IS the
    connection. Legacy mode still requires the Apps Script URL + a token. */
 function cloudReady() {
   if (SUPA.configured()) return !!(SUPA.user && SUPA.user.id);
-  return !!cloudEndpoint() && !!cloudAccountToken();
+  return false;
 }
 function cloudNeedsUrl() {
-  return !SUPA.configured();
+  return false;
 }
 /* Supabase-native push/get (primary path). */
 async function supabasePush() {

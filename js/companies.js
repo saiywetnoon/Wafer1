@@ -1,9 +1,9 @@
 /* ============================================================
    COMPANIES / WORKSPACES
    Lets each business (user/company) keep its own ledgers,
-   inventory, pricing, customers and Google sync config.
-   Every data API is scoped to the ACTIVE_COMPANY via
-   companyStateKey() / companyDraftKey() / companyConfigKey().
+   inventory, pricing and customers.
+   Every local-cache API is scoped to the ACTIVE_COMPANY via
+   companyStateKey() / companyDraftKey().
    ------------------------------------------------------------
    'default' is the pre-existing workspace. It intentionally uses
    the original (unsuffixed) storage keys so existing local data
@@ -130,7 +130,6 @@ function deleteCompany(id) {
   const wasActive = getActiveCompanyId() === id;
   try { localStorage.removeItem(STORAGE_KEY + '_' + id); } catch (e) {}
   try { localStorage.removeItem(DRAFT_STORAGE_KEY + '_' + id); } catch (e) {}
-  try { localStorage.removeItem(GOOGLE_SYNC_CONFIG_KEY + '_' + id); } catch (e) {}
   companies = companies.filter(function (x) { return x.id !== id; });
   persistCompanies();
   if (wasActive) {

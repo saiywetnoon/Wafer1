@@ -15,7 +15,6 @@
         onerror="if (typeof window.Chart === 'undefined') { var s = document.createElement('script'); s.src = 'https://unpkg.com/chart.js@4.4.1/dist/chart.umd.min.js'; document.head.appendChild(s); }"></script>
 <script src="https://unpkg.com/lucide@1.34.0"
         onerror="if (!window.lucide) { var s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/lucide@1.34.0/dist/umd/lucide.min.js'; s.onerror = function () { if (!window.lucide) { var t = document.createElement('script'); t.src = 'https://cdnjs.cloudflare.com/ajax/libs/lucide/1.34.0/lucide.min.js'; document.head.appendChild(t); } }; document.head.appendChild(s); }"></script>
-<script src="https://accounts.google.com/gsi/client" defer></script>
     <!-- Supabase client: primary CDN + automatic fallback so the real (URL-free) backend
          never silently disappears when one CDN is blocked/slow. If both fail the app will
          say so honestly instead of demanding a script URL. -->
@@ -83,10 +82,6 @@ tailwind.config = {
       </button>
       <button id="companyNameBtn" onclick="openCompanySwitch()" title="Switch workspace" class="topbar-btn">
         <i data-lucide="building-2" class="w-4 h-4 text-amber-400 shrink-0"></i> <span id="companyName" class="truncate">—</span>
-      </button>
-      <div id="googleSignInDiv" class="hidden"></div>
-      <button id="googleSignOutBtn" class="hidden topbar-btn text-emerald-400">
-        <i data-lucide="log-out" class="w-4 h-4"></i> <span id="googleUserLabel">Sign Out</span>
       </button>
       <button id="adminBtn" class="hidden topbar-btn text-purple-300" title="Approve new accounts">
         <i data-lucide="shield" class="w-4 h-4"></i> Admin
@@ -1177,7 +1172,7 @@ tailwind.config = {
     </div>
   </section>
 
-  <!-- ===================== GOOGLE SYNC & BACKUP ===================== -->
+  <!-- ===================== SUPABASE SYNC & BACKUP ===================== -->
   <section id="tab-sync" class="tab-panel hidden">
     <!-- Online / Cloud — multi-tenant, access from any device -->
     <div class="card bg-gray-900 rounded-xl p-5 border border-emerald-800/60 mb-5">
@@ -1218,7 +1213,7 @@ tailwind.config = {
       </div>
     </div>
 
-    <div id="legacySheetsCard" class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+    <div id="legacySheetsCard" class="hidden" aria-hidden="true">
       <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="cloud" class="w-5 h-5 text-emerald-400"></i> Google Sheets Sync & Drive Backup</h3>
       <p class="text-xs text-gray-400 mb-4">Connect your Google Apps Script Web App URL to synchronize all entries to a Google Sheet and store automatic backups to Google Drive. Changes are pushed automatically after each save.</p>
 
@@ -1559,7 +1554,6 @@ tailwind.config = {
     <script src="js/device.js?v=20260919"></script>
     <script src="js/supabase.js?v=20260912-shared-workspace"></script>
     <script src="js/storage.js?v=20261009"></script>
-    <script src="js/google.js?v=20260919"></script>
     <script src="js/helpers.js?v=20261015"></script>
     <script src="js/pricing.js?v=20261009"></script>
     <script src="js/usage.js?v=20261009"></script>
@@ -1568,7 +1562,7 @@ tailwind.config = {
     <script src="js/dashboard.js?v=20261015"></script>
     <script src="js/calendar.js?v=20260919"></script>
     <script src="js/csv.js?v=20260919"></script>
-    <script src="js/sync-ui.js?v=20261012"></script>
+    <script src="js/sync-ui.js?v=20260912-supabase-only"></script>
     <script src="js/sample-data.js?v=20260919"></script>
     <script src="js/inventory.js?v=20261009"></script>
     <script src="js/customers.js?v=20261009"></script>
