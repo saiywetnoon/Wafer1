@@ -507,7 +507,7 @@ function mergeRemoteIntoLocal(r) {
   // Record collections — union by id (remote-only rows added; same-id
   // clashes → newest edit wins automatically).
   ['production', 'sales', 'customers', 'suppliers', 'purchases', 'payments',
-    'customerPayments', 'expenses', 'recurringExpenses', 'waste', 'recipes'].forEach(function (f) {
+    'customerPayments', 'expenses', 'recurringExpenses', 'waste', 'priceHistory', 'recipes'].forEach(function (f) {
     var merged = mergeRows(state[f] || [], r[f] || []);
     if (JSON.stringify(merged) !== JSON.stringify(state[f] || [])) { state[f] = merged; changed = true; }
   });

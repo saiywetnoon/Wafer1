@@ -316,7 +316,8 @@ $('savePurchaseBtn').addEventListener('click', function () {
     var ing = priceItemByName(u.name);
     if (!ing) return;
     if (!state.priceHistory) state.priceHistory = [];
-    state.priceHistory.push({ date: today(), name: u.name, old: Math.round(u.old), new: Math.round(u.neu) });
+    state.priceHistory.push({ id: uid(), date: today(), name: u.name, old: Math.round(u.old), new: Math.round(u.neu), updatedAt: new Date().toISOString() });
+    ing.updatedAt = new Date().toISOString();
     ing.price = Math.round(u.neu);
   });
   saveState();

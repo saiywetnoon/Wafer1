@@ -26,16 +26,24 @@ function renderPriceTable() {
         const v = parseFloat(inp.value);
         const newVal = (!isNaN(v) && v >= 0) ? v : (inp.value === '' ? null : oldVal);
         if (newVal !== oldVal) {
-          // Record price change into history (only for price field)
+          // Record price change into history (only for price field). Each entry
+          // gets its own id + updatedAt so the cloud merge UNIONS price changes
+          // across devices instead of collapsing same-ingredient records (the
+          // old unnamed entries caused "no history of changing").
           if (field === 'price' && oldVal !== null && newVal !== null) {
             if (!state.priceHistory) state.priceHistory = [];
             state.priceHistory.push({
+              id: (typeof uid === 'function') ? uid() : String(Date.now()),
               date: today(),
               name: state.prices[idx].name,
               old: oldVal,
-              new: newVal
+              new: newVal,
+              updatedAt: new Date().toISOString()
             });
           }
+          // Stamp the edited row so a same-name clash across devices is won by
+          // the newest edit instead of silently keeping a stale local value.
+          state.prices[idx].updatedAt = new Date().toISOString();
           state.prices[idx][field] = newVal;
           inp.value = newVal === null ? '' : newVal;
           persistState();
