@@ -99,6 +99,10 @@ function saveProduction() {
   if (useBy) record.useBy = useBy;
 
   const previous = isUpdate ? state.production.find(function (p) { return p.id === record.id; }) : null;
+  // Cross-device merge: every record carries a timestamp; the newest updatedAt wins.
+  const nowStamp = new Date().toISOString();
+  record.updatedAt = nowStamp;
+  record.createdAt = (isUpdate && previous && previous.createdAt) ? previous.createdAt : nowStamp;
   const ingredientShortage = inventoryUsageShortage(previous ? previous.usage : {}, usage);
   if (ingredientShortage) {
     showToast('Not enough ' + ingredientShortage.name + '. Available: ' + fmt(ingredientShortage.available) + '; this batch needs ' + fmt(ingredientShortage.requested) + ' more.', 'error');

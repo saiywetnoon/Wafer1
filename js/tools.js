@@ -36,7 +36,7 @@ $('saveRecipeBtn').addEventListener('click', function () {
   const name = $('recipeName').value.trim();
   if (!name) { showToast('Enter a recipe name.', 'error'); return; }
   if (!state.recipes) state.recipes = [];
-  state.recipes.push({ name: name, usage: Object.assign({}, currentUsage()) });
+  state.recipes.push({ name: name, usage: Object.assign({}, currentUsage()), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   saveState();
   renderRecipes();
   $('recipeName').value = '';
@@ -125,7 +125,7 @@ $('addWasteBtn').addEventListener('click', function () {
   const date = $('wasteDate').value || today();
   const qty = parseFloat($('wasteQty').value);
   if (isNaN(qty) || qty <= 0) { showToast('Enter a valid quantity.', 'error'); return; }
-  const record = { id: uid(), date: date, qty: Math.round(qty) };
+  const record = { id: uid(), date: date, qty: Math.round(qty), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   const shortage = canRecordWaste(record);
   if (shortage) {
     showToast('Not enough finished stock on ' + shortage.date + '. Available: ' + fmt(shortage.available) + ' pieces; waste is ' + fmt(shortage.requested) + '.', 'error');
@@ -174,7 +174,7 @@ $('addExpenseBtn').addEventListener('click', function () {
   if (isNaN(amount) || amount <= 0) { showToast('Enter a valid amount.', 'error'); return; }
   if (!desc) { showToast('Enter a description.', 'error'); return; }
   if (!state.expenses) state.expenses = [];
-  state.expenses.push({ id: uid(), date: date, amount: amount, desc: desc, category: category });
+  state.expenses.push({ id: uid(), date: date, amount: amount, desc: desc, category: category, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   saveState();
   renderExpenses();
   $('expenseAmount').value = '';
@@ -217,7 +217,7 @@ $('addRecurringBtn').addEventListener('click', function () {
   if (!name) { showToast('Enter a name (e.g. Rent).', 'error'); return; }
   if (isNaN(amount) || amount <= 0) { showToast('Enter a valid monthly amount.', 'error'); return; }
   if (!state.recurringExpenses) state.recurringExpenses = [];
-  state.recurringExpenses.push({ id: uid(), name: name, amount: Math.round(amount) });
+  state.recurringExpenses.push({ id: uid(), name: name, amount: Math.round(amount), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   saveState();
   renderRecurring();
   $('recurringName').value = '';

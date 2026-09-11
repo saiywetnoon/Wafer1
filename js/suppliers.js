@@ -71,7 +71,7 @@ function normalizeSupplierPayables() {
   out.forEach(function (o) {
     var recorded = toMoney(o.p.paid);
     var target = Math.round(o.allocated);
-    if (target > recorded) o.p.paid = target;
+    if (target > recorded) { o.p.paid = target; o.p.updatedAt = new Date().toISOString(); }
   });
 }
 
@@ -361,7 +361,7 @@ $('recordSupplierPaymentBtn').addEventListener('click', function () {
       if (apply > 0) p.updatedAt = new Date().toISOString();
     });
   if (!state.payments) state.payments = [];
-  state.payments.push({ id: uid(), supplierId: supplierId, date: date, amount: Math.round(amount), createdAt: new Date().toISOString() });
+  state.payments.push({ id: uid(), supplierId: supplierId, date: date, amount: Math.round(amount), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   saveState();
   renderSuppliers();
   $('supplierPaymentAmount').value = '';

@@ -108,7 +108,7 @@ $('addCustomerBtn').addEventListener('click', function () {
   const price = parseFloat($('custPrice').value) || 1300;
   const phone = $('custPhone').value.trim();
   if (!state.customers) state.customers = [];
-  state.customers.push({ id: uid(), name: name, phone: phone, standingOrder: order, price: price, debt: 0 });
+  state.customers.push({ id: uid(), name: name, phone: phone, standingOrder: order, price: price, debt: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   saveState();
   renderCustomers();
   $('custName').value = '';
@@ -145,6 +145,7 @@ function adjustCustomerDebt(direction) {
     // Manual "debt added" charge — tracked on the baseline so it survives the
     // authoritative recompute in normalizeCustomerBalances().
     cust.extraDebt = Math.max(0, toMoney(toFinite(cust.extraDebt) + appliedAmount));
+    cust.updatedAt = new Date().toISOString();
   }
   normalizeCustomerBalances();
   saveState();

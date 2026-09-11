@@ -293,7 +293,7 @@ function totalMixWeightFor(usage) {
 /* ---------- Ingredient inventory movement ledger ---------- */
 function ensureInventoryItem(name) {
   if (!state.inventory) state.inventory = {};
-  if (!state.inventory[name]) state.inventory[name] = { stock: 0, lowAlert: 0 };
+  if (!state.inventory[name]) state.inventory[name] = { stock: 0, lowAlert: 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   return state.inventory[name];
 }
 function inventoryStockFor(name) {
@@ -405,10 +405,19 @@ function normalizeCustomerBalances() {
       customer.extraDebt = Math.max(0, toMoney((toMoney(customer.debt) - realLedger)));
     }
     // Debt is ALWAYS the authoritative sum: manual baseline + real ledger balance.
+    const beforeDebt = customer.debt, beforeOrder = customer.standingOrder,
+      beforePrice = customer.price, beforePhone = customer.phone, beforeExtra = customer.extraDebt;
     customer.debt = Math.max(0, toMoney((toMoney(customer.extraDebt) + realLedger)));
     customer.standingOrder = Math.max(0, toFinite(customer.standingOrder));
     customer.price = Math.max(0, toFinite(customer.price, 1300));
     customer.phone = customer.phone || '';
+    // Stamp only when a value actually changed, so a cross-device merge adopts the
+    // newest balance without stamping identical copies into a sync loop.
+    if (customer.debt !== beforeDebt || customer.standingOrder !== beforeOrder
+      || customer.price !== beforePrice || customer.phone !== beforePhone
+      || customer.extraDebt !== beforeExtra) {
+      customer.updatedAt = new Date().toISOString();
+    }
   });
 }
 

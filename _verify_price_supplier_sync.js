@@ -113,9 +113,40 @@ ok(state.prices.find(function (p) { return p.name === 'Egg'; }).price === 575,
 try { normalizeSupplierPayables(); ok(true, 'normalizeSupplierPayables runs clean after merge'); }
 catch (e) { ok(false, 'normalizeSupplierPayables crashed: ' + e.message); }
 
+/* ---------- Part 2: every writer stamps -> newest-wins everywhere ---------- */
+
+// Production + sales records carry timestamps and the newest edit wins the merge.
+state.production.push({ id: 'pr_stamp', date: '2026-09-10', pieces: 50, bags: 6, usage: { 'Egg': 1 }, capital: 2000, laborMinutes: 15, laborCost: 375, costPerPiece: 40, createdAt: '2026-09-10T08:00:00Z', updatedAt: '2026-09-10T08:00:00Z' });
+mergeRemoteIntoLocal({ production: [{ id: 'pr_stamp', date: '2026-09-10', pieces: 60, bags: 7, usage: { 'Egg': 1 }, capital: 2100, laborMinutes: 15, laborCost: 375, costPerPiece: 35, createdAt: '2026-09-10T08:00:00Z', updatedAt: '2026-09-10T09:30:00Z' }] });
+ok(state.production.find(function (p) { return p.id === 'pr_stamp'; }).pieces === 60,
+   'newest production edit wins the same-id merge (got ' + state.production.find(function (p) { return p.id === 'pr_stamp'; }).pieces + ')');
+
+state.sales.push({ id: 'sl_stamp', date: '2026-09-10', pieces: 40, bags: 5, price: 600, amount: 3000, paidAmount: 3000, createdAt: '2026-09-10T08:00:00Z', updatedAt: '2026-09-10T08:00:00Z' });
+mergeRemoteIntoLocal({ sales: [{ id: 'sl_stamp', date: '2026-09-10', pieces: 45, bags: 6, price: 600, amount: 3600, paidAmount: 3600, createdAt: '2026-09-10T08:00:00Z', updatedAt: '2026-09-10T10:00:00Z' }] });
+ok(state.sales.find(function (x) { return x.id === 'sl_stamp'; }).amount === 3600,
+   'newest sale edit wins the same-id merge');
+
+// Customers: balance recompute stamps only when something changed (no churn).
+state.customers = [{ id: 'c1', name: 'Aung', debt: 0, standingOrder: 0, price: 1300, phone: '', extraDebt: 0, createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z' }];
+state.customerPayments = [];
+state.sales = [];
+const stampBefore = state.customers[0].updatedAt;
+normalizeCustomerBalances();
+ok(state.customers[0].updatedAt === stampBefore, 'normalizeCustomerBalances is stable when nothing changed (no churn)');
+state.sales.push({ id: 'slc1', customerId: 'c1', date: '2026-09-10', amount: 13000, paidAmount: 3000, createdAt: '2026-09-10T08:00:00Z', updatedAt: '2026-09-10T08:00:00Z' });
+state.customerPayments.push({ id: 'cp1', customerId: 'c1', date: '2026-09-11', amount: 5000, createdAt: '2026-09-11T08:00:00Z' });
+normalizeCustomerBalances();
+ok(state.customers[0].debt === 5000, 'customer debt recomputed from ledger (10000 - 5000 = 5000, got ' + state.customers[0].debt + ')');
+ok(state.customers[0].updatedAt !== stampBefore, 'customer row stamped when its balance changed');
+
+// Inventory items are created with timestamps so low-alert edits merge newest-wins.
+state.inventory = {}; state.inventoryMovements = [];
+const invItem = ensureInventoryItem('Egg');
+ok(!!invItem.createdAt && !!invItem.updatedAt, 'inventory items are created with timestamps');
+
 console.log(fail === 0 ? 'ALL PRICE/SUPPLIER SYNC CHECKS PASSED' : (fail + ' CHECK(S) FAILED'));
 process.exit(fail === 0 ? 0 : 1);
 `;
 
-const src = read('config.js') + '\n' + read('helpers.js') + '\n' + read('suppliers.js') + '\n' + read('cloud.js') + '\n' + TEST_BODY;
+const src = read('config.js') + '\n' + read('helpers.js') + '\n' + read('suppliers.js') + '\n' + read('sales.js') + '\n' + read('cloud.js') + '\n' + TEST_BODY;
 eval(src);

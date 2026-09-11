@@ -78,6 +78,14 @@ function saveSale() {
     receiptNo: isUpdate ? '' : 'CR-' + Date.now().toString(36).toUpperCase(),
     cogs: 0, avgCost: 0, net: 0
   };
+  // Cross-device merge: every record carries a timestamp; the newest updatedAt wins.
+  const nowStamp = new Date().toISOString();
+  record.updatedAt = nowStamp;
+  record.createdAt = nowStamp;
+  if (isUpdate) {
+    const prevSale = state.sales.find(function (x) { return x.id === record.id; });
+    if (prevSale && prevSale.createdAt) record.createdAt = prevSale.createdAt;
+  }
 
   const shortage = canSaveSale(record);
   if (shortage) {

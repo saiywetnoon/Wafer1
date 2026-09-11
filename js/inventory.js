@@ -87,6 +87,7 @@ function renderInventory() {
     inp.addEventListener('change', function () {
       const item = ensureInventoryItem(inp.dataset.name);
       item.lowAlert = Math.max(0, parseFloat(inp.value) || 0);
+      item.updatedAt = new Date().toISOString();
       saveState();
       renderInventory();
     });

@@ -23,7 +23,7 @@ function addCashAdjustment(amount, label) {
   if (!label) { showToast('Add a short description (e.g. petrol, draw, deposit).', 'error'); return; }
   if (!state.cash) state.cash = { opening: 0, adjustments: [] };
   if (!Array.isArray(state.cash.adjustments)) state.cash.adjustments = [];
-  state.cash.adjustments.push({ id: uid(), date: today(), amount: amount, label: label });
+  state.cash.adjustments.push({ id: uid(), date: today(), amount: amount, label: label, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   saveState();
   renderCash();
   showToast(amount > 0 ? 'Cash added to drawer.' : 'Cash removed from drawer.');
