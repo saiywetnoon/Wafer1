@@ -252,6 +252,35 @@ function renderDeviceSyncStatus() {
     if (l) { const d = new Date(l); last = isNaN(d.getTime()) ? '—' : d.toLocaleString(); }
   } catch (e) {}
   set('deviceSyncLast', last);
+  refreshDeviceCloudCounts();   // async, updates the card when it lands
+}
+
+/* Compact record+stock summary of a ledger copy — answers the question
+   "is my production actually IN the cloud, or only on this device?". */
+function stateCountSummary(s) {
+  return {
+    production: (s && s.production) ? s.production.length : 0,
+    sales: (s && s.sales) ? s.sales.length : 0,
+    purchases: (s && s.purchases) ? s.purchases.length : 0,
+    stock: (s && s.stock && typeof s.stock.pieces === 'number') ? s.stock.pieces : null
+  };
+}
+async function refreshDeviceCloudCounts() {
+  try {
+    const d = stateCountSummary(state);
+    const dEl = $('deviceLocalCounts');
+    if (dEl) dEl.textContent = 'production ' + d.production + ' · sales ' + d.sales + ' · stock ' + (d.stock == null ? '?' : d.stock) + ' pcs';
+    const res = await cloudGet();
+    const cEl = $('deviceCloudCounts');
+    if (!cEl) return;
+    const r = (res && res.ok && res.payload && res.payload.state) ? res.payload.state : null;
+    if (!r) {
+      cEl.textContent = (res && res.error) ? 'read failed (' + String(res.error).slice(0, 40) + ')' : 'empty';
+      return;
+    }
+    const c = stateCountSummary(r);
+    cEl.textContent = 'production ' + c.production + ' · sales ' + c.sales + ' · stock ' + (c.stock == null ? '?' : c.stock) + ' pcs';
+  } catch (e) { /* best-effort */ }
 }
 
 /* Re-create the realtime subscription (e.g. after a flaky connection) where

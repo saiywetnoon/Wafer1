@@ -920,6 +920,12 @@ function applyCloudRemote(remote, remoteTs, force) {
   // A fresh device pulling the cloud must also respect every tombstone.
   if (typeof applyDeletionTombstones === 'function') applyDeletionTombstones();
 
+  // A pulled copy must NEVER render a stale/empty stock: recompute finished-goods
+  // stock straight from the freshly pulled production/sales/waste ledger, so the
+  // stock card and dashboard are correct the moment this pull lands — even if a
+  // later render step is interrupted or the stored snapshot was outdated.
+  if (typeof rebuildStockAndCogs === 'function') rebuildStockAndCogs();
+
   if (typeof normalizeCustomerBalances === 'function') normalizeCustomerBalances();
   if (typeof normalizeSupplierPayables === 'function') normalizeSupplierPayables();
   if (typeof migrateInventoryMovements === 'function') migrateInventoryMovements();

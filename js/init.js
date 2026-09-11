@@ -321,6 +321,23 @@ async function appStart() {
   // Background freshness: re-pull the account copy every 60s so an already-open
   // tab keeps showing the latest edits from other devices (realtime backstop).
   try { startCloudPolling(); } catch (e) { console.warn('cloud polling not available', e); }
+  // Catch-up on tab focus: when the user switches back to this tab (or phone
+  // app), pull + merge immediately instead of waiting up to 60s / realtime.
+  if (!window.__cloudVisibilityHandler) {
+    window.__cloudVisibilityHandler = true;
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && cloudReady()) {
+        try {
+          cloudGet().then(function (res) {
+            const remote = (res && res.ok) ? res.payload : null;
+            if (remote && remote.state) {
+              handleRemoteCopy(remote.state, remote.exportedAt ? Date.parse(remote.exportedAt) : undefined, 'Tab revived', (remote && remote.device) || null);
+            }
+          }).catch(function () {});
+        } catch (e) { /* best-effort */ }
+      }
+    });
+  }
   // From here on, EVERY save auto-pushes to the cloud (price, stock, anything).
   setCloudAutoSync(true);
   // Topbar notification bell + dropdown.
