@@ -479,7 +479,7 @@ function applyDeletionTombstones() {
   }
   ['production', 'sales', 'waste', 'customers', 'suppliers', 'purchases', 'payments',
     'customerPayments', 'expenses', 'recurringExpenses', 'recipes',
-    'inventoryMovements', 'prices'].forEach(function (c) {
+    'priceHistory', 'inventoryMovements', 'prices'].forEach(function (c) {
     state[c] = keep(c, state[c]);
   });
   if (state.cash && Array.isArray(state.cash.adjustments)) {

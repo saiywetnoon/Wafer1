@@ -33,7 +33,7 @@ async function cloudSyncNow() {
   if (!res || !res.ok) { updateGoogleSyncStatus('Could not read Supabase. Retrying automatically.', 'error'); return; }
   if (res.payload && res.payload.state) handleRemoteCopy(res.payload.state, Date.parse(res.exportedAt) || undefined, 'Manual sync', res.payload.device || null); else await cloudPush();
   renderCloudStatus();
-  try { compareCloudAndDevice(); } catch (e) { /* best-effort */ }
+  try { compareCloudAndDevice().catch(function () {}); } catch (e) { /* best-effort */ }
 }
 async function reconnectRealtime() {
   if (SUPA.configured()) { try { await SUPA.sessionUser(); } catch (e) {} }
@@ -88,6 +88,47 @@ async function cloudForcePullFromCloud() {
   renderCloudStatus();
 }
 function renderSyncTab() { renderCloudStatus(); }
+/* DEFINITIVE cloud self-test: write a unique marker to the shared cloud row
+   through the REAL push path, read it back, then restore the original data.
+   Shows exactly where sync breaks:
+     - write fails  -> sign-in / approval / RLS / session / network problem
+     - read stuck   -> the cloud reads are hitting an old row (RLS/cache/project)
+     - round-trip OK -> the cloud is fine; any other device showing old data is
+                        running an OLD build or cannot reach Supabase. */
+async function cloudRoundTripTest() {
+  if (!SUPA.configured()) { showToast('Supabase is required.', 'error'); return; }
+  try { await SUPA.sessionUser(); } catch (e) {}
+  if (!cloudReady()) { showToast('Sign in first.', 'error'); return; }
+  const uid = SUPA.user && SUPA.user.id;
+  if (!uid) { showToast('Sign in first.', 'error'); return; }
+  const out = $('cloudTruth');
+  if (!out) return;
+  if (!confirm('Run a cloud round-trip self-test?\n\nIt writes a tiny test marker to the SHARED cloud and restores your data right after. Use it to prove whether the cloud is actually updating.')) return;
+  out.innerHTML = '<div class="text-[10px] text-gray-500">Round-trip test running…</div>';
+  const token = 'rtest-' + Math.random().toString(36).slice(2, 10) + '-' + Date.now().toString(36);
+  const lines = [];
+  try {
+    const before = await cloudGet();
+    lines.push('1) Read cloud: ' + (before && before.ok ? 'OK — cloud ' + (before.payload && before.payload.state ? 'has data' : 'is EMPTY') : 'FAILED — ' + esc((before && before.error) || 'unknown')));
+    if (before && before.ok) {
+      const marker = JSON.parse(JSON.stringify(state));
+      marker.__diag = { token: token, at: new Date().toISOString() };
+      const payload = { app: 'daily-crispy-roll-ledger', exportedAt: new Date().toISOString(), device: typeof getDeviceFact === 'function' ? getDeviceFact() : null, state: marker };
+      const up = await SUPA.saveLedger(uid, payload);
+      lines.push('2) Write test marker: ' + (up && up.ok ? 'OK' : 'FAILED — ' + esc((up && up.error) || 'unknown')));
+      if (up && up.ok) {
+        const after = await cloudGet();
+        const gotToken = after && after.ok && after.payload && after.payload.state && after.payload.state.__diag && after.payload.state.__diag.token;
+        lines.push('3) Read back marker: ' + (gotToken === token ? 'MATCHED — the cloud row updates correctly ✓' : 'STALE — the cloud read still returns the OLD row (read/RLS/caching issue) ✗'));
+        const restore = await SUPA.saveLedger(uid, toGooglePayload());
+        lines.push('4) Restored original data: ' + (restore && restore.ok ? 'OK (the marker is gone)' : 'WRITE FAILED while restoring — press Upload Now / Overwrite Cloud on this device to restore your data.'));
+      }
+    }
+  } catch (e) { lines.push('ERROR: ' + esc(String(e))); }
+  out.innerHTML = '<div class="max-h-40 overflow-y-auto text-[10px] whitespace-pre-wrap">' + lines.join('<br>') + '</div>';
+  if (typeof renderCloudStatus === 'function') { try { renderCloudStatus(); } catch (e) {} }
+}
+if ($('cloudRttBtn')) $('cloudRttBtn').addEventListener('click', cloudRoundTripTest);
 if ($('exportFullBackupBtn')) $('exportFullBackupBtn').addEventListener('click', downloadFullBackup);
 if ($('restoreFullBackupBtn')) $('restoreFullBackupBtn').addEventListener('click', () => $('restoreFileInput').click());
 if ($('restoreFileInput')) $('restoreFileInput').addEventListener('change', function () {
