@@ -134,18 +134,52 @@ const SUPA = {
   },
   async getLedger(userId) {
     const sb = this.init(); if (!sb) return { error: 'unconfigured' };
-    const { data, error } = await sb
-      .from('shared_ledgers').select('payload,updated_at').eq('workspace_id', this.workspaceId).maybeSingle();
-    if (error) {
+    const readShared = async function () {
+      return await sb
+        .from('shared_ledgers').select('payload,updated_at').eq('workspace_id', this.workspaceId).maybeSingle();
+    }.bind(this);
+    const first = await readShared();
+    if (first && first.error) {
       // Distinguish a REAL read failure (RLS / network / session) from a clean
       // "no row yet". A failed read must never look like an empty cloud —
       // that used to let a device push its local copy OVER a populated cloud
       // it simply could not read at that moment.
-      const msg = String((error && (error.message || error.code)) || 'read failed');
+      const msg = String((first.error && (first.error.message || first.error.code)) || 'read failed');
       if (/no rows|PGRST116|406|not found/i.test(msg)) return null;
+      // Expired/invalid session: `saveLedger` already heals a dead token for
+      // WRITES — the read must do the same or a device whose access token
+      // silently expired would show the SAME cloud snapshot forever, no matter
+      // how often the user refreshes (every pull fails identically and the
+      // reconcile gives up after one retry). Ask the server to confirm via
+      // getUser() — if the refresh token is alive it returns a fresh access
+      // token and ONE retry is enough; if it is dead, stop pretending and say
+      // so instead of hiding the failure.
+      if (/jwt|401|403|unauthor|expired|token/i.test(msg)) {
+        try {
+          const g = await sb.auth.getUser();
+          if (g && !g.error && g.data && g.data.user) {
+            const retried = await readShared();
+            if (retried && !retried.error) {
+              const row = retried.data;
+              if (row) return { payload: row.payload, updatedAt: row.updated_at };
+              return null; // confirmed empty AFTER the token was healed
+            }
+            return { error: msg };
+          }
+          // Refresh token is dead too. We deliberately keep `this.user` — the
+          // cached session still exists, and dropping it would flip cloudReady()
+          // to false and silently kill the 8s reconcile / 60s poll retry loops,
+          // re-freezing every refresh. Keeping it means cloudAfterSignIn keeps
+          // retrying and surfaces the honest "could not reach the cloud yet" /
+          // "sign in again" state until the user signs in again.
+          return { error: 'session expired — sign in again to sync' };
+        } catch (e) {
+          return { error: 'session expired — sign in again to sync' };
+        }
+      }
       return { error: msg };
     }
-    if (data) return { payload: data.payload, updatedAt: data.updated_at };
+    if (first && first.data) return { payload: first.data.payload, updatedAt: first.data.updated_at };
     // One-time seamless migration from the old per-user ledger. The first
     // existing account to open this version seeds the shared workspace; later
     // accounts read that shared row. Private legacy rows are left untouched.

@@ -41,10 +41,21 @@ async function supabasePush() {
   if (!uid) return { ok: false, error: 'Not signed in.' };
   return SUPA.saveLedger(uid, toGooglePayload());
 }
+/* Same principle as the push watchdog: a cloud READ that never resolves must
+   not wedge the boot / poll / refresh path forever (device B would otherwise
+   sit on its last-known snapshot with no pull and no error). Time-box it and
+   let the caller's retry path report + retry normally. */
+var CLOUD_READ_TIMEOUT_MS = (typeof window !== 'undefined' && window.__supaTimeoutMs)
+  ? Math.max(250, window.__supaTimeoutMs) : 20000;
+function cloudReadTimedOut() {
+  return new Promise(function (resolve) {
+    setTimeout(function () { resolve({ error: 'cloud read timed out' }); }, CLOUD_READ_TIMEOUT_MS);
+  });
+}
 async function supabaseGet() {
   const uid = SUPA.user && SUPA.user.id;
   if (!uid) return { ok: false, error: 'Not signed in.' };
-  const row = await SUPA.getLedger(uid);
+  const row = await Promise.race([SUPA.getLedger(uid), cloudReadTimedOut()]);
   // A row with `.error` means the READ FAILED — never mistake that for "the
   // cloud is empty" (an emptiness bug let devices overwrite a populated cloud
   // with a stale local copy). `null` means a clean, CONFIRMED empty ledger.
@@ -193,6 +204,45 @@ var CLOUD_LAST_SYNC_KEY = 'dailyCrispyRollLedger_lastCloudSync';
    newest complete state. */
 var cloudPushInFlight = null;
 var cloudPushRequested = false;
+/* A network request that NEVER resolves must not jam the single-flight write
+   queue forever. Without this guard ONE hung push silently freezes every
+   later save: the device keeps cooking/selling locally, the cloud row stops
+   updating, and every other device shows the same snapshot no matter how
+   often it refreshes (there is no queue flag and no status change to retry
+   from). Time-boxing each attempt turns a hang into a normal failure — the
+   queue is marked pending, the status pill says so, and the 20s heartbeat
+   retries (initSyncFlushers). Generous: a slow cellular upload may take a
+   while, but a request stuck for CLOUD_PUSH_TIMEOUT_MS is not coming back. */
+var CLOUD_PUSH_TIMEOUT_MS = (typeof window !== 'undefined' && window.__supaTimeoutMs)
+  ? Math.max(1500, window.__supaTimeoutMs * 6) : 30000;
+function cloudPushTimedOut() {
+  return new Promise(function (resolve) {
+    setTimeout(function () { resolve({ ok: false, error: 'cloud write timed out' }); }, CLOUD_PUSH_TIMEOUT_MS);
+  });
+}
+function cloudPush() {
+  cloudPushRequested = true;
+  if (cloudPushInFlight) return cloudPushInFlight;
+  // `inFlight` is captured by its own finally. Only the CURRENT in-flight
+  // promise may clear the slot: if this attempt times out / is abandoned and a
+  // newer cloudPush() has already replaced cloudPushInFlight, we must not null
+  // the newer one.
+  var inFlight;
+  inFlight = (async function () {
+    var lastResult = { ok: false, error: 'No cloud write was started.' };
+    try {
+      while (cloudPushRequested) {
+        cloudPushRequested = false;
+        lastResult = await Promise.race([cloudPushOnce(), cloudPushTimedOut()]);
+      }
+      return lastResult;
+    } finally {
+      if (cloudPushInFlight === inFlight) cloudPushInFlight = null;
+    }
+  })();
+  cloudPushInFlight = inFlight;
+  return inFlight;
+}
 /* True while the most recent push did NOT reach the cloud (this session).
    Keeps the status pill in a visible "Sync failed — retrying" state instead
    of showing a lie ("Synced") for hours. */
@@ -229,26 +279,6 @@ async function cloudPushOnce() {
     }
   }
   return res;
-}
-/* Serialize whole-ledger writes.  This is intentionally the public cloudPush
-   entry point so manual upload, auto-save, retry, and merge reconciliation all
-   share the same protection. */
-function cloudPush() {
-  cloudPushRequested = true;
-  if (cloudPushInFlight) return cloudPushInFlight;
-  cloudPushInFlight = (async function () {
-    var lastResult = { ok: false, error: 'No cloud write was started.' };
-    try {
-      while (cloudPushRequested) {
-        cloudPushRequested = false;
-        lastResult = await cloudPushOnce();
-      }
-      return lastResult;
-    } finally {
-      cloudPushInFlight = null;
-    }
-  })();
-  return cloudPushInFlight;
 }
 /* Try to send any queued changes now that we are (back) online. */
 async function flushPendingSync() {
