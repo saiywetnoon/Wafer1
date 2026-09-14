@@ -215,6 +215,10 @@ global.document = {
 const store = {};
 store['today'] = '2026-08-30';
 global.today = () => store['today'];
+/* Production report date used by the pan auto-report — in the app this is the
+   date on the Production form (the batch in progress). In this standalone
+   harness it simply mirrors the mocked "today". */
+global.activeProductionDate = () => store['today'];
 global.saveProductionFromRun = function (date, pcs, bags, usage, notes, useBy, quiet) {
   global.savedRuns = (global.savedRuns || 0) + 1;
   global.lastRun = { date, pcs, bags, quiet };

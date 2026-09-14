@@ -96,7 +96,10 @@ interfere with each other. For each pan:
 - **Automatic roll + bag count → Production** — when a timer finishes, the pan
   counts the **Rolls & Bags** you set for it. With **"Automatically report
   finished batches to Production"** on (the default), those exact counts are
-  added straight into the Production panel and merged into that day's batch:
+  added straight into the Production panel and merged into the batch you're
+  producing — the date on the Production form, so a pan that finishes after
+  midnight keeps counting into that same batch and never starts a new day's
+  row:
   **Pieces** grows by the Rolls and **Bags Prod.** grows by the Bags. The daily
   recipe stays deducted exactly once. Turn auto-report off to keep the counts in
   the Today's Batch Log (where you can also edit Rolls & Bags per pan) and use

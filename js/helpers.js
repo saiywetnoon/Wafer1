@@ -8,6 +8,19 @@ const today = () => {
   const local = new Date(d.getTime() - off * 60000);
   return local.toISOString().slice(0, 10);
 };
+/* The production date of the batch the user is CURRENTLY producing — the date
+   shown on the Production form. Production is per batch/date: when a nightly
+   batch runs past 0:00, the finished pans must keep counting into THIS same
+   batch instead of opening a brand-new production row for the new calendar day
+   (which used to abandon the batch that was still being produced). Falls back
+   to today() when no date is picked yet (fresh tab / first run of the day). */
+const activeProductionDate = () => {
+  try {
+    const el = document.getElementById('logDate');
+    if (el && el.value) return el.value;
+  } catch (e) { /* best-effort — never block the pan report */ }
+  return today();
+};
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
   if (c === '&') return '&' + 'amp;';

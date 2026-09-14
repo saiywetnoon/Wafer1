@@ -44,11 +44,13 @@
    7. AUTOMATIC ROLL COUNT → PRODUCTION — when a timer finishes,
       the pan counts the Rolls you set for it and (with
       settings.autoReport, on by default) reports them straight into
-      the Production panel (quietly, merged into that day's batch,
-      once). Bags are NEVER per-round: they are counted from packs of
-      FULL SETS of rolls (rolls ÷ "Rolls per bag", floor) in the
-      ledger. Manually resetting a finished pan cancels its pending
-      count so nothing can ever be double-reported.
+      the Production panel (quietly, merged into the batch you're
+      producing — the Production form's date, so a pan that finishes
+      after 0:00 keeps counting into that same batch and never opens
+      a new day's row; once). Bags are NEVER per-round: they are
+      counted from packs of FULL SETS of rolls (rolls ÷ "Rolls per
+      bag", floor) in the ledger. Manually resetting a finished pan
+      cancels its pending count so nothing can ever be double-reported.
    ============================================================ */
 (function () {
   'use strict';
@@ -111,6 +113,11 @@
   // Optional pan "runs" (feature 2): after a pan finishes a batch you can log
   // it to production from the timers screen. Keyed by pan id (dynamic).
   var runPieces = {};
+  // The production date each pending run was finished on (captured at markRun).
+  // A batch made at night keeps counting into the batch the user was producing,
+  // even after the calendar flips to a new day at 0:00 — the report date is
+  // never re-assigned to whatever "today" is when the run is finally logged.
+  var runDates = {};
   // Pans whose finished batch was already auto-reported to Production (live
   // session guard; persisted in each saved pan as `reported` so a refresh can
   // never double-count a finished batch).
@@ -378,6 +385,7 @@
     // reset can never double-report a batch that isn't actually being counted.
     reportedRun[pan.id] = false;
     runPieces[pan.id] = 0;
+    delete runDates[pan.id];
     save();
     paintPan(pan);
     stopTickIfIdle();
@@ -635,6 +643,11 @@
     if (pan.stage === 3 && !pan.running && !reportedRun[pan.id]) {
       if (!runPieces[pan.id]) {
         runPieces[pan.id] = rollsFor(pan.id);
+        // Remember WHICH production batch this run belongs to at the moment it
+        // finishes. Reporting later must use this date (the batch in progress),
+        // never the wall-clock day at report time — that is what used to split
+        // a night shift into two production rows at midnight.
+        runDates[pan.id] = activeProductionDate();
         // Persist immediately: the finish-tick save() runs BEFORE this count is
         // set, so without this a pending count would be lost on refresh.
         save();
@@ -648,10 +661,14 @@
   function autoReportDone(pan) {
     if (!settings.autoReport || reportedRun[pan.id] || !runPieces[pan.id]) return;
     if (typeof saveProductionFromRun !== 'function') return;
-    var ok = saveProductionFromRun(today(), runPieces[pan.id], null, undefined, undefined, undefined, true);
+    // Report into the batch this run was made for — the production date on the
+    // form when it finished — NOT the wall-clock day "now", which after 0:00
+    // would open a brand-new production row and abandon the batch in progress.
+    var ok = saveProductionFromRun(runDates[pan.id] || activeProductionDate(), runPieces[pan.id], null, undefined, undefined, undefined, true);
     if (ok) {
       runPieces[pan.id] = 0;
       reportedRun[pan.id] = true;
+      delete runDates[pan.id];
     }
   }
   function renderRunSummary() {
@@ -660,11 +677,15 @@
     const rpb = settings.rollsPerBag || defaultRollsPerBag();
     // Day totals make bags count out loud in the timers: reported rolls live in
     // today's Production batch(es); pending rolls are still waiting in the pans.
+    // Count against the batch that the finished pans belong to (the Production
+    // form's date), so a night shift that runs past 0:00 stays on ONE line with
+    // its real pieces instead of being re-counted on the new calendar day.
+    const runDate = activeProductionDate();
+    const dayLabel = (runDate === today()) ? 'Today' : runDate;
     let reportedPieces = 0;
-    const todayStr = today();
     if (typeof state !== 'undefined' && state.production) {
       state.production.forEach(function (p) {
-        if (p.date === todayStr) reportedPieces += (parseFloat(p.pieces) || 0);
+        if (p.date === runDate) reportedPieces += (parseFloat(p.pieces) || 0);
       });
     }
     let pendingPieces = 0;
@@ -673,7 +694,7 @@
     const totalBags = Math.floor(totalPieces / rpb);   // FULL SETS ONLY
     const head =
       '<div class="sm:col-span-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">' +
-        '<div class="text-xs font-bold text-amber-300">📦 Today: ' +
+        '<div class="text-xs font-bold text-amber-300">📦 ' + dayLabel + ': ' +
           '<span class="text-emerald-400">' + totalPieces + ' roll' + (totalPieces === 1 ? '' : 's') + ' → ' +
           totalBags + ' bag' + (totalBags === 1 ? '' : 's') + '</span>' +
           '<span class="text-gray-400 font-normal"> — full sets of ' + rpb + ' rolls' +
@@ -700,7 +721,7 @@
     }).join('');
     const empty =
       (totalPieces > 0)
-        ? '<div class="sm:col-span-3 text-gray-500 text-xs">All finished batches for today are already counted above.</div>'
+        ? '<div class="sm:col-span-3 text-gray-500 text-xs">All finished batches for ' + dayLabel + ' are already counted above.</div>'
         : '<div class="sm:col-span-3 text-gray-500 text-xs">No finished batches yet. Finished pans count their Rolls automatically; bags are counted from full sets of rolls when logged to Production.</div>';
     box.innerHTML = head + (cards || empty);
   }
@@ -721,16 +742,17 @@
     pans.forEach(function (pan) {
       const pcs = runPieces[pan.id] || 0;
       if (!pcs) return;
-      const ok = saveProductionFromRun(today(), pcs, null, undefined, (g('logNotes') ? g('logNotes').value : ''), undefined);
+      const ok = saveProductionFromRun(runDates[pan.id] || activeProductionDate(), pcs, null, undefined, (g('logNotes') ? g('logNotes').value : ''), undefined);
       if (ok) {
         runPieces[pan.id] = 0;
         reportedRun[pan.id] = true;
+        delete runDates[pan.id];
         savedAny = true;
       }
     });
     if (savedAny) {
       renderRunSummary();
-      if (window.showToast) showToast('Finished batches logged to Production for today.', 'success');
+      if (window.showToast) showToast('Finished batches logged to Production.', 'success');
     } else {
       if (window.showToast) showToast(noFinishedRuns() ? 'No finished batches to log yet.' : 'Could not log — check ingredient stock.', 'info');
     }
@@ -824,6 +846,7 @@
           p.running = false; p.endAt = 0; p.remaining = p.duration; p.stage = 0;
           reportedRun[p.id] = false;
           runPieces[p.id] = 0;
+          delete runDates[p.id];
         });
         stopTickIfIdle();
         save();
@@ -1076,6 +1099,7 @@
         v: STORAGE_VERSION,
         settings: settings,
         runs: Object.assign({}, runPieces),
+        runDates: Object.assign({}, runDates),
         pans: pans.map(function (p) {
           return { id: p.id, duration: p.duration, remaining: p.remaining, running: p.running, endAt: p.endAt, stage: p.stage, reported: !!reportedRun[p.id] };
         })
@@ -1104,6 +1128,11 @@
       // never reported — auto-report off, or a blocked try — must not be lost).
       if (saved.runs && typeof saved.runs[saved.id] === 'number') {
         runPieces[saved.id] = Math.max(0, saved.runs[saved.id]);
+        // A pending run is re-anchored to the batch date it was finished on so
+        // a refresh after midnight can never re-assign it to the new calendar day.
+        if (runPieces[saved.id] > 0 && saved.runDates && typeof saved.runDates[saved.id] === 'string') {
+          runDates[saved.id] = saved.runDates[saved.id];
+        }
       }
       var eff = getTimeoutSettingsForId(pan.id);
       pan.duration = (saved.duration > 0) ? saved.duration : (eff.fold + eff.final);

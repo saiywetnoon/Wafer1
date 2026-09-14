@@ -953,7 +953,7 @@ tailwind.config = {
         <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="list-checks" class="w-5 h-5 text-emerald-400"></i> Today's Batch Log</h3>
         <button id="panSaveRunBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition">Log finished batch → Production</button>
       </div>
-      <p class="text-xs text-gray-400 mb-2">Each finished pan counts its <b class="text-emerald-400">Rolls</b> and reports them to Production automatically (quietly merged into that day's batch). <b class="text-emerald-400">Bags are counted from FULL SETS of total rolls</b> — the "Rolls per bag" rule in ⚙ Settings (default 5). 16 rolls at 5/bag = 3 bags; a 17th roll still leaves 3 bags until the 20th fills the 4th. The day's total rolls → bags is shown at the top of this log.</p>
+      <p class="text-xs text-gray-400 mb-2">Each finished pan counts its <b class="text-emerald-400">Rolls</b> and reports them to Production automatically (quietly merged into the batch you're producing — the date on the Production form, so a pan that finishes after 0:00 keeps counting into that same batch and never starts a new day's row). <b class="text-emerald-400">Bags are counted from FULL SETS of total rolls</b> — the "Rolls per bag" rule in ⚙ Settings (default 5). 16 rolls at 5/bag = 3 bags; a 17th roll still leaves 3 bags until the 20th fills the 4th. The day's total rolls → bags is shown at the top of this log.</p>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="panRunSummary"></div>
     </div>
   </section>

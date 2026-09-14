@@ -8,7 +8,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.7\\js';
+const dir = path.join(__dirname, 'js');
 const read = (f) => fs.readFileSync(path.join(dir, f), 'utf8');
 
 /* ---------- DOM stubs (smoke-test style, extended for ledger.js/usage.js) ---------- */
@@ -154,6 +154,7 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
     state.production = []; state.sales = []; state.inventoryMovements = []; state.inventoryMovementVersion = 1;
     state.stock = { pieces: 0, cost: 0 }; state.draft = null; draftUsage = {}; draftTouched = false;
     state.settings = Object.assign({ hourlyWage: 1500, rollsPerBag: 5 }, state.settings);
+    D.getElementById('logDate').value = '';
   }
   const D = global.document;
   function keyDown(key, code, shift, target) {
@@ -227,6 +228,41 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
   ok(state.production[0].pieces === 1, 'D3: the pending roll reached Production');
   keyDown('!', 'Digit2', true);
   saveProductionFromRun = origRunSave;
+
+  /* ============ E) 0:00 MIDNIGHT CROSSING — pans keep counting into the batch in progress ============ */
+  console.log('== E) pans finishing after midnight do NOT open a new day row — they merge into the in-progress batch ==');
+  reset();
+  setPanSettings(5, 1, true);
+  // The user has been producing batch 2026-09-13 all evening; the Production
+  // form still shows that date even though the clock has now crossed 0:00
+  // (today() returns a different calendar day). Old behaviour: this second pan
+  // opened a brand-new row for the new date and abandoned the previous batch.
+  D.getElementById('logDate').value = '2026-09-13';
+  resetPan(); finishRun();
+  ok(state.production.length === 1, 'E1: post-midnight pan still merges into the in-progress batch (1 row, got ' + state.production.length + ')');
+  ok(state.production[0].date === '2026-09-13', 'E2: rolls count on the batch date being produced, not the new calendar day (got ' + state.production[0].date + ')');
+  ok(state.production[0].pieces === 1, 'E3: the roll landed in that batch (1 piece)');
+  resetPan(); finishRun();
+  ok(state.production.length === 1, 'E4: second post-midnight pan still merges — no split row appears in Recent Production');
+  ok(state.production[0].pieces === 2 && state.production[0].date === '2026-09-13', 'E5: 2 rolls on 2026-09-13 — previous production process was never abandoned (got ' + state.production[0].pieces + '/' + state.production[0].date + ')');
+  ok(text().indexOf('2026-09-13:') >= 0, 'E6: timers day-header names the batch being produced (2026-09-13)');
+
+  /* ============ F) a pending run keeps ITS batch date across a refresh + later manual log ============ */
+  console.log('== F) pending run (auto-report OFF) is logged to the batch it was rolled for, not to "today" ==');
+  reset();
+  D.getElementById('logDate').value = '2026-09-12';
+  setPanSettings(5, 1, false);          // auto-report OFF → the roll count stays pending
+  resetPan(); finishRun();
+  ok(state.production.length === 0, 'F1: run stays pending (not reported) while auto-report is off');
+  const panStoreKeyF = Object.keys(store).find(function (k) { return k.indexOf('panTimers_v1') === 0; }) || 'panTimers_v1_default';
+  const storedF = JSON.parse(localStorage.getItem(panStoreKeyF) || 'null');
+  ok(storedF && storedF.runDates && storedF.runDates.pan1 === '2026-09-12', 'F2: pending run persists the batch date it was finished on (got ' + (storedF && storedF.runDates && storedF.runDates.pan1) + ')');
+  // Next morning the user has moved the Production form to the new day.
+  D.getElementById('logDate').value = '2026-09-13';
+  D.getElementById('panSaveRunBtn').dispatch('click');
+  ok(state.production.length === 1, 'F3: manual "Log finished batch" writes ONE row');
+  ok(state.production[0].date === '2026-09-12', 'F4: the log lands on its own batch (2026-09-12), not the new day (got ' + state.production[0].date + ')');
+  ok(state.production[0].pieces === 1, 'F5: 1 roll logged');
 
   console.log(out.failures === 0 ? 'REPRO CHECK: ALL SCENARIOS EXPLORED' : ('REPRO CHECK: ' + out.failures + ' FAILURE(S)'));
 })();
