@@ -241,11 +241,11 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
   };
   if (record.capital === 0) record.capital = Math.round(ingredientCostFor(record.usage));
   if (useBy) record.useBy = useBy;
-  const shortage = inventoryUsageShortage({}, record.usage);
-  if (shortage) {
-    showToast('Not enough ' + shortage.name + '. Available: ' + fmt(shortage.available) + '; batch needs ' + fmt(shortage.requested) + ' more.', 'error');
-    return false;
-  }
+  // A finished pan batch is REAL production — the rolls already exist, so it is
+  // always recorded. When a stock item is short the running balance simply goes
+  // negative and the overConsumedStockItems() warning below tells the user what
+  // to restock. (Blocking here would silently drop every pan report whenever an
+  // ingredient has partial stock — the automatic report would never land.)
   state.production.push(record);
   reconcileProductionInventory({}, record.usage, record.date, record.id);
   rebuildStockAndCogs();

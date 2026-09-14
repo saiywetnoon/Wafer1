@@ -415,13 +415,16 @@
   function tick() {
     var now = Date.now();
     pans.forEach(function (pan) {
-      const wasStage3 = pan.stage === 3 && !pan.running;
       if (stepPan(pan, now)) {
         triggerAlert(pan, pan.stage);   // toast + beep + save + flash + banner
       } else {
         paintPan(pan);
       }
-      if (!wasStage3 && pan.stage === 3 && !pan.running) {
+      // Count + auto-report a finished pan. autoReportDone is idempotent and
+      // retried while the run is still pending, so a batch restored after a
+      // refresh — or one a shortage/offline blip blocked earlier — finally
+      // lands in Production as soon as it can.
+      if (pan.stage === 3 && !pan.running) {
         markRun(pan);
         autoReportDone(pan);   // auto-counted rolls → Production panel
       }
@@ -630,7 +633,12 @@
      panel and bags are derived there from FULL SETS of rolls. */
   function markRun(pan) {
     if (pan.stage === 3 && !pan.running && !reportedRun[pan.id]) {
-      runPieces[pan.id] = runPieces[pan.id] || rollsFor(pan.id);
+      if (!runPieces[pan.id]) {
+        runPieces[pan.id] = rollsFor(pan.id);
+        // Persist immediately: the finish-tick save() runs BEFORE this count is
+        // set, so without this a pending count would be lost on refresh.
+        save();
+      }
     }
   }
   /* Auto-report a finished batch to Production (quietly — no tab jump, no
@@ -649,10 +657,34 @@
   function renderRunSummary() {
     const box = g('panRunSummary');
     if (!box) return;
-    box.innerHTML = pans.map(function (pan) {
+    const rpb = settings.rollsPerBag || defaultRollsPerBag();
+    // Day totals make bags count out loud in the timers: reported rolls live in
+    // today's Production batch(es); pending rolls are still waiting in the pans.
+    let reportedPieces = 0;
+    const todayStr = today();
+    if (typeof state !== 'undefined' && state.production) {
+      state.production.forEach(function (p) {
+        if (p.date === todayStr) reportedPieces += (parseFloat(p.pieces) || 0);
+      });
+    }
+    let pendingPieces = 0;
+    pans.forEach(function (pan) { pendingPieces += (runPieces[pan.id] || 0); });
+    const totalPieces = reportedPieces + pendingPieces;
+    const totalBags = Math.floor(totalPieces / rpb);   // FULL SETS ONLY
+    const head =
+      '<div class="sm:col-span-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">' +
+        '<div class="text-xs font-bold text-amber-300">📦 Today: ' +
+          '<span class="text-emerald-400">' + totalPieces + ' roll' + (totalPieces === 1 ? '' : 's') + ' → ' +
+          totalBags + ' bag' + (totalBags === 1 ? '' : 's') + '</span>' +
+          '<span class="text-gray-400 font-normal"> — full sets of ' + rpb + ' rolls' +
+          (reportedPieces ? ' · ' + reportedPieces + ' already in Production' : '') +
+          (pendingPieces ? ' · ' + pendingPieces + ' pending to log' : '') +
+          '</span></div>' +
+        '<div class="text-[10px] text-gray-500 mt-0.5">Finished pans auto-report their Rolls to Production; bags are counted here from full sets only, exactly like the Production panel.</div>' +
+      '</div>';
+    const cards = pans.map(function (pan) {
       const pcs = runPieces[pan.id] || 0;
       const rolls = rollsFor(pan.id) || 1;   // what ONE round produces
-      const rpb = settings.rollsPerBag || defaultRollsPerBag();
       const bags = Math.floor(pcs / rpb);    // FULL SETS ONLY
       return '<div class="p-3 rounded-lg bg-gray-800/60 border border-gray-700">' +
         '<div class="text-xs font-bold text-gray-300">' + escapeHtml(pan.name) +
@@ -665,7 +697,12 @@
         '<label class="text-[10px] text-gray-400">Rolls<input type="number" min="0" step="1" value="' + pcs + '" data-run-pieces="' + pan.id + '" class="pan-ov-input w-16"></label>' +
         '</div>' +
         '<div class="text-[10px] text-gray-500 mt-1">' + pcs + ' rolls → ' + bags + ' bag' + (bags === 1 ? '' : 's') + ' (only full ' + rpb + '-roll packs count).</div></div>';
-    }).join('') || '<div class="text-gray-500 text-xs">No finished batches yet. Finished pans count their Rolls automatically; bags are counted from full sets of rolls when logged to Production.</div>';
+    }).join('');
+    const empty =
+      (totalPieces > 0)
+        ? '<div class="sm:col-span-3 text-gray-500 text-xs">All finished batches for today are already counted above.</div>'
+        : '<div class="sm:col-span-3 text-gray-500 text-xs">No finished batches yet. Finished pans count their Rolls automatically; bags are counted from full sets of rolls when logged to Production.</div>';
+    box.innerHTML = head + (cards || empty);
   }
   function wireRunSummary() {
     const box = g('panRunSummary');
@@ -1038,6 +1075,7 @@
       var data = {
         v: STORAGE_VERSION,
         settings: settings,
+        runs: Object.assign({}, runPieces),
         pans: pans.map(function (p) {
           return { id: p.id, duration: p.duration, remaining: p.remaining, running: p.running, endAt: p.endAt, stage: p.stage, reported: !!reportedRun[p.id] };
         })
@@ -1062,6 +1100,11 @@
       var pan = findPan(saved.id);
       if (!pan) return;
       if (saved.reported) reportedRun[saved.id] = true;
+      // Pending roll counts survive a refresh too (a finished batch that was
+      // never reported — auto-report off, or a blocked try — must not be lost).
+      if (saved.runs && typeof saved.runs[saved.id] === 'number') {
+        runPieces[saved.id] = Math.max(0, saved.runs[saved.id]);
+      }
       var eff = getTimeoutSettingsForId(pan.id);
       pan.duration = (saved.duration > 0) ? saved.duration : (eff.fold + eff.final);
       pan.stage = saved.stage || 0;
@@ -1092,6 +1135,16 @@
     bindHeaderAndTabs();
     bindSettingsPanel();
     paint();
+    // First load / refresh: report any finished-but-pending run (one a previous
+    // shortage/offline blip kept from Production, or a page closed mid-day)
+    // now that we're live again. Reported runs are a no-op inside.
+    if (settings.autoReport) {
+      pans.forEach(function (p) {
+        if (p.stage === 3 && !p.running && !reportedRun[p.id] && runPieces[p.id]) {
+          autoReportDone(p);
+        }
+      });
+    }
     if (pans.some(function (p) { return p.running; })) ensureTick();
     document.addEventListener('keydown', onKey);
     updateGlobalBanner();

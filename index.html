@@ -929,7 +929,7 @@ tailwind.config = {
           </div>
           <div>
             <h3 class="font-bold text-base">Frying Pan Timers</h3>
-            <p class="text-xs text-gray-400">Independent pans, each with its own timing — heat <b class="text-amber-400">fold</b> seconds, open lid &amp; fold margins, close back, then heat <b class="text-amber-400">final</b> seconds before <b class="text-red-400">lift lid &amp; roll!</b> Each finished pan counts its <b class="text-emerald-400">Rolls &amp; Bags</b> (you set them) and reports them to the Production panel. Set each pan's own timing, rolls &amp; bags in ⚙ Settings.</p>
+            <p class="text-xs text-gray-400">Independent pans, each with its own timing — heat <b class="text-amber-400">fold</b> seconds, open lid &amp; fold margins, close back, then heat <b class="text-amber-400">final</b> seconds before <b class="text-red-400">lift lid &amp; roll!</b> Each finished pan counts its <b class="text-emerald-400">Rolls</b> and reports them to the Production panel. Bags are counted from <b class="text-emerald-400">full sets of the day's total rolls</b> (e.g. 16 rolls at 5/bag = 3 bags). Set each pan's own timing and rolls, plus the packing rule, in ⚙ Settings.</p>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -953,7 +953,7 @@ tailwind.config = {
         <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="list-checks" class="w-5 h-5 text-emerald-400"></i> Today's Batch Log</h3>
         <button id="panSaveRunBtn" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition">Log finished batch → Production</button>
       </div>
-      <p class="text-xs text-gray-400 mb-2">Each finished pan counts its <b class="text-emerald-400">Rolls</b> (and optional <b class="text-emerald-400">Bags</b>, only when you set them) and reports the rolls to Production automatically. Bags are never invented: if you don't set them, Production records 0 bags and you enter the real packed bags when you package.</p>
+      <p class="text-xs text-gray-400 mb-2">Each finished pan counts its <b class="text-emerald-400">Rolls</b> and reports them to Production automatically (quietly merged into that day's batch). <b class="text-emerald-400">Bags are counted from FULL SETS of total rolls</b> — the "Rolls per bag" rule in ⚙ Settings (default 5). 16 rolls at 5/bag = 3 bags; a 17th roll still leaves 3 bags until the 20th fills the 4th. The day's total rolls → bags is shown at the top of this log.</p>
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="panRunSummary"></div>
     </div>
   </section>
@@ -985,14 +985,15 @@ tailwind.config = {
             <span class="font-normal normal-case text-[10px] text-gray-500">Add/remove pans to match your production line. Each pan keeps its own shortcut key (1–9).</span>
           </label>
           <!-- Per-pan timings & rolls: each pan can run its OWN duration and
-               count its OWN rolls + bags per batch. Rows are rendered by pan-timers.js. -->
+                count its OWN rolls per batch (bags are counted later from full
+                sets of the day's total rolls). Rows are rendered by pan-timers.js. -->
           <div class="mt-4 pt-3 border-t border-gray-800">
             <div class="flex items-center justify-between gap-2 mb-2">
-              <div class="text-xs font-bold text-gray-300">Per-pan timings, rolls &amp; bags</div>
+              <div class="text-xs font-bold text-gray-300">Per-pan timings &amp; rolls</div>
               <button id="panUseGlobalBtn" type="button" class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-[10px] font-bold transition whitespace-nowrap">Use global for all</button>
             </div>
             <div id="panPerPanRows" class="space-y-2"></div>
-            <p class="text-[10px] text-gray-500 mt-1.5">Each pan can run its own heat timing and count its own Rolls and Bags when a batch finishes. Uncheck "Use global" to customise that pan.</p>
+            <p class="text-[10px] text-gray-500 mt-1.5">Each pan can run its own heat timing and count its own Rolls when a batch finishes. Bags are NOT set per pan — they're counted from full sets of the day's total rolls (see the packing rule below). Uncheck "Use global" to customise that pan.</p>
           </div>
           <!-- Rolls & bags & reporting -->
           <div class="mt-4 pt-3 border-t border-gray-800">
