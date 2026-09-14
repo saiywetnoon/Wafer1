@@ -4,7 +4,7 @@
 function renderAll() {
   migrateLegacyEntries();
   rebuildStockAndCogs();
-  const formDate = $('logDate').value || today();
+  const formDate = $('logDate').value || (state.settings && state.settings.activeProductionDate) || today();
   populateProductionForm(formDate);
   $('logDate').value = formDate;
   $('saleDate').value = today();

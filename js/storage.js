@@ -265,6 +265,9 @@ function loadDraftIfNewer() {
 /* Put a draft's values back into the production form. */
 function restoreDraftToForm(d) {
   draftUsage = Object.assign({}, d.usage);
+  // The draft's date is the batch the user was producing — make it the active
+  // batch (synced) so pan reports keep counting into it across reloads/devices.
+  if (state.settings) state.settings.activeProductionDate = d.date || today();
   const fields = {
     logDate: d.date || today(),
     additionalCost: d.additionalCost || 0,

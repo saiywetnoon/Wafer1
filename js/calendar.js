@@ -64,6 +64,9 @@ function dayInfo(date) { return eventOf(date) || null; }
 function loadEntryIntoForm(date) {
   const batch = (state.production || []).filter(function (x) { return x.date === date; })[0];
   $('logDate').value = date;
+  // Loading a day means that day's batch is now the active batch — remember it
+  // (synced) so pan reports keep counting into it across reloads/devices.
+  if (state.settings) state.settings.activeProductionDate = date;
   draftUsage = {};
   if (batch) {
     document.getElementById('editProdId').value = batch.id;

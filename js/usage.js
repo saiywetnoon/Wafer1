@@ -130,6 +130,9 @@ function populateProductionForm(date) {
 }
 $('logDate').addEventListener('change', function () {
   const curD = $('logDate').value || today();
+  // The user is now producing THIS batch — remember it (synced) so a reload or
+  // another device keeps pan reports on this same date, never a fresh today().
+  if (state.settings) state.settings.activeProductionDate = curD;
   populateProductionForm(curD);
   // Picking a day that already has a batch makes the Save button UPDATE it;
   // a fresh day resets it back to a new batch.

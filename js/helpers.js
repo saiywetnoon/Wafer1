@@ -12,13 +12,21 @@ const today = () => {
    shown on the Production form. Production is per batch/date: when a nightly
    batch runs past 0:00, the finished pans must keep counting into THIS same
    batch instead of opening a brand-new production row for the new calendar day
-   (which used to abandon the batch that was still being produced). Falls back
-   to today() when no date is picked yet (fresh tab / first run of the day). */
+   (which used to abandon the batch that was still being produced).
+   The chosen date is persisted in state.settings.activeProductionDate, so a
+   page reload or a second device keeps counting into the SAME batch instead of
+   silently jumping to today() and creating a second row. Falls back to today()
+   only when no batch has been started yet (brand-new account / first run). */
 const activeProductionDate = () => {
   try {
     const el = document.getElementById('logDate');
     if (el && el.value) return el.value;
   } catch (e) { /* best-effort — never block the pan report */ }
+  try {
+    if (typeof state !== 'undefined' && state && state.settings && state.settings.activeProductionDate) {
+      return state.settings.activeProductionDate;
+    }
+  } catch (e) { /* best-effort */ }
   return today();
 };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);

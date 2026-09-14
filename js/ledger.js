@@ -120,6 +120,9 @@ function saveProduction() {
     state.production.push(record);
     reconcileProductionInventory({}, usage, date, record.id);
   }
+  // The date just saved is the batch the user is producing — remember it (synced)
+  // so pan reports keep counting into it across reloads and other devices.
+  if (state.settings) state.settings.activeProductionDate = date;
 
   rebuildStockAndCogs();
   saveState();
@@ -182,6 +185,9 @@ function deriveBagsFromPieces(pieces) {
    reporting in the Fry Timers screen never yanks the user out of the timers. */
 function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
   if (!date || !(pieces > 0)) { if (!quiet) showToast('No finished batch to save.', 'error'); return false; }
+  // The batch these rolls belong to becomes the active production date (synced),
+  // so a reload or a second device keeps adding rolls to it instead of today().
+  if (state.settings) state.settings.activeProductionDate = date;
   const runUsage = usage || currentUsage();
   // "Explicit bags" = the caller passed a real positive bag count. Otherwise
   // bags are DERIVED from the day's total rolls using the packing rule

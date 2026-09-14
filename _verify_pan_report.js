@@ -4,6 +4,9 @@
      B. partial stock no longer blocks the pan report (record + negative balance + warn)
      C. pending roll counts persist across a refresh and log via the batch button
      D. a failed report attempt is auto-retried on a later tick
+     E. pans finishing past 0:00 keep counting into the batch being produced (NO new-day row)
+     F. a pending run keeps its own batch date across a refresh + later manual log
+     G. a reload keeps the persisted active production date (no new-day row)
    Run: node _verify_pan_report.js */
 'use strict';
 const fs = require('fs');
@@ -263,6 +266,21 @@ const src = read('config.js') + '\n' + read('storage.js') + '\n' + read('helpers
   ok(state.production.length === 1, 'F3: manual "Log finished batch" writes ONE row');
   ok(state.production[0].date === '2026-09-12', 'F4: the log lands on its own batch (2026-09-12), not the new day (got ' + state.production[0].date + ')');
   ok(state.production[0].pieces === 1, 'F5: 1 roll logged');
+
+  /* ============ G) reload after midnight keeps the batch being produced ============ */
+  console.log('== G) after a reload the app remembers the batch being produced (persisted anchor) ==');
+  reset();
+  D.getElementById('logDate').value = '2026-09-13';
+  setPanSettings(5, 1, true);
+  resetPan(); finishRun();
+  ok(state.settings.activeProductionDate === '2026-09-13', 'G1: the batch date is persisted into the synced settings');
+  ok(state.production.length === 1 && state.production[0].date === '2026-09-13', 'G2: first pan landed on 2026-09-13');
+  // Simulate a page reload: the form date is gone and the clock shows a NEW day,
+  // but the app must keep counting into the batch being produced.
+  D.getElementById('logDate').value = '';
+  resetPan(); finishRun();
+  ok(state.production.length === 1, 'G3: post-reload pan still merges into the SAME batch — no new-day row');
+  ok(state.production[0].date === '2026-09-13' && state.production[0].pieces === 2, 'G4: both rolls on 2026-09-13 (got ' + state.production[0].pieces + '/' + state.production[0].date + ')');
 
   console.log(out.failures === 0 ? 'REPRO CHECK: ALL SCENARIOS EXPLORED' : ('REPRO CHECK: ' + out.failures + ' FAILURE(S)'));
 })();
