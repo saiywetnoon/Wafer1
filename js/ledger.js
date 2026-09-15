@@ -175,6 +175,36 @@ function deriveBagsFromPieces(pieces) {
   return Math.max(0, Math.floor((parseFloat(pieces) || 0) / rpb));
 }
 
+/* One-time bag repair (v1.9). Batches recorded before the `bagsAuto` flag
+   existed (legacy saved ledgers and sample rows) have NO flag, so the
+   Production panel / Fry Timers derived bags live from pieces while the
+   reports summed the STORED field — the same batch could show two different
+   bag counts ("45 (auto)" in the panel, "38" in the CSV/report).
+   Normalization, idempotently:
+     • no flag yet → AUTO when stored bags already match the packing rule,
+       otherwise MANUAL (a physically-counted pack, e.g. 38 bags of 228 rolls
+       packed at 6/bag — the recorded value is honoured).
+     • AUTO rows    → stored bags refreshed to the derived count, so every
+       report and the panel agree everywhere.
+   Returns whether anything changed (so callers can save after migration). */
+function normalizeProductionBags() {
+  const arr = state.production || [];
+  let changed = false;
+  arr.forEach(function (p) {
+    if (!p) return;
+    const derived = deriveBagsFromPieces(p.pieces);
+    if (p.bagsAuto === undefined || p.bagsAuto === null) {
+      p.bagsAuto = (parseFloat(p.bags) || 0) === derived;
+      changed = true;
+    }
+    if (p.bagsAuto !== false) {
+      const cur = parseFloat(p.bags) || 0;
+      if (cur !== derived) { p.bags = derived; changed = true; }
+    }
+  });
+  return changed;
+}
+
 /* One-click save of a pan batch's production (used by the run tracker, the pan's
    automatic roll counting and per-pan timings). Writes the same Production entry
    as the main form, then navigates to the Production tab so the totals are

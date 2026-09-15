@@ -25,7 +25,7 @@ $('exportCsvBtn').addEventListener('click', function () {
   lines.push('Date,Pieces,Bags,Weight/Roll (g),Mix Weight (g),Expected Rolls,vs Actual,Ingredient Cost (Ks),Additional (Ks),Capital (Ks),Labor Min,Labor Cost (Ks),Cost/Piece (Ks),Notes');
   prodList().forEach(function (p) {
     const ing = (p.capital || 0) - (p.additionalCost || 0);
-    lines.push(csvRow([p.date, p.pieces, p.bags, p.weightPerRoll || 0, p.mixWeight || 0, p.expectedRolls || '', (p.expectedRolls ? (p.pieces - p.expectedRolls) : ''), Math.round(ing), p.additionalCost || 0, p.capital || 0, p.laborMinutes || 0, p.laborCost || 0, p.costPerPiece || 0, p.notes || '']));
+    lines.push(csvRow([p.date, p.pieces, productionBags(p), p.weightPerRoll || 0, p.mixWeight || 0, p.expectedRolls || '', (p.expectedRolls ? (p.pieces - p.expectedRolls) : ''), Math.round(ing), p.additionalCost || 0, p.capital || 0, p.laborMinutes || 0, p.laborCost || 0, p.costPerPiece || 0, p.notes || '']));
   });
   lines.push('');
   lines.push('=== SALES (SOLD) ===');

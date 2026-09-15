@@ -49,6 +49,9 @@ $('demoBtn').addEventListener('click', function () {
     const notes = (s.roll % 3 === 0) ? 'Good & crispy' : (s.roll % 3 === 1 ? 'A bit salty' : 'Slightly under crisp');
     state.production.push({
       id: uid(), date: rdate, pieces: s.pcs, bags: s.bagsP,
+      // These are physically-packed counts (the sample was packed at ~6/bag) —
+      // a MANUAL override so the panel and reports both show the stored bags.
+      bagsAuto: false,
       weightPerRoll: wpr, mixWeight: Math.round(mixW), expectedRolls: exp, notes: notes,
       usage: usage, additionalCost: 0, capital: Math.round(capital),
       laborMinutes: s.labor, laborCost: Math.round(laborCost),

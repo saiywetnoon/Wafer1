@@ -271,9 +271,12 @@ The recommended live setup is **Netlify + Supabase**:
 
 - Netlify hosts this static app (`index.html`, `css/`, and `js/`).
 - Supabase Auth provides email/password accounts and sessions.
-- Supabase Postgres stores ONE shared ledger JSON row (`shared_ledgers`) that
-  every approved account reads and writes, so a phone, a PC and a staff tablet
-  see the same business data.
+- Supabase Postgres stores one **private ledger JSON row per account**
+  (`ledgers.user_id = auth.uid()`, enforced by RLS). Signing in with the SAME
+  account on a phone, a PC and a tablet syncs that one row, so a business's
+  own devices see the same data — while a DIFFERENT account can never read or
+  overwrite it. (The old single `shared_ledgers` row is adopted ONCE by the
+  first account to open after the upgrade and then retired.)
 - Supabase Realtime updates every signed-in device after a save.
 
 The Google Apps Script modules remain in the repository as a legacy fallback

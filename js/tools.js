@@ -404,7 +404,7 @@ function ingredientCostRows() {
       if (qty <= 0) return;
       rows.push({
         date: p.date, whenIso: when, productionId: p.id,
-        bags: p.bags || 0, pieces: p.pieces || 0,
+        bags: productionBags(p), pieces: p.pieces || 0,
         name: ing.name, unit: ing.unit, qty: qty,
         cost: ingredientCostSingle(ing, qty)
       });

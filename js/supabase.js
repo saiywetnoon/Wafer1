@@ -7,10 +7,14 @@
 
    Tables (see _supabase-setup.sql):
      profiles(id uuid pk, email text, role text, status text, created_at)
-     shared_ledgers (workspace_id text pk, payload jsonb, updated_at timestamptz)
-   All approved accounts share the same business workspace. This is deliberate:
-   a phone, tablet and cashier PC may use different approved logins but must
-   always see one ledger.
+     ledgers(user_id uuid pk, payload jsonb, updated_at timestamptz)   <- ACTIVE store
+     shared_ledgers(workspace_id text pk, ...)                         <- LEGACY only
+
+   >>> v1.9 PRIVACY: each account owns its OWN private ledger row
+   (`ledgers.user_id = auth.uid()`, enforced by RLS in the database).
+   `shared_ledgers` is no longer read/written for live data — it is kept
+   ONLY as a one-time migration source for the old shared data.
+   This is what stops "a new account sees someone else's data".
    ============================================================ */
 
 const SUPA = {
@@ -19,7 +23,7 @@ const SUPA = {
   profile: { role: 'user', status: 'pending' },
   _hl: null,       // realtime listener handle
   _onAuth: null,   // auth-state-change callback
-  workspaceId: 'main',
+  workspaceId: 'main', // legacy shared row id (migration source only)
 
   /* True only when the dev has pasted URL + anon key in config.js. */
   configured() {
@@ -106,7 +110,7 @@ const SUPA = {
   /* On first sign-up the auth trigger creates a pending profile; here we
      read it. (Admin approvals are listed below.) */
 
-  /* ---- ledger read/write ---- */
+  /* ---- ledger read/write: PRIVATE per account (v1.9 privacy fix) ---- */
   async saveLedger(userId, payload) {
     const sb = this.init(); if (!sb) return { error: 'unconfigured' };
     // Never write with a stale/expired session: refresh the cached session and
@@ -116,8 +120,12 @@ const SUPA = {
     try { u = await this.sessionUser() || u; } catch (e) {}
     if (!u || !u.id) return { error: 'session expired — sign in again to sync' };
     const now = new Date().toISOString();
+    // v1.9: each user writes ONLY their own `ledgers` row (RLS also enforces
+    // auth.uid() = user_id). The old shared_ledgers row is never written now —
+    // that per-account separation is what stops account A from clobbering a
+    // different account B's business data.
     const { error } = await sb
-      .from('shared_ledgers').upsert({ workspace_id: this.workspaceId, payload: payload, updated_at: now }, { onConflict: 'workspace_id' });
+      .from('ledgers').upsert({ user_id: userId, payload: payload, updated_at: now }, { onConflict: 'user_id' });
     if (error) {
       const msg = String((error && (error.message || error.code)) || 'write failed');
       // If the backend says our token is bad, confirm it server-side and drop
@@ -134,31 +142,23 @@ const SUPA = {
   },
   async getLedger(userId) {
     const sb = this.init(); if (!sb) return { error: 'unconfigured' };
-    const readShared = async function () {
+    // Read ONLY this account's own row. A row with `.error` means the READ
+    // FAILED — never mistake that for "cloud is empty" (an old bug let a
+    // device push its local copy OVER a populated cloud it couldn't read).
+    const readOwn = async function () {
       return await sb
-        .from('shared_ledgers').select('payload,updated_at').eq('workspace_id', this.workspaceId).maybeSingle();
-    }.bind(this);
-    const first = await readShared();
+        .from('ledgers').select('payload,updated_at').eq('user_id', userId).maybeSingle();
+    };
+    const first = await readOwn();
     if (first && first.error) {
-      // Distinguish a REAL read failure (RLS / network / session) from a clean
-      // "no row yet". A failed read must never look like an empty cloud —
-      // that used to let a device push its local copy OVER a populated cloud
-      // it simply could not read at that moment.
       const msg = String((first.error && (first.error.message || first.error.code)) || 'read failed');
       if (/no rows|PGRST116|406|not found/i.test(msg)) return null;
-      // Expired/invalid session: `saveLedger` already heals a dead token for
-      // WRITES — the read must do the same or a device whose access token
-      // silently expired would show the SAME cloud snapshot forever, no matter
-      // how often the user refreshes (every pull fails identically and the
-      // reconcile gives up after one retry). Ask the server to confirm via
-      // getUser() — if the refresh token is alive it returns a fresh access
-      // token and ONE retry is enough; if it is dead, stop pretending and say
-      // so instead of hiding the failure.
+      // Expired/invalid session: heal the token via getUser() and retry ONCE.
       if (/jwt|401|403|unauthor|expired|token/i.test(msg)) {
         try {
           const g = await sb.auth.getUser();
           if (g && !g.error && g.data && g.data.user) {
-            const retried = await readShared();
+            const retried = await readOwn();
             if (retried && !retried.error) {
               const row = retried.data;
               if (row) return { payload: row.payload, updatedAt: row.updated_at };
@@ -166,12 +166,8 @@ const SUPA = {
             }
             return { error: msg };
           }
-          // Refresh token is dead too. We deliberately keep `this.user` — the
-          // cached session still exists, and dropping it would flip cloudReady()
-          // to false and silently kill the 8s reconcile / 60s poll retry loops,
-          // re-freezing every refresh. Keeping it means cloudAfterSignIn keeps
-          // retrying and surfaces the honest "could not reach the cloud yet" /
-          // "sign in again" state until the user signs in again.
+          // Refresh token dead: keep `this.user` so cloudAfterSignIn keeps
+          // retrying and surfaces "sign in again" honestly.
           return { error: 'session expired — sign in again to sync' };
         } catch (e) {
           return { error: 'session expired — sign in again to sync' };
@@ -180,24 +176,56 @@ const SUPA = {
       return { error: msg };
     }
     if (first && first.data) return { payload: first.data.payload, updatedAt: first.data.updated_at };
-    // One-time seamless migration from the old per-user ledger. The first
-    // existing account to open this version seeds the shared workspace; later
-    // accounts read that shared row. Private legacy rows are left untouched.
-    const legacy = await sb.from('ledgers').select('payload,updated_at').eq('user_id', userId).maybeSingle();
-    if (legacy && !legacy.error && legacy.data) {
-      return { payload: legacy.data.payload, updatedAt: legacy.data.updated_at, legacy: true };
+
+    // v1.9 ONE-TIME ADOPTION — the account has no row yet. If the OLD shared
+    // workspace row still exists, the DB function `ledger_adopt_shared` copies
+    // it into THIS account's private row AND deletes the shared row (atomic,
+    // security-definer). So the FIRST account to open after the upgrade gets
+    // the legacy data; every account after that starts EMPTY — this is what
+    // stops a newly registered account from loading someone else's data.
+    try {
+      const rpc = await sb.rpc('ledger_adopt_shared', { p_workspace_id: this.workspaceId });
+      if (rpc && rpc.data && rpc.data.payload) {
+        return { payload: rpc.data.payload, updatedAt: rpc.data.updated_at || null, legacy: true };
+      }
+      if (rpc && rpc.error && !/PGRST202|function.*not.*found/i.test(String(rpc.error.message || rpc.error.code || ''))) {
+        return { error: String(rpc.error.message || rpc.error.code || 'adopt failed') };
+      }
+    } catch (e) { /* RPC unavailable — fall through to the safe copy below */ }
+
+    // Fallback for databases where the v1.9 adoption RPC has not been created
+    // yet: copy the shared payload into this account's row (no delete). Once
+    // the owner runs the upgrade SQL and opens the app again, the RPC path
+    // takes over and removes the shared row.
+    const shared = await sb.from('shared_ledgers')
+      .select('payload,updated_at').eq('workspace_id', this.workspaceId).maybeSingle();
+    if (shared && !shared.error && shared.data && shared.data.payload) {
+      const adopt = await sb.from('ledgers').upsert(
+        { user_id: userId, payload: shared.data.payload, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      );
+      if (!adopt || !adopt.error) {
+        return { payload: shared.data.payload, updatedAt: shared.data.updated_at, legacy: true };
+      }
+      return { error: String((adopt.error && (adopt.error.message || adopt.error.code)) || 'adopt failed') };
     }
-    if (legacy && legacy.error) return { error: String(legacy.error.message || legacy.error.code || 'legacy read failed') };
-    return null;
+    if (shared && shared.error) {
+      const msg = String((shared.error && (shared.error.message || shared.error.code)) || 'read failed');
+      if (/no rows|PGRST116|406|not found/i.test(msg)) return null;
+      return { error: msg };
+    }
+    return null; // confirmed empty — this account has no ledger yet
   },
 
-  /* ---- realtime: other devices' edits arrive by themselves ---- */
+  /* ---- realtime: OTHER DEVICES of THE SAME ACCOUNT appear by themselves ----
+     v1.9: watch only THIS user's private row (`ledgers`), so an edit by a
+     different account NEVER arrives here. */
   subscribeRealtime(userId, cb) {
     const sb = this.init(); if (!sb) return null;
     if (this._hl) { try { sb.removeChannel(this._hl); } catch (e) {} }
-    const chan = sb.channel('shared-led-' + this.workspaceId)
+    const chan = sb.channel('my-led-' + userId)
       .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'shared_ledgers', filter: 'workspace_id=eq.' + this.workspaceId },
+          { event: '*', schema: 'public', table: 'ledgers', filter: 'user_id=eq.' + userId },
           function (payload) { if (cb) { try { cb(payload.new); } catch (e) {} } })
       .subscribe();
     this._hl = chan;

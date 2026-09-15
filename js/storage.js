@@ -112,6 +112,9 @@ function loadState() {
         state.stock = { pieces: parseFloat(parsed.stock.pieces) || 0, cost: parseFloat(parsed.stock.cost) || 0 };
       }
       state.version = 2;
+      // v1.9 bag repair — legacy batches without a `bagsAuto` flag showed
+      // different bag counts in the panel (derived) vs the reports (stored).
+      if (typeof normalizeProductionBags === 'function' && normalizeProductionBags()) saveState();
       if (typeof migrateInventoryMovements === 'function' && migrateInventoryMovements()) saveState();
       if (typeof normalizeCustomerBalances === 'function') {
         normalizeCustomerBalances();

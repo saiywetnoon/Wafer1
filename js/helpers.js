@@ -81,6 +81,25 @@ function salesList() {
   });
 }
 
+/* Bags count for ONE production batch — the single rule every screen shares:
+   a MANUAL override (`bagsAuto === false`, the value was physically counted
+   when packing) is always shown as stored; everything else derives FULL SETS
+   only (floor(pieces ÷ rollsPerBag)), exactly like the Production panel and
+   the Fry Timers. The reports (dashboard, calendar, audit, CSV, printable,
+   monthly) previously summed the STORED bag field while the panel DERIVED it
+   live — so legacy batches and sample rows (e.g. 228 pieces with 38 stored
+   bags) showed "38" in reports but "45 (auto)" in the panel. After the v1.9
+   normalization every stored auto-row matches the derived count anyway; this
+   helper makes a mismatch impossible even for rows that were never normalized. */
+function productionBags(p) {
+  if (!p) return 0;
+  if (p.bagsAuto === false) return parseFloat(p.bags) || 0;
+  if (typeof deriveBagsFromPieces === 'function') {
+    try { return deriveBagsFromPieces(p.pieces); } catch (e) { /* fall through */ }
+  }
+  return parseFloat(p.bags) || 0;
+}
+
 /* Aggregate money + quantities across ALL production and sales.
    Profit = total revenue − the COGS of the goods ACTUALLY SOLD (average-cost
    COGS stamped per sale by rebuildStockAndCogs). Unsold rolls keep their cost
@@ -93,7 +112,7 @@ function financeTotalsAll() {
   var totalCogs = sales.reduce(function (s, sl) { return s + (sl.cogs || 0); }, 0);
   return {
     capital: totalCapital,
-    productionBags: prod.reduce(function (s, p) { return s + (p.bags || 0); }, 0),
+    productionBags: prod.reduce(function (s, p) { return s + productionBags(p); }, 0),
     productionPieces: prod.reduce(function (s, p) { return s + (p.pieces || 0); }, 0),
     laborMin: prod.reduce(function (s, p) { return s + (p.laborMinutes || 0); }, 0),
     laborCost: prod.reduce(function (s, p) { return s + (p.laborCost || 0); }, 0),
@@ -252,7 +271,7 @@ function entriesProdSales() {
   (state.production || []).forEach(function (p) {
     if (!map[p.date]) map[p.date] = { date: p.date, prodBags: 0, prodPieces: 0, capital: 0, laborMin: 0, laborCost: 0, soldBags: 0, soldPieces: 0, revenue: 0, cogs: 0, net: 0 };
     var d = map[p.date];
-    d.prodBags += (p.bags || 0); d.prodPieces += (p.pieces || 0); d.capital += (p.capital || 0);
+    d.prodBags += productionBags(p); d.prodPieces += (p.pieces || 0); d.capital += (p.capital || 0);
     d.laborMin += (p.laborMinutes || 0); d.laborCost += (p.laborCost || 0);
   });
   (state.sales || []).forEach(function (s) {

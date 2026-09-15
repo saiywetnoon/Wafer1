@@ -2,11 +2,17 @@
    CLOUD — online / access-from-anywhere layer
    ============================================================
    A single provider-agnostic interface the app uses to go online.
-   Backed by Supabase: a shared workspace row, Supabase Auth and Realtime.
+   Backed by Supabase: an account-owned private ledger row, Supabase
+   Auth and Realtime.
 
-   Model:
-   - Every approved Supabase account accesses the same workspace.
-   - Changes auto-push and auto-pull across every approved device.
+   Model (v1.9 — per-account privacy):
+   - Every approved account owns EXACTLY one private row:
+     `ledgers.user_id = auth.uid()` (enforced by RLS in the database).
+   - Changes auto-push and auto-pull across the SAME account's devices.
+   - A different account can never read or edit it. The old shared
+     `shared_ledgers` row is adopted ONCE by the first account to open
+     after the upgrade (see SUPA.getLedger / ledger_adopt_shared), then
+     it is never used again.
    ============================================================ */
 
 function cloudAccountToken() { return authToken(); }
@@ -585,6 +591,15 @@ function mergeRemoteIntoLocal(r) {
     if (JSON.stringify(merged) !== JSON.stringify(state[f] || [])) { state[f] = merged; changed = true; }
   });
 
+  // v1.9 bag repair — remote rows from legacy devices may lack the `bagsAuto`
+  // flag (or carry a stale stored bag count). Normalize AFTER the union so the
+  // Production panel's derived bags and every report's summed bags always
+  // agree, on every device, no matter which device generated the row.
+  if (typeof normalizeProductionBags === 'function') {
+    var beforeBags = JSON.stringify(state.production || []);
+    if (normalizeProductionBags() && JSON.stringify(state.production || []) !== beforeBags) changed = true;
+  }
+
   // Customer debt is DERIVED — normalizeCustomerBalances() is the single source
   // of truth (sales credit minus payments received, plus a manual baseline).
   // The merge above can receive a NEW payment row while the remote customer
@@ -1060,10 +1075,10 @@ async function cloudAfterSignIn() {
     if (remoteIsLegacy) {
       const migrated = await cloudPush();
       if (!migrated || !migrated.ok) {
-        updateGoogleSyncStatus('Could not create the shared workspace yet; retrying automatically.', 'info');
+        updateGoogleSyncStatus('Could not adopt the legacy workspace yet; retrying automatically.', 'info');
         return false;
       }
-      updateGoogleSyncStatus('Created the shared workspace. All approved accounts now see this ledger.', 'success');
+      updateGoogleSyncStatus('Legacy data adopted into your private account ledger. Only you can see it.', 'success');
       renderCloudStatus();
       return true;
     }

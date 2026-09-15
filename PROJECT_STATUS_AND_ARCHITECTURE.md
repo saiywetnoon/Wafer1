@@ -77,8 +77,8 @@ Give a working, low-literacy, multi-device shop owner one ledger that:
 | Table | Purpose | RLS |
 |---|---|---|
 | `profiles(id, email, role, status, created_at)` | Account approval gate (`pending/approved/rejected`) | self-read; admin-only updates; identity/role immutable |
-| `ledgers(user_id, payload, updated_at)` | Legacy per-user rows (migration source only) | owner + approved |
-| `shared_ledgers(workspace_id PK, payload, updated_at)` | The one shared workspace row (`'main'`); edited by every approved account | any *approved* account (select/insert/update) |
+| `ledgers(user_id, payload, updated_at)` | ACTIVE per-account store (v1.9) — one whole-ledger JSON row per account | owner + approved (`auth.uid() = user_id`) |
+| `shared_ledgers(workspace_id PK, payload, updated_at)` | LEGACY migration source only — the app reads/writes it once (v1.9 adopts the old shared payload into the first opener's private row, then deletes it) | any *approved* account (kept only so old cached builds during the transition keep working) |
 
 Key server-side functions: `handle_new_user()`, `touch_ledger()`, `is_approved()`, `is_admin()`, `protect_profile_fields()`.
 ---
@@ -134,8 +134,8 @@ Key server-side functions: `handle_new_user()`, `touch_ledger()`, `is_approved()
 1. User input → `live-sync.js` → `persistState()` (300 ms debounce) → `saveState()`:
    - writes `JSON.stringify(state)` to `localStorage[companyStateKey()]`
    - calls `triggerGoogleSync()` (900 ms debounce) → `cloudPush()`
-2. `cloudPush()` → serialized `cloudPushOnce()` → `supabasePush()` → `SUPA.saveLedger(uid, toGooglePayload())` → **upsert** of the whole row into `shared_ledgers(workspace_id = 'main')`.
-3. Realtime broadcasts the new row to every signed-in device → `supabaseUpdate()` (own-tab echo skipped via `getSessionId()`) → `handleRemoteCopy()` → merge → `renderAll()`.
+2. `cloudPush()` → serialized `cloudPushOnce()` → `supabasePush()` → `SUPA.saveLedger(uid, toGooglePayload())` → **upsert** of the whole row into `ledgers(user_id = auth.uid())` — THIS account's private row only.
+3. Realtime broadcasts the new row to the SAME account's devices → `supabaseUpdate()` (own-tab echo skipped via `getSessionId()`) → `handleRemoteCopy()` → merge → `renderAll()`. A different account never receives the event (its Realtime filter points at its own `user_id` row).
 
 ### 4.3 Merge rules (conflict resolution)
 
@@ -169,7 +169,7 @@ Key server-side functions: `handle_new_user()`, `touch_ledger()`, `is_approved()
 - **Password reset** (`authRequestPasswordReset`): requires Supabase SMTP/sender and Site-URL configuration to actually deliver emails; otherwise the confirmation message is misleading.
 - **Account provisioning**: accounts created before `handle_new_user` was installed have no profile row and are locked out until the backfill SQL (documented in `_supabase-setup.sql`) is run.
 - **Admin console**: functional, but only lists accounts that already have a profiles row.
-- **Shared-workspace semantics**: every approved account edits the same JSON row — by design — but there is no per-role write protection or audit trail, and older UI copy claiming accounts are isolated was corrected in earlier work.
+- **Per-account privacy**: since v1.9 each account stores its ledger in its own `ledgers.user_id` row (RLS-enforced). The old "one shared `shared_ledgers` row belongs to every approved account" model is gone; the first account to open after the upgrade adopts the legacy row once.
 
 ### Known gaps / technical debt
 

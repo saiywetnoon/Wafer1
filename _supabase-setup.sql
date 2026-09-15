@@ -138,9 +138,13 @@ create policy ledgers_update on public.ledgers
   for update using (auth.uid() = user_id and public.is_approved())
 with check (auth.uid() = user_id and public.is_approved());
 
--- 6) One shared business ledger. Every approved account can read and edit the
--- same row, so staff can use separate logins on their own phones/PCs while
--- seeing the same production, sales, stock, customers and cash data.
+-- 6) LEGACY shared business ledger — migration source ONLY (v1.9 privacy).
+-- Before v1.9 every approved account read/wrote THIS ONE row, which is why a
+-- newly registered account appeared to load everyone else's data. Since v1.9
+-- the app stores each account's ledger in ITS OWN `ledgers` row (section 5)
+-- and NEVER reads/writes `shared_ledgers` for live data. This table is kept
+-- purely so that on first open after the upgrade the FIRST account adopts the
+-- old shared payload into its private row (once), then it is never touched.
 create table if not exists public.shared_ledgers (
   workspace_id text primary key,
   payload jsonb not null default '{}'::jsonb,
@@ -218,4 +222,90 @@ create trigger shared_ledger_touch before insert or update on public.shared_ledg
 --   on conflict (id) do nothing;
 --
 -- Then open the Admin console on an admin device and approve the pending ones.
+-- ============================================================
+
+-- ============================================================
+-- v1.9 UPGRADE — ACCOUNT PRIVACY (RUN ONCE, idempotent)
+-- ------------------------------------------------------------
+-- WHAT CHANGED: the app now reads/writes ITS OWN `ledgers.user_id` row.
+-- `shared_ledgers` is migration-source only. New accounts therefore start
+-- EMPTY and can never see another account's data.
+--
+-- 1) `ledgers` RLS already scopes every read/write to auth.uid() = user_id
+--    (section 5) — no policy change needed. Verify they exist:
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='ledgers' and policyname='ledgers_select') then
+    create policy ledgers_select on public.ledgers
+      for select using (auth.uid() = user_id and public.is_approved());
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='ledgers' and policyname='ledgers_insert') then
+    create policy ledgers_insert on public.ledgers
+      for insert with check (auth.uid() = user_id and public.is_approved());
+  end if;
+  if not exists (select 1 from pg_policies where schemaname='public' and tablename='ledgers' and policyname='ledgers_update') then
+    create policy ledgers_update on public.ledgers
+      for update using (auth.uid() = user_id and public.is_approved())
+      with check (auth.uid() = user_id and public.is_approved());
+  end if;
+end;
+$$;
+
+-- 1b) One-time legacy adoption, run by the FIRST account that opens an empty
+--     private row. It copies the old shared_ledgers payload into that account's
+--     own `ledgers` row AND deletes the shared row (atomic). Every account that
+--     signs in afterwards finds no shared row and starts EMPTY.
+create or replace function public.ledger_adopt_shared(p_workspace_id text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_payload jsonb;
+  v_upd timestamptz;
+begin
+  -- Already has a private row? Report it (shouldn't happen — the app only
+  -- calls this when its own row read was empty).
+  select payload, updated_at into v_payload, v_upd
+    from public.ledgers where user_id = auth.uid();
+  if v_payload is not null then
+    return jsonb_build_object('payload', v_payload, 'updated_at', coalesce(v_upd, now()));
+  end if;
+  -- Nothing to migrate -> confirmed empty.
+  select payload, updated_at into v_payload, v_upd
+    from public.shared_ledgers where workspace_id = p_workspace_id;
+  if v_payload is null then
+    return jsonb_build_object('payload', null, 'updated_at', null);
+  end if;
+  -- First adopter takes it; delete the shared row so later accounts start empty.
+  insert into public.ledgers (user_id, payload, updated_at)
+  values (auth.uid(), v_payload, coalesce(v_upd, now()))
+  on conflict (user_id) do nothing;
+  delete from public.shared_ledgers where workspace_id = p_workspace_id;
+  return jsonb_build_object('payload', v_payload, 'updated_at', coalesce(v_upd, now()));
+end;
+$$;
+
+-- 2) Realtime must deliver an account's OWN row only (already attempted in
+--    section 7, re-asserted here for databases that ran an OLDER setup).
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'ledgers'
+  ) then
+    alter publication supabase_realtime add table public.ledgers;
+  end if;
+end;
+$$;
+
+-- 3) AFTER YOUR FIRST LOGIN has adopted the old shared data into your own row
+--    (the app does it automatically), you may clear the legacy shared row so
+--    nobody on an old cached build can keep reading it. Run this in the SQL
+--    editor once, as the owner (it needs elevated rights, so use the SQL editor
+--    — not the app):
+--
+--      delete from public.shared_ledgers where workspace_id = 'main';
+--
 -- ============================================================

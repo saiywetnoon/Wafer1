@@ -48,7 +48,7 @@ function moneyOutForDay(dateStr) {
       rows.push({
         id: 'prod-' + p.id,
         type: 'production', date: p.date, amount: (p.capital || 0),
-        label: 'Batch materials (' + (p.bags || 0) + ' bags · ' + (p.pieces || 0) + ' pcs)',
+        label: 'Batch materials (' + productionBags(p) + ' bags · ' + (p.pieces || 0) + ' pcs)',
         detail: p.notes || 'Rolled batch ingredients & extra cost',
         deletable: false, ref: p
       });
