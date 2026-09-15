@@ -4,8 +4,8 @@
 
 function totalPayable() {
   return (state.purchases || []).reduce(function (s, p) {
-    var paid = (p.paid || 0) + (p.paidNow || 0);
-    return s + Math.max(0, (p.itemTotal || 0) - paid);
+    var paid = toMoney(p.paid) + toMoney(p.paidNow);
+    return s + Math.max(0, toMoney(p.itemTotal) - paid);
   }, 0);
 }
 
@@ -25,9 +25,40 @@ function supplierById(id) {
 function supplierBalance(id) {
   return (state.purchases || []).reduce(function (s, p) {
     if (p.supplierId !== id) return s;
-    var paid = (p.paid || 0) + (p.paidNow || 0);
-    return s + Math.max(0, (p.itemTotal || 0) - paid);
+    var paid = toMoney(p.paid) + toMoney(p.paidNow);
+    return s + Math.max(0, toMoney(p.itemTotal) - paid);
   }, 0);
+}
+
+/* Allocate a payment across a shop's oldest unpaid purchases (FIFO) and return
+   the amount actually applied. A payment can NEVER exceed what the shop is
+   actually owed: the outstanding balance is the hard cap, and the amount is
+   kept at 2-decimal precision so a fractional payment is never rounded UP into
+   being bigger than the real debt (an overpayment used to be booked in full,
+   which made the Payments ledger / Money Out show more cash leaving than the
+   purchases really cost). Pure logic so the click handler AND the Node harness
+   share the same allocation path. */
+function applySupplierPayment(supplierId, amount) {
+  var maxAllowed = Math.max(0, toMoney(supplierBalance(supplierId)));
+  if (maxAllowed <= 0) return 0;
+  var applied = Math.min(toMoney(amount), maxAllowed);
+  var remaining = applied;
+  if (remaining > 0) {
+    (state.purchases || []).filter(function (p) { return p.supplierId === supplierId; })
+      .sort(function (a, b) { return (a.date || '').localeCompare(b.date || ''); })
+      .forEach(function (p) {
+        if (remaining <= 0) return;
+        var paid = toMoney(p.paid) + toMoney(p.paidNow);
+        var bal = Math.max(0, toMoney(p.itemTotal) - paid);
+        var apply = Math.min(bal, remaining);
+        p.paid = toMoney((p.paid || 0) + apply);
+        remaining -= apply;
+        // Re-stamp the purchase so the merge on other devices recognises this
+        // payment as an edit (same-id clashes are won by the newest updatedAt).
+        if (apply > 0) p.updatedAt = new Date().toISOString();
+      });
+  }
+  return applied;
 }
 
 /* Replay the payments ledger onto purchases (oldest purchase first — the same
@@ -70,7 +101,7 @@ function normalizeSupplierPayables() {
   });
   out.forEach(function (o) {
     var recorded = toMoney(o.p.paid);
-    var target = Math.round(o.allocated);
+    var target = toMoney(o.allocated);
     if (target > recorded) { o.p.paid = target; o.p.updatedAt = new Date().toISOString(); }
   });
 }
@@ -239,6 +270,17 @@ function removeItemRow(btn) {
   safeIcons();
 }
 
+/* Purchase-line amount: unit-aware and, for Electricity, ALWAYS the tiered
+   50/100/150/300 bill formula (ignoring the typed per-unit price) so a supplier
+   purchase of electricity can never overcharge at the old flat per-unit rate. */
+function purchaseLineAmount(ing, qty, price) {
+  qty = parseFloat(qty) || 0;
+  if (qty <= 0) return 0;
+  if (ing && ing.name === 'Electricity') return electricityBillParts(qty).total;
+  if (ing && ing.unit === 'g') return (qty / 1000) * (parseFloat(price) || 0);
+  return qty * (parseFloat(price) || 0);
+}
+
 function recalcPurchaseTotal() {
   var rows = document.querySelectorAll('#purchaseItems .purchase-item');
   var total = 0;
@@ -247,8 +289,7 @@ function recalcPurchaseTotal() {
     var qty = parseFloat(row.querySelector('.purchase-item-qty').value) || 0;
     var price = parseFloat(row.querySelector('.purchase-item-price').value) || 0;
     var ing = priceItemByName(name);
-    if (ing && ing.unit === 'g') total += (qty / 1000) * price;
-    else total += qty * price;
+    total += purchaseLineAmount(ing, qty, price);
   });
   var t = $('purchaseItemTotal'); if (t) t.textContent = fmtKs(total);
 }
@@ -271,7 +312,7 @@ $('savePurchaseBtn').addEventListener('click', function () {
     var price = parseFloat(row.querySelector('.purchase-item-price').value) || 0;
     if (!name || !price || qty <= 0) return;
     var ing = priceItemByName(name);
-    var amount = (ing && ing.unit === 'g') ? (qty / 1000) * price : qty * price;
+    var amount = purchaseLineAmount(ing, qty, price);
     items.push({ name: name, qty: qty, unit: ing ? ing.unit : 'unit', price: price, amount: amount });
     itemTotal += amount;
   });
@@ -286,13 +327,16 @@ $('savePurchaseBtn').addEventListener('click', function () {
   });
   if (!state.purchases) state.purchases = [];
   var purchaseNowIso = new Date().toISOString();
+  // Keep itemTotal/paidNow at 2-decimal precision (never rounded UP to the next
+  // Ks): rounding them separately is what made "What You Owe" show a little more
+  // than the real cost of the ingredients.
   state.purchases.push({
     id: purchaseId,
     supplierId: supplierId,
     date: date,
     items: items,
-    itemTotal: Math.round(itemTotal),
-    paidNow: Math.round(paidNow),
+    itemTotal: toMoney(itemTotal),
+    paidNow: toMoney(paidNow),
     note: '',
     createdAt: purchaseNowIso,
     updatedAt: purchaseNowIso
@@ -325,7 +369,7 @@ $('savePurchaseBtn').addEventListener('click', function () {
   updateGoogleSyncStatus('Price list updated from purchase prices.', 'success');
   }
   var msg = 'Purchase saved — stock added to inventory.';
-  if (paidNow < itemTotal) msg += ' You owe ' + fmtKs(Math.round(itemTotal - paidNow)) + ' to the shop.';
+  if (paidNow < itemTotal) msg += ' You owe ' + fmtKs(itemTotal - paidNow) + ' to the shop.';
   else msg += ' Fully paid.';
   showToast(msg);
 });
@@ -343,29 +387,23 @@ $('recordSupplierPaymentBtn').addEventListener('click', function () {
   var date = $('supplierPaymentDate').value || today();
   if (!supplierId) { showToast('Select a shop to pay.', 'error'); return; }
   if (isNaN(amount) || amount <= 0) { showToast('Enter a valid payment amount.', 'error'); return; }
-  // Allocate payment to the shop's oldest unpaid purchases first
-  var remaining = amount;
-  (state.purchases || []).filter(function (p) { return p.supplierId === supplierId; })
-    .sort(function (a, b) { return (a.date || '').localeCompare(b.date || ''); })
-    .forEach(function (p) {
-      if (remaining <= 0) return;
-      var paid = (p.paid || 0) + (p.paidNow || 0);
-      var bal = Math.max(0, (p.itemTotal || 0) - paid);
-      var apply = Math.min(bal, remaining);
-      p.paid = (p.paid || 0) + apply;
-      remaining -= apply;
-      // Re-stamp the purchase so the merge on other devices recognises this
-      // payment as an edit (same-id clashes are won by the newest updatedAt).
-      // Without this the phone's payment shows up as a `payments` row on the
-      // computer while the purchase carrying the reduced balance is dropped as
-      // "not newer" — Total Payable never drops.
-      if (apply > 0) p.updatedAt = new Date().toISOString();
-    });
+  var owed = Math.max(0, toMoney(supplierBalance(supplierId)));
+  if (owed <= 0) { showToast(supplierName(supplierId) + ' has no outstanding balance to pay.', 'error'); return; }
+  // A payment can never exceed what is actually owed to this shop: an
+  // overpayment used to be booked in full and rounded UP to the next Ks, which
+  // made the Payments ledger / Money Out show a little MORE leaving than the
+  // purchases really cost. Cap to the debt (same rule customer repayments use)
+  // and keep the 2-decimal amount — the excess is just not counted.
+  var applied = applySupplierPayment(supplierId, amount);
   if (!state.payments) state.payments = [];
-  state.payments.push({ id: uid(), supplierId: supplierId, date: date, amount: Math.round(amount), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  state.payments.push({ id: uid(), supplierId: supplierId, date: date, amount: applied, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
   saveState();
   renderSuppliers();
   $('supplierPaymentAmount').value = '';
   triggerGoogleSync();
-  showToast('Payment of ' + fmtKs(amount) + ' recorded to ' + supplierName(supplierId) + '.');
+  var msg = 'Payment of ' + fmtKs(applied) + ' recorded to ' + supplierName(supplierId) + '.';
+  if (toMoney(amount) > applied) {
+    msg += ' Only ' + fmtKs(applied) + ' was owed — the extra ' + fmtKs(toMoney(amount) - applied) + ' is not counted as a payment.';
+  }
+  showToast(msg);
 });

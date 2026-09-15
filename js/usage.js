@@ -163,7 +163,7 @@ function renderUsageTable(force) {
   const usage = currentUsage();
   tbody.innerHTML = state.prices.map(function (ing) {
     const qty = usage[ing.name] !== undefined ? usage[ing.name] : (DEFAULT_USAGE[ing.name] || 0);
-    const cost = ing.unit === 'g' ? (qty / 1000) * (parseFloat(ing.price) || 0) : qty * (parseFloat(ing.price) || 0);
+    const cost = ingredientCostSingle(ing, qty);
     const weight = Math.round(ingredientWeightGrams(ing, qty));
     return '<tr class="border-b border-gray-800">' +
       '<td class="py-1.5 pr-2 font-medium">' + esc(ing.name) + '</td>' +
@@ -219,7 +219,7 @@ function updateUsageCosts() {
   refreshSaveButton();
   state.prices.forEach(function (ing) {
     const qty = usage[ing.name] || 0;
-    const cost = ing.unit === 'g' ? (qty / 1000) * (parseFloat(ing.price) || 0) : qty * (parseFloat(ing.price) || 0);
+    const cost = ingredientCostSingle(ing, qty);
     const row = document.querySelector('.usage-input[data-name="' + ing.name + '"]');
     if (row) {
       const cells = row.closest('tr').querySelectorAll('td');

@@ -303,11 +303,32 @@ function totalStandingOrders() {
 }
 
 /* ---------- Cost & Weight Calculation ---------- */
+/* Electricity billing policy — the ONLY bill priced this way. The supplier
+   splits the total units into four equal quarters and bills each quarter at a
+   different rate (50 / 100 / 150 / 300 Ks per unit):
+     cost = (T/4 × 50) + (T/4 × 100) + (T/4 × 150) + (T/4 × 300)
+   e.g. 62 units → 15.5×50 + 15.5×100 + 15.5×150 + 15.5×300 = 9,300 Ks. */
+var ELECTRICITY_RATES = [50, 100, 150, 300];
+function electricityBillParts(totalUnits) {
+  const units = Math.max(0, parseFloat(totalUnits) || 0);
+  const quarter = units / 4;
+  const parts = ELECTRICITY_RATES.map(function (rate) { return quarter * rate; });
+  const total = parts.reduce(function (sum, p) { return sum + p; }, 0);
+  return { units: units, quarter: quarter, rates: ELECTRICITY_RATES.slice(), parts: parts, total: total };
+}
+/* Cost of ONE ingredient line (unit-aware). Electricity is special-cased to the
+   tiered bill formula above, so its cost ignores the (informational) price-list
+   value and always uses the 50/100/150/300 quarter rates. */
+function ingredientCostSingle(ing, qty) {
+  qty = parseFloat(qty) || 0;
+  if (qty <= 0) return 0;
+  if (ing && ing.name === 'Electricity') return electricityBillParts(qty).total;
+  if (ing && ing.unit === 'g') return (qty / 1000) * (parseFloat(ing.price) || 0);
+  return qty * (parseFloat(ing.price) || 0);
+}
 function ingredientCostFor(usage) {
   return state.prices.reduce(function (sum, ing) {
-    const qty = parseFloat(usage[ing.name]) || 0;
-    if (ing.unit === 'g') return sum + (qty / 1000) * (parseFloat(ing.price) || 0);
-    return sum + qty * (parseFloat(ing.price) || 0);
+    return sum + ingredientCostSingle(ing, usage[ing.name]);
   }, 0);
 }
 function totalMixWeightFor(usage) {

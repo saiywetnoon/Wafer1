@@ -8,6 +8,8 @@ function renderTools() {
   renderPriceHistory();
   renderExpenses();
   renderRecurring();
+  renderIngredientCosts();
+  renderElectricityBill();
   renderForecast();
   renderTargetProfit();
   renderPurchaseList();
@@ -385,4 +387,107 @@ $('exportMonthlyCsvBtn').addEventListener('click', function () {
   URL.revokeObjectURL(a.href);
   showToast('Report exported to CSV.');
 });
+/* ============================================================
+   INGREDIENT COST BY BATCH (DATE & TIME) + ELECTRICITY BILL
+   ============================================================ */
+
+/* Every ingredient line of every production batch, with the logged date/time,
+   using the exact same cost rules as production capital (unit-aware pricing,
+   electricity through the tiered 50/100/150/300 quarter formula). Newest first. */
+function ingredientCostRows() {
+  const rows = [];
+  (state.production || []).forEach(function (p) {
+    const usage = p.usage || {};
+    const when = p.createdAt || (p.date + 'T12:00:00');
+    (state.prices || []).forEach(function (ing) {
+      const qty = parseFloat(usage[ing.name]) || 0;
+      if (qty <= 0) return;
+      rows.push({
+        date: p.date, whenIso: when, productionId: p.id,
+        bags: p.bags || 0, pieces: p.pieces || 0,
+        name: ing.name, unit: ing.unit, qty: qty,
+        cost: ingredientCostSingle(ing, qty)
+      });
+    });
+  });
+  rows.sort(function (a, b) {
+    const c = String(b.date).localeCompare(String(a.date));
+    if (c) return c;
+    return String(b.whenIso || '').localeCompare(String(a.whenIso || ''));
+  });
+  return rows;
+}
+
+function renderIngredientCosts() {
+  const el = $('ingredientCostList');
+  if (!el) return;
+  const rows = ingredientCostRows();
+  if (!rows.length) {
+    el.innerHTML = '<div class="text-[11px] text-gray-500">No production batches yet — save a batch and each ingredient’s cost with its date &amp; time appears here.</div>';
+    return;
+  }
+  // 1) Running total cost per ingredient across all history.
+  let totalsHtml = '';
+  let grand = 0;
+  (state.prices || []).forEach(function (ing) {
+    const mine = rows.filter(function (r) { return r.name === ing.name; });
+    if (!mine.length) return;
+    const qty = mine.reduce(function (s, r) { return s + r.qty; }, 0);
+    const cost = mine.reduce(function (s, r) { return s + r.cost; }, 0);
+    grand += cost;
+    totalsHtml += '<div class="flex justify-between py-1 border-b border-gray-700 last:border-0">' +
+      '<span class="text-xs text-gray-200">' + esc(ing.name) + '</span>' +
+      '<span class="text-xs text-amber-400 font-semibold tabular-nums">' + fmt(Math.round(qty * 100) / 100) + ' ' + esc(ing.unit === 'g' ? 'g' : 'units') + ' · ' + fmtKs(cost) + '</span></div>';
+  });
+  let html =
+    '<div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Total cost per ingredient (all history)</div>' +
+    '<div class="space-y-1 mb-3 max-h-40 overflow-y-auto scrollbar-thin">' + totalsHtml +
+      '<div class="flex justify-between pt-1.5 font-bold border-t border-gray-700"><span class="text-xs text-gray-300">Grand total</span><span class="text-emerald-400 font-semibold">' + fmtKs(grand) + '</span></div>' +
+    '</div>';
+  // 2) Per-batch detail with date & time (newest first).
+  html += '<div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Per batch — newest first</div><div>';
+  let lastId = null;
+  rows.forEach(function (r) {
+    if (r.productionId !== lastId) {
+      if (lastId !== null) html += '</div>';
+      html += '<div class="mt-1 text-[11px] font-semibold text-gray-200 border-b border-gray-700">' +
+        esc(fmtDateTime(r.whenIso)) +
+        ' <span class="text-[10px] text-gray-500">— ' + fmt(r.bags) + ' bags · ' + fmt(r.pieces) + ' pcs</span></div><div class="space-y-0.5">';
+      lastId = r.productionId;
+    }
+    const tiered = r.name === 'Electricity' ? ' <span class="text-[9px] text-gray-500">tiered 50/100/150/300</span>' : '';
+    html += '<div class="flex justify-between text-[11px] py-0.5 border-b border-gray-800 last:border-0">' +
+      '<span class="text-gray-300">' + esc(r.name) + ' <span class="text-gray-500">' + fmt(Math.round(r.qty * 100) / 100) + ' ' + esc(r.unit === 'g' ? 'g' : 'units') + '</span>' + tiered + '</span>' +
+      '<span class="font-semibold text-amber-400 tabular-nums">' + fmtKs(r.cost) + '</span></div>';
+  });
+  html += '</div></div>';
+  el.innerHTML = html;
+  safeIcons();
+}
+
+/* Electricity bill calculator — the ONLY bill billed with the tiered formula:
+   total ÷ 4 is billed at 50, then 100, then 150, then 300 Ks per unit. */
+function renderElectricityBill() {
+  const el = $('electricityBillResult');
+  if (!el) return;
+  const inputEl = $('electricityBillUnits');
+  const raw = inputEl ? inputEl.value : '';
+  const units = parseFloat(raw);
+  if (isNaN(units) || units <= 0) {
+    el.innerHTML = '<span class="text-gray-500">Enter the meter’s total units to see the 4-quarter breakdown.</span>';
+    return;
+  }
+  const parts = electricityBillParts(units);
+  el.innerHTML =
+    '<div class="text-[11px] text-gray-400 mb-1">' + fmt(Math.round(units * 100) / 100) + ' units ÷ 4 = <b class="text-gray-200">' + fmt(Math.round(parts.quarter * 100) / 100) + '</b> units per quarter</div>' +
+    parts.rates.map(function (rate, i) {
+      return '<div class="flex justify-between py-1 border-b border-gray-700 last:border-0">' +
+        '<span class="text-xs text-gray-300">Quarter ' + (i + 1) + ' · ' + fmt(rate) + ' Ks/unit</span>' +
+        '<span class="text-xs text-amber-400 font-semibold tabular-nums">' + fmt(Math.round(parts.parts[i])) + ' Ks</span></div>';
+    }).join('') +
+    '<div class="flex justify-between pt-1.5 font-bold text-xs border-t border-gray-700"><span class="text-gray-300">Total electricity bill</span><span class="text-emerald-400">' + fmtKs(parts.total) + '</span></div>';
+}
+try {
+  if ($('electricityBillUnits')) $('electricityBillUnits').addEventListener('input', renderElectricityBill);
+} catch (e) { /* optional calculator — never crash the Tools tab */ }
 

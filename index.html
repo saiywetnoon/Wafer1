@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" data-build="v1.13.9">
+<html lang="en" class="dark" data-build="v1.13.10">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1091,6 +1091,12 @@ tailwind.config = {
         <div id="priceHistoryList" class="text-xs text-gray-400 max-h-40 overflow-y-auto scrollbar-thin"></div>
       </div>
 
+<!-- Ingredient Cost by Batch (Date & Time) -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="list-tree" class="w-5 h-5 text-amber-400"></i> Ingredient Cost by Batch (Date &amp; Time)</h3>
+        <p class="text-xs text-gray-400 mb-3">Every saved batch's cost for each ingredient, with the date &amp; time it was logged — plus the running total per ingredient. Electricity uses the tiered 50/100/150/300 unit rates.</p>
+        <div id="ingredientCostList" class="text-xs text-gray-400 max-h-72 overflow-y-auto scrollbar-thin"></div>
+      </div>
       <!-- Expenses -->
       <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
         <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="receipt" class="w-5 h-5 text-amber-400"></i> One-Time Expenses</h3>
@@ -1125,7 +1131,16 @@ tailwind.config = {
         <button id="addRecurringBtn" class="w-full py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold">Add Recurring Cost</button>
         <div id="recurringList" class="text-xs text-gray-400 mt-3 max-h-40 overflow-y-auto scrollbar-thin"></div>
       </div>
-
+      <!-- Electricity Bill (tiered 50/100/150/300) -->
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="zap" class="w-5 h-5 text-amber-400"></i> Electricity Bill (tiered rates)</h3>
+        <p class="text-xs text-gray-400 mb-3">Your supplier splits the total units into 4 equal quarters and bills each quarter at a different rate — 50, 100, 150 and 300 Ks per unit. Enter this bill's total units to see the breakdown.</p>
+        <div class="flex items-center gap-3 mb-3">
+          <label class="text-xs text-gray-300 font-semibold" for="electricityBillUnits">Total units</label>
+          <input id="electricityBillUnits" type="number" min="0" step="0.1" placeholder="e.g. 62" class="w-36 px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
+        </div>
+        <div id="electricityBillResult" class="text-xs text-gray-400">Enter the meter's total units to see the 4-quarter breakdown.</div>
+      </div>
       <!-- Forecast + Printable -->
       <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
         <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="trending-up" class="w-5 h-5 text-emerald-400"></i> Sales Forecast & Reports</h3>
@@ -1517,35 +1532,35 @@ tailwind.config = {
 </div>
 
 
-    <script src="js/config.js?v=20261017c"></script>
-    <script src="js/i18n.js?v=20261017c"></script>
-    <script src="js/pwa.js?v=20261017c"></script>
-    <script src="js/device.js?v=20261017c"></script>
-    <script src="js/supabase.js?v=20261017c"></script>
-    <script src="js/storage.js?v=20261017c"></script>
-    <script src="js/helpers.js?v=20261017c"></script>
-    <script src="js/pricing.js?v=20261017c"></script>
-    <script src="js/usage.js?v=20261017c"></script>
-    <script src="js/ledger.js?v=20261017c"></script>
-    <script src="js/sales.js?v=20261017c"></script>
-    <script src="js/dashboard.js?v=20261017c"></script>
-    <script src="js/calendar.js?v=20261017c"></script>
-    <script src="js/csv.js?v=20261017c"></script>
-    <script src="js/sync-ui.js?v=20261017c"></script>
-    <script src="js/sample-data.js?v=20261017c"></script>
-    <script src="js/inventory.js?v=20261017c"></script>
-    <script src="js/customers.js?v=20261017c"></script>
-    <script src="js/suppliers.js?v=20261017c"></script>
-    <script src="js/moneyout.js?v=20261017c"></script>
-    <script src="js/tools.js?v=20261017c"></script>
-    <script src="js/pan-timers.js?v=20261017c"></script>
-    <script src="js/cash.js?v=20261017c"></script>
-    <script src="js/companies.js?v=20261017c"></script>
-    <script src="js/auth.js?v=20261017c"></script>
-    <script src="js/cloud.js?v=20261017c"></script>
-    <script src="js/live-sync.js?v=20261017c"></script>
-    <script src="js/ai.js?v=20261017c"></script>
-    <script src="js/init.js?v=20261017c"></script>
+    <script src="js/config.js?v=20261017f"></script>
+    <script src="js/i18n.js?v=20261017f"></script>
+    <script src="js/pwa.js?v=20261017f"></script>
+    <script src="js/device.js?v=20261017f"></script>
+    <script src="js/supabase.js?v=20261017f"></script>
+    <script src="js/storage.js?v=20261017f"></script>
+    <script src="js/helpers.js?v=20261017f"></script>
+    <script src="js/pricing.js?v=20261017f"></script>
+    <script src="js/usage.js?v=20261017f"></script>
+    <script src="js/ledger.js?v=20261017f"></script>
+    <script src="js/sales.js?v=20261017f"></script>
+    <script src="js/dashboard.js?v=20261017f"></script>
+    <script src="js/calendar.js?v=20261017f"></script>
+    <script src="js/csv.js?v=20261017f"></script>
+    <script src="js/sync-ui.js?v=20261017f"></script>
+    <script src="js/sample-data.js?v=20261017f"></script>
+    <script src="js/inventory.js?v=20261017f"></script>
+    <script src="js/customers.js?v=20261017f"></script>
+    <script src="js/suppliers.js?v=20261017f"></script>
+    <script src="js/moneyout.js?v=20261017f"></script>
+    <script src="js/tools.js?v=20261017f"></script>
+    <script src="js/pan-timers.js?v=20261017f"></script>
+    <script src="js/cash.js?v=20261017f"></script>
+    <script src="js/companies.js?v=20261017f"></script>
+    <script src="js/auth.js?v=20261017f"></script>
+    <script src="js/cloud.js?v=20261017f"></script>
+    <script src="js/live-sync.js?v=20261017f"></script>
+    <script src="js/ai.js?v=20261017f"></script>
+    <script src="js/init.js?v=20261017f"></script>
 
 </body>
 </html>

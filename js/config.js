@@ -55,7 +55,7 @@ const DEFAULT_PRICES = [
   { name: 'Water', unit: 'g', price: 0, weightPerUnit: null, remark: '', stock: false },
   { name: 'Black Sesame', unit: 'g', price: 12000, weightPerUnit: null, remark: '' },
   { name: 'Additive Blend', unit: 'g', price: 4000, weightPerUnit: null, remark: '' },
-  { name: 'Electricity', unit: 'unit', price: 250, weightPerUnit: null, remark: 'per unit', stock: false },
+  { name: 'Electricity', unit: 'unit', price: 150, weightPerUnit: null, remark: 'tiered: 4 quarter rates 50/100/150/300', stock: false },
   { name: 'Packaging', unit: 'unit', price: 4, weightPerUnit: 17.14, remark: 'per bag' }
 ];
 
@@ -74,4 +74,4 @@ const DEFAULT_ROLLS_PER_BAG = 5;
 /* Current app build. `index.html` stamps the same id on <html data-build=…>.
    A mismatch (old HTML or old JS in the cache) makes the app warn loudly,
    because stale files are the #1 cause of "it says Synced but nothing uploads". */
-const __LEDGER_BUILD = 'v1.13.9';
+const __LEDGER_BUILD = 'v1.13.10';
