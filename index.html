@@ -1092,10 +1092,15 @@ tailwind.config = {
       </div>
 
 <!-- Ingredient Cost by Batch (Date & Time) -->
-      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
-        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="list-tree" class="w-5 h-5 text-amber-400"></i> Ingredient Cost by Batch (Date &amp; Time)</h3>
-        <p class="text-xs text-gray-400 mb-3">Every saved batch's cost for each ingredient, with the date &amp; time it was logged — plus the running total per ingredient. Electricity uses the tiered 50/100/150/300 unit rates.</p>
-        <div id="ingredientCostList" class="text-xs text-gray-400 max-h-72 overflow-y-auto scrollbar-thin"></div>
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800 lg:col-span-2">
+        <h3 class="font-bold text-base mb-1 flex items-center gap-2"><i data-lucide="list-tree" class="w-5 h-5 text-amber-400"></i> Ingredient Cost Report — by Month</h3>
+        <p class="text-xs text-gray-400 mb-3">Total cost of each ingredient for every month, with a per-batch breakdown showing the date &amp; time each batch was logged. Electricity uses the tiered 50/100/150/300 unit rates.</p>
+        <div class="flex items-center gap-3 mb-2">
+          <label class="text-xs font-semibold text-gray-300" for="ingredientCostMonth">Drill into month</label>
+          <select id="ingredientCostMonth" class="px-3 py-1.5 rounded-lg border border-gray-700 bg-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"></select>
+          <span class="text-[10px] text-gray-500">the table below shows ALL months; picking one shows that month's per-batch detail</span>
+        </div>
+        <div id="ingredientCostList" class="text-xs text-gray-400 max-h-96 overflow-y-auto scrollbar-thin"></div>
       </div>
       <!-- Expenses -->
       <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
@@ -1532,35 +1537,35 @@ tailwind.config = {
 </div>
 
 
-    <script src="js/config.js?v=20261017f"></script>
-    <script src="js/i18n.js?v=20261017f"></script>
-    <script src="js/pwa.js?v=20261017f"></script>
-    <script src="js/device.js?v=20261017f"></script>
-    <script src="js/supabase.js?v=20261017f"></script>
-    <script src="js/storage.js?v=20261017f"></script>
-    <script src="js/helpers.js?v=20261017f"></script>
-    <script src="js/pricing.js?v=20261017f"></script>
-    <script src="js/usage.js?v=20261017f"></script>
-    <script src="js/ledger.js?v=20261017f"></script>
-    <script src="js/sales.js?v=20261017f"></script>
-    <script src="js/dashboard.js?v=20261017f"></script>
-    <script src="js/calendar.js?v=20261017f"></script>
-    <script src="js/csv.js?v=20261017f"></script>
-    <script src="js/sync-ui.js?v=20261017f"></script>
-    <script src="js/sample-data.js?v=20261017f"></script>
-    <script src="js/inventory.js?v=20261017f"></script>
-    <script src="js/customers.js?v=20261017f"></script>
-    <script src="js/suppliers.js?v=20261017f"></script>
-    <script src="js/moneyout.js?v=20261017f"></script>
-    <script src="js/tools.js?v=20261017f"></script>
-    <script src="js/pan-timers.js?v=20261017f"></script>
-    <script src="js/cash.js?v=20261017f"></script>
-    <script src="js/companies.js?v=20261017f"></script>
-    <script src="js/auth.js?v=20261017f"></script>
-    <script src="js/cloud.js?v=20261017f"></script>
-    <script src="js/live-sync.js?v=20261017f"></script>
-    <script src="js/ai.js?v=20261017f"></script>
-    <script src="js/init.js?v=20261017f"></script>
+    <script src="js/config.js?v=20261017h"></script>
+    <script src="js/i18n.js?v=20261017h"></script>
+    <script src="js/pwa.js?v=20261017h"></script>
+    <script src="js/device.js?v=20261017h"></script>
+    <script src="js/supabase.js?v=20261017h"></script>
+    <script src="js/storage.js?v=20261017h"></script>
+    <script src="js/helpers.js?v=20261017h"></script>
+    <script src="js/pricing.js?v=20261017h"></script>
+    <script src="js/usage.js?v=20261017h"></script>
+    <script src="js/ledger.js?v=20261017h"></script>
+    <script src="js/sales.js?v=20261017h"></script>
+    <script src="js/dashboard.js?v=20261017h"></script>
+    <script src="js/calendar.js?v=20261017h"></script>
+    <script src="js/csv.js?v=20261017h"></script>
+    <script src="js/sync-ui.js?v=20261017h"></script>
+    <script src="js/sample-data.js?v=20261017h"></script>
+    <script src="js/inventory.js?v=20261017h"></script>
+    <script src="js/customers.js?v=20261017h"></script>
+    <script src="js/suppliers.js?v=20261017h"></script>
+    <script src="js/moneyout.js?v=20261017h"></script>
+    <script src="js/tools.js?v=20261017h"></script>
+    <script src="js/pan-timers.js?v=20261017h"></script>
+    <script src="js/cash.js?v=20261017h"></script>
+    <script src="js/companies.js?v=20261017h"></script>
+    <script src="js/auth.js?v=20261017h"></script>
+    <script src="js/cloud.js?v=20261017h"></script>
+    <script src="js/live-sync.js?v=20261017h"></script>
+    <script src="js/ai.js?v=20261017h"></script>
+    <script src="js/init.js?v=20261017h"></script>
 
 </body>
 </html>

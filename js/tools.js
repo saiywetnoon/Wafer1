@@ -418,15 +418,101 @@ function ingredientCostRows() {
   return rows;
 }
 
+var ingredientCostMonthFilter = '';   // '' = All history, 'yyyy-mm' = that month
+var ingredientCostMonthTouched = false; // user touched the month dropdown
+
+function ingredientCostMonths() {
+  const months = {};
+  ingredientCostRows().forEach(function (r) {
+    if (r.date && r.date.length >= 7) months[r.date.slice(0, 7)] = true;
+  });
+  return Object.keys(months).sort().reverse();
+}
+function ingredientCostMonthLabel(ym) {
+  if (!ym) return 'All history';
+  try { return new Date(ym + '-01T00:00:00').toLocaleString(undefined, { month: 'long', year: 'numeric' }); }
+  catch (e) { return ym; }
+}
+function ingredientCostMonthShort(ym) {
+  if (!ym) return '';
+  try { return new Date(ym + '-01T00:00:00').toLocaleString(undefined, { month: 'short', year: '2-digit' }); }
+  catch (e) { return ym; }
+}
+
 function renderIngredientCosts() {
   const el = $('ingredientCostList');
   if (!el) return;
-  const rows = ingredientCostRows();
-  if (!rows.length) {
+  const all = ingredientCostRows();
+  // Rebuild the month dropdown on every render (new months appear as batches
+  // are saved), preserving the user's chosen month in the module-level filter.
+  const sel = $('ingredientCostMonth');
+  const months = ingredientCostMonths();
+  if (sel) {
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">All history</option>' + months.map(function (m) {
+      return '<option value="' + esc(m) + '">' + esc(ingredientCostMonthLabel(m)) + '</option>';
+    }).join('');
+    let chosen = (ingredientCostMonthFilter && months.indexOf(ingredientCostMonthFilter) > -1)
+      ? ingredientCostMonthFilter
+      : ((prev && months.indexOf(prev) > -1) ? prev : '');
+    // First visit: open on the current month when it has any batches at all.
+    if (!ingredientCostMonthTouched && !chosen) {
+      const def = today().slice(0, 7);
+      if (months.indexOf(def) > -1) chosen = def;
+    }
+    ingredientCostMonthFilter = chosen;
+    sel.value = chosen;
+  }
+  const filter = ingredientCostMonthFilter;
+  if (!all.length) {
     el.innerHTML = '<div class="text-[11px] text-gray-500">No production batches yet — save a batch and each ingredient’s cost with its date &amp; time appears here.</div>';
     return;
   }
-  // 1) Running total cost per ingredient across all history.
+  const rows = filter ? all.filter(function (r) { return r.date.slice(0, 7) === filter; }) : all;
+  if (!rows.length) {
+    el.innerHTML = '<div class="text-[11px] text-gray-500">No batches in ' + esc(ingredientCostMonthLabel(filter)) + '.</div>';
+    return;
+  }
+  // 0) INGREDIENT × MONTH crosstab — the total cost of each ingredient for every
+  //    month, so the whole picture is visible at a glance (not just one month).
+  const crossMonths = ingredientCostMonths().reverse();           // chronological
+  const cross = {};       // ingredient -> { yyyy-mm: cost }
+  const crossMonthTotals = {};   // yyyy-mm -> cost
+  const crossIngTotals = {};     // ingredient -> cost (all months)
+  all.forEach(function (r) {
+    const ym = r.date.slice(0, 7);
+    if (!cross[r.name]) cross[r.name] = {};
+    cross[r.name][ym] = (cross[r.name][ym] || 0) + r.cost;
+    crossMonthTotals[ym] = (crossMonthTotals[ym] || 0) + r.cost;
+    crossIngTotals[r.name] = (crossIngTotals[r.name] || 0) + r.cost;
+  });
+  const crossGrand = Object.keys(crossMonthTotals).reduce(function (s, ym) { return s + crossMonthTotals[ym]; }, 0);
+  const crossBody = (state.prices || []).map(function (ing) {
+    if (!cross[ing.name]) return '';
+    return '<tr class="border-b border-gray-800">' +
+      '<td class="py-1 pr-2 text-left text-gray-200 whitespace-nowrap">' + esc(ing.name) +
+        (ing.name === 'Electricity' ? ' <span class="text-[9px] text-gray-500">tiered</span>' : '') + '</td>' +
+      crossMonths.map(function (ym) {
+        const v = (cross[ing.name][ym] || 0);
+        return '<td class="py-1 px-2 text-right text-amber-400 tabular-nums">' + (v > 0 ? fmtKs(v) : '<span class="text-gray-600">—</span>') + '</td>';
+      }).join('') +
+      '<td class="py-1 px-2 text-right font-semibold text-amber-400 tabular-nums">' + fmtKs(crossIngTotals[ing.name] || 0) + '</td></tr>';
+  }).join('');
+  const crossHtml =
+    '<div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Total cost per ingredient, by month</div>' +
+    '<div class="overflow-x-auto scrollbar-thin max-h-56 mb-3">' +
+    '<table class="w-full text-xs">' +
+    '<thead><tr class="text-left text-gray-400 border-b border-gray-700">' +
+    '<th class="py-1 pr-2">Ingredient</th>' +
+      crossMonths.map(function (ym) { return '<th class="py-1 px-2 text-right">' + esc(ingredientCostMonthShort(ym)) + '</th>'; }).join('') +
+      '<th class="py-1 px-2 text-right">Total</th></tr></thead>' +
+    '<tbody>' + crossBody +
+    '<tr class="font-bold">' +
+      '<td class="py-1 px-2 text-left text-gray-300">Month total</td>' +
+      crossMonths.map(function (ym) { return '<td class="py-1 px-2 text-right text-emerald-400 tabular-nums">' + fmtKs(crossMonthTotals[ym] || 0) + '</td>'; }).join('') +
+      '<td class="py-1 px-2 text-right text-emerald-400 tabular-nums">' + fmtKs(crossGrand) + '</td></tr>' +
+    '</tbody></table></div>';
+  // 1) Total cost per ingredient for the selected scope (month or all history).
   let totalsHtml = '';
   let grand = 0;
   (state.prices || []).forEach(function (ing) {
@@ -439,12 +525,12 @@ function renderIngredientCosts() {
       '<span class="text-xs text-gray-200">' + esc(ing.name) + '</span>' +
       '<span class="text-xs text-amber-400 font-semibold tabular-nums">' + fmt(Math.round(qty * 100) / 100) + ' ' + esc(ing.unit === 'g' ? 'g' : 'units') + ' · ' + fmtKs(cost) + '</span></div>';
   });
-  let html =
-    '<div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Total cost per ingredient (all history)</div>' +
+  let html = crossHtml +
+    '<div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Total cost per ingredient — ' + esc(ingredientCostMonthLabel(filter)) + '</div>' +
     '<div class="space-y-1 mb-3 max-h-40 overflow-y-auto scrollbar-thin">' + totalsHtml +
-      '<div class="flex justify-between pt-1.5 font-bold border-t border-gray-700"><span class="text-xs text-gray-300">Grand total</span><span class="text-emerald-400 font-semibold">' + fmtKs(grand) + '</span></div>' +
+      '<div class="flex justify-between pt-1.5 font-bold border-t border-gray-700"><span class="text-xs text-gray-300">View total</span><span class="text-emerald-400 font-semibold">' + fmtKs(grand) + '</span></div>' +
     '</div>';
-  // 2) Per-batch detail with date & time (newest first).
+  // 2) Per-batch detail with date & time (newest first) within the scope.
   html += '<div class="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Per batch — newest first</div><div>';
   let lastId = null;
   rows.forEach(function (r) {
@@ -490,4 +576,11 @@ function renderElectricityBill() {
 try {
   if ($('electricityBillUnits')) $('electricityBillUnits').addEventListener('input', renderElectricityBill);
 } catch (e) { /* optional calculator — never crash the Tools tab */ }
+try {
+  if ($('ingredientCostMonth')) $('ingredientCostMonth').addEventListener('change', function () {
+    ingredientCostMonthTouched = true;
+    ingredientCostMonthFilter = this.value || '';
+    renderIngredientCosts();
+  });
+} catch (e) { /* optional month filter — never crash the Tools tab */ }
 

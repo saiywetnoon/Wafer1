@@ -63,11 +63,27 @@
   /* Pan-timer state is scoped per workspace/account, so two logins (or the
      multi-company flow) on one device never share each other's cooking state.
      Old global-key data is still read as a fallback so a refresh upgrade keeps
-     running timers. */
+     running timers.
+
+     CRITICAL: the scope is normally decided by companyBootstrap(), which runs
+     only AFTER the async Supabase session restore — but this module initialises
+     at DOMContentLoaded, BEFORE that. Using the in-memory ACTIVE_COMPANY there
+     made panStorageKey() return '..._default' on every page load, so signed-in
+     users' timers (saved under '..._acct-<email>') were never found and RESET
+     on each refresh. The persisted active-workspace pointer (ACTIVE_COMPANY_KEY,
+     written synchronously by companyBootstrap on every boot/login) is available
+     immediately at DOMContentLoaded, so read the scope from it first. */
   function panStorageKey() {
     try {
-      var scope = (typeof ACTIVE_COMPANY !== 'undefined' && ACTIVE_COMPANY && ACTIVE_COMPANY.id) ? String(ACTIVE_COMPANY.id) : 'default';
-      return STORAGE_KEY + '_' + scope;
+      var scope = null;
+      try {
+        if (typeof getActiveCompanyId === 'function') {
+          var id = getActiveCompanyId();
+          if (id) scope = String(id);
+        }
+      } catch (e) { scope = null; }
+      if (!scope && typeof ACTIVE_COMPANY !== 'undefined' && ACTIVE_COMPANY && ACTIVE_COMPANY.id) scope = String(ACTIVE_COMPANY.id);
+      return STORAGE_KEY + '_' + (scope || 'default');
     } catch (e) { return STORAGE_KEY; }
   }
   function panReadRaw() {
@@ -1177,6 +1193,15 @@
     if (pans.some(function (p) { return p.running; })) ensureTick();
     document.addEventListener('keydown', onKey);
     updateGlobalBanner();
+    // Persist the freshest state when the tab is refreshed/closed (pagehide is a
+    // normal unload, so a change made a split-second before a refresh is never
+    // stranded in memory only). Save is a no-op-safe, try/catch-wrapped write.
+    try {
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') save();
+      });
+      window.addEventListener('pagehide', save);
+    } catch (e) { /* best-effort — timers still keep working and save on actions */ }
   }
 
   if (document.readyState === 'loading') {

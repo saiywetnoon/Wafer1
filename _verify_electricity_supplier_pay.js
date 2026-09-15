@@ -151,13 +151,37 @@ const icEl = { innerHTML: '' };
 document.getElementById = (id) => (id === 'ingredientCostList' ? icEl : (id === 'electricityBillUnits' ? { value: '62' } : (id === 'electricityBillResult' ? ebEl : { addEventListener() {}, innerHTML: '', textContent: '', value: '' })));
 const ebEl = { innerHTML: '' };
 
+// Deterministic month filter: open on All history (user-touched) so the "default
+// to current month" behaviour never depends on the machine's real date.
+ingredientCostMonthTouched = true;
+ingredientCostMonthFilter = '';
+
 renderIngredientCosts();
 ok2(/Flour/.test(icEl.innerHTML) && /Electricity/.test(icEl.innerHTML), 'ingredient cost card lists each ingredient');
+ok2(icEl.innerHTML.indexOf('by month') > -1, 'ingredient × month crosstab is rendered');
+ok2(icEl.innerHTML.indexOf('Month total') > -1, 'crosstab has a Month-total row');
+// Flour 460+920=1380, Eggs 600+1200=1800, Electricity 600+1200=1800 => 4,980.
+ok2(icEl.innerHTML.indexOf('4,980') > -1, 'crosstab Month total = 4,980 Ks for September');
 ok2(/Sep 12/.test(icEl.innerHTML), 'per-batch detail shows the logged date & time');
 ok2(/pr1/.test(icEl.innerHTML) === false, 'detail is grouped per batch, not per production id printed');
 // Electricity total across both batches: 4 + 8 = 12 units -> 12*150 = 1800 Ks tiered.
-ok2(icEl.innerHTML.indexOf('1,800') > -1, 'electricity grand total uses the tiered 50/100/150/300 rate (1,800 Ks for 12 units)');
+ok2(icEl.innerHTML.indexOf('1,800') > -1, 'electricity month total uses the tiered 50/100/150/300 rate (1,800 Ks for 12 units)');
 ok2(icEl.innerHTML.indexOf('tiered 50/100/150/300') > -1, 'electricity rows are labelled as tiered');
+
+// Month filter: both fixture batches are in September 2026.
+ingredientCostMonthFilter = '2026-09';
+renderIngredientCosts();
+ok2(icEl.innerHTML.indexOf('1,800') > -1, 'September filter keeps both batches (electricity 12 units = 1,800 Ks)');
+ok2(icEl.innerHTML.indexOf('September 2026') > -1 || icEl.innerHTML.indexOf('2026-09') > -1, 'heading names the selected month');
+
+// A stale/non-existent month gracefully falls back instead of hiding data.
+ingredientCostMonthFilter = '2020-01';
+renderIngredientCosts();
+ok2(icEl.innerHTML.indexOf('1,800') > -1, 'stale month filter falls back safely (data never hidden)');
+
+ingredientCostMonthFilter = '';
+renderIngredientCosts();
+ok2(/Flour/.test(icEl.innerHTML), 'All history still renders the per-ingredient totals');
 
 renderElectricityBill();
 ok2(/9,300/.test(ebEl.innerHTML), 'electricity bill card shows 62 units -> 9,300 Ks');
