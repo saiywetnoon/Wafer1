@@ -1460,7 +1460,12 @@ tailwind.config = {
         <input id="authPassword" type="password" placeholder="At least 6 characters" autocomplete="current-password"
                class="w-full px-3 py-2 rounded-lg border border-gray-700 bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500">
 
-        <details class="mt-4">
+        <!-- Legacy Apps-Script endpoint block. RETIRED on this build (the app
+             requires Supabase, configured in js/config.js). Kept hidden always —
+             it used to flash on the login screen whenever the Supabase CDN
+             library was a few hundred ms late (SUPA.configured() is false until
+             window.supabase exists), showing a dead "Server settings" URL field. -->
+        <details class="mt-4" hidden>
           <summary class="text-xs text-gray-500 cursor-pointer select-none hover:text-gray-400">Server settings</summary>
           <div class="mt-2">
             <label for="authServerUrl" class="text-[10px] font-semibold text-gray-500 block mb-1">Apps Script Web App URL (required once)</label>

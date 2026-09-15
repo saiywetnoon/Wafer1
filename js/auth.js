@@ -13,6 +13,17 @@ const AUTH_EMAIL_KEY = 'dailyCrispyRollLedger_authEmail';
 const AUTH_ROLE_KEY = 'dailyCrispyRollLedger_authRole';
 let authUser = null; // { email, role }
 
+/* This build requires Supabase (URL + anon key live in js/config.js); the
+   legacy Apps-Script backend is RETIRED — its login path below only runs for
+   key-less deployments. SUPA.configured() additionally requires the CDN-loaded
+   supabase-js library (window.supabase), which can still be loading for a few
+   hundred ms at boot — that delay is what used to flash the dead "Server
+   settings" URL field on the login screen. */
+const SUPA_KEYS_PRESENT = !!(SUPABASE_URL_wafer && SUPABASE_ANON_KEY_wafer);
+function supaLibReady() {
+  return SUPA_KEYS_PRESENT && !!(window && window.supabase);
+}
+
 /* ---------- active session getters (Supabase-aware) ---------- */
 async function sbAuthUser() {
   if (SUPA.configured()) {
@@ -71,7 +82,8 @@ function clearAuthUser() {
 
 /* ---------- Sign up / In / Out ---------- */
 async function authSignup(email, password) {
-  if (SUPA.configured()) {
+  if (SUPA_KEYS_PRESENT) {
+    if (!supaLibReady()) return { ok: false, message: 'Sign-in service is still loading — wait a few seconds and try again.' };
     const r = await SUPA.signUp(email, password);
     if (r.error || !r.data) return { ok: false, message: (r.error && r.error.message) || 'Sign-up failed.' };
     // Supabase's DB trigger creates a pending profile row automatically.
@@ -81,7 +93,8 @@ async function authSignup(email, password) {
   return r;
 }
 async function authLogin(email, password) {
-  if (SUPA.configured()) {
+  if (SUPA_KEYS_PRESENT) {
+    if (!supaLibReady()) return { ok: false, message: 'Sign-in service is still loading — wait a few seconds and try again.' };
     const r = await SUPA.signIn(email, password);
     if (r.error) return { ok: false, message: (r.error && r.error.message) || 'Login failed.' };
     await SUPA.sessionUser();
@@ -149,7 +162,7 @@ maybeRecoveryFlow();
    BOOT GATE — only approved sessions reach the app
    ============================================================ */
 async function authBootstrap() {
-  if (SUPA.configured()) {
+  if (SUPA_KEYS_PRESENT) {
     const u = await sbAuthUser();
     if (u && u.email) {
       if (u.status === 'approved') {
@@ -183,11 +196,13 @@ async function authBootstrap() {
 function showAuthScreen(msg) {
   const s = $('authScreen'); if (s) s.classList.remove('hidden');
   const app = $('appContainer'); if (app) app.classList.add('hidden');
-  // In Supabase mode hide the legacy "deployment URL / server settings" block.
-  if (SUPA.configured()) {
-    const det = document.querySelector('#authScreen details');
-    if (det) det.classList.add('hidden');
-  }
+  // The legacy "Server settings" / Apps Script URL block is dead on this build
+  // (the app requires Supabase). Hide it UNCONDITIONALLY — gating on
+  // SUPA.configured() made it flash on the login screen whenever the Supabase
+  // CDN library was still loading (configured() is false until window.supabase
+  // exists), which is exactly the "why do I see site setting sometimes?" bug.
+  const det = document.querySelector('#authScreen details');
+  if (det) det.classList.add('hidden');
   if (msg) setAuthMsg(msg, 'info');
 }
 function hideAuthScreen() {
