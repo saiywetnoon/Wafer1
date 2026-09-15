@@ -1,5 +1,5 @@
 /* ============================================================
-   VERIFY — ROLL/BAG COUNT CONSISTENCY (v1.9 report fix)
+   VERIFY — ROLL/BAG COUNT CONSISTENCY (v1.8.5 report fix)
    Loads the REAL js/config.js + js/helpers.js + js/ledger.js and
    proves that every report (dashboard/CSV/printable/calendar/audit,
    which all go through entriesProdSales + financeTotalsAll) shows

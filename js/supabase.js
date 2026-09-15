@@ -10,7 +10,7 @@
      ledgers(user_id uuid pk, payload jsonb, updated_at timestamptz)   <- ACTIVE store
      shared_ledgers(workspace_id text pk, ...)                         <- LEGACY only
 
-   >>> v1.9 PRIVACY: each account owns its OWN private ledger row
+   >>> v1.8.5 PRIVACY: each account owns its OWN private ledger row
    (`ledgers.user_id = auth.uid()`, enforced by RLS in the database).
    `shared_ledgers` is no longer read/written for live data — it is kept
    ONLY as a one-time migration source for the old shared data.
@@ -110,7 +110,7 @@ const SUPA = {
   /* On first sign-up the auth trigger creates a pending profile; here we
      read it. (Admin approvals are listed below.) */
 
-  /* ---- ledger read/write: PRIVATE per account (v1.9 privacy fix) ---- */
+  /* ---- ledger read/write: PRIVATE per account (v1.8.5 privacy fix) ---- */
   async saveLedger(userId, payload) {
     const sb = this.init(); if (!sb) return { error: 'unconfigured' };
     // Never write with a stale/expired session: refresh the cached session and
@@ -120,7 +120,7 @@ const SUPA = {
     try { u = await this.sessionUser() || u; } catch (e) {}
     if (!u || !u.id) return { error: 'session expired — sign in again to sync' };
     const now = new Date().toISOString();
-    // v1.9: each user writes ONLY their own `ledgers` row (RLS also enforces
+    // v1.8.5: each user writes ONLY their own `ledgers` row (RLS also enforces
     // auth.uid() = user_id). The old shared_ledgers row is never written now —
     // that per-account separation is what stops account A from clobbering a
     // different account B's business data.
@@ -175,28 +175,57 @@ const SUPA = {
       }
       return { error: msg };
     }
-    if (first && first.data) return { payload: first.data.payload, updatedAt: first.data.updated_at };
+    // A NON-ADMIN always reads ONLY their own row — never the legacy shared
+    // one. (A non-admin WITHOUT a row falls through to _adoptOrOwn, which the
+    // DB answers with "empty"; it can never receive the owner's data.)
+    const isAdminProfile = !!(this.profile && this.profile.role === 'admin');
+    if (first && first.data && !isAdminProfile) {
+      return { payload: first.data.payload, updatedAt: first.data.updated_at };
+    }
+    // Admin, or an account with no row yet: the DB decides. `ledger_adopt_shared`
+    // is ADMIN-ONLY and prefers the legacy shared 'main' row when it exists
+    // (it is the newest full copy — everything since the shared era), copying
+    // it into the admin's own row and deleting 'main'.
+    return await this._adoptOrOwn(userId, !!(first && first.data));
+  },
 
-    // v1.9 ONE-TIME ADOPTION — the account has no row yet. If the OLD shared
-    // workspace row still exists, the DB function `ledger_adopt_shared` copies
-    // it into THIS account's private row AND deletes the shared row (atomic,
-    // security-definer). So the FIRST account to open after the upgrade gets
-    // the legacy data; every account after that starts EMPTY — this is what
-    // stops a newly registered account from loading someone else's data.
+  /* Decide the account's cloud copy after the own-row read:
+       1. RPC `ledger_adopt_shared` present -> it ANSWERS authoritatively.
+          A payload is delivered ONLY to the admin; a null payload means "this
+          account has no data" (non-admin, or admin with nothing anywhere) —
+          never fall through in that case.
+       2. RPC missing (older database) -> fallback: ONLY the admin may read
+          `shared_ledgers`; the admin copies 'main' over their own row when it
+          exists, otherwise keeps their own row. A non-admin is never allowed
+          to read/copy the shared row. */
+  async _adoptOrOwn(userId, hasOwnRow) {
+    const sb = this.init(); if (!sb) return { error: 'unconfigured' };
+    const isAdminProfile = !!(this.profile && this.profile.role === 'admin');
     try {
       const rpc = await sb.rpc('ledger_adopt_shared', { p_workspace_id: this.workspaceId });
-      if (rpc && rpc.data && rpc.data.payload) {
-        return { payload: rpc.data.payload, updatedAt: rpc.data.updated_at || null, legacy: true };
-      }
-      if (rpc && rpc.error && !/PGRST202|function.*not.*found/i.test(String(rpc.error.message || rpc.error.code || ''))) {
-        return { error: String(rpc.error.message || rpc.error.code || 'adopt failed') };
+      if (rpc) {
+        if (rpc.error) {
+          if (/PGRST202|function.*not.*found/i.test(String(rpc.error.message || rpc.error.code || ''))) {
+            /* RPC not deployed yet — fall through to the admin-only copy below */
+          } else {
+            return { error: String(rpc.error.message || rpc.error.code || 'adopt failed') };
+          }
+        } else {
+          // Authoritative answer. Even a null payload is final — do NOT fall
+          // through, because falling through would re-read the shared row.
+          if (rpc.data && rpc.data.payload) {
+            // A payload from the RPC is a legacy adoption only when this account
+            // had NO own row before (a fresh account taking 'main', or a plain
+            // own row for an admin with nothing newer in the shared row).
+            return { payload: rpc.data.payload, updatedAt: rpc.data.updated_at || null, legacy: !hasOwnRow };
+          }
+          return null;
+        }
       }
     } catch (e) { /* RPC unavailable — fall through to the safe copy below */ }
 
-    // Fallback for databases where the v1.9 adoption RPC has not been created
-    // yet: copy the shared payload into this account's row (no delete). Once
-    // the owner runs the upgrade SQL and opens the app again, the RPC path
-    // takes over and removes the shared row.
+    // Fallback (RPC missing): ADMIN ONLY. Non-admins may never touch it.
+    if (!isAdminProfile) return null;
     const shared = await sb.from('shared_ledgers')
       .select('payload,updated_at').eq('workspace_id', this.workspaceId).maybeSingle();
     if (shared && !shared.error && shared.data && shared.data.payload) {
@@ -211,14 +240,21 @@ const SUPA = {
     }
     if (shared && shared.error) {
       const msg = String((shared.error && (shared.error.message || shared.error.code)) || 'read failed');
-      if (/no rows|PGRST116|406|not found/i.test(msg)) return null;
-      return { error: msg };
+      if (!/no rows|PGRST116|406|not found/i.test(msg)) return { error: msg };
+    }
+    // Nothing left in the legacy shared row -> keep the admin's own row.
+    const own = await sb.from('ledgers')
+      .select('payload,updated_at').eq('user_id', userId).maybeSingle();
+    if (own && !own.error && own.data) return { payload: own.data.payload, updatedAt: own.data.updated_at };
+    if (own && own.error) {
+      const msg2 = String((own.error && (own.error.message || own.error.code)) || 'read failed');
+      if (!/no rows|PGRST116|406|not found/i.test(msg2)) return { error: msg2 };
     }
     return null; // confirmed empty — this account has no ledger yet
   },
 
   /* ---- realtime: OTHER DEVICES of THE SAME ACCOUNT appear by themselves ----
-     v1.9: watch only THIS user's private row (`ledgers`), so an edit by a
+     v1.8.5: watch only THIS user's private row (`ledgers`), so an edit by a
      different account NEVER arrives here. */
   subscribeRealtime(userId, cb) {
     const sb = this.init(); if (!sb) return null;

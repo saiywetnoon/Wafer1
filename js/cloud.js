@@ -5,7 +5,7 @@
    Backed by Supabase: an account-owned private ledger row, Supabase
    Auth and Realtime.
 
-   Model (v1.9 — per-account privacy):
+   Model (v1.8.5 — per-account privacy):
    - Every approved account owns EXACTLY one private row:
      `ledgers.user_id = auth.uid()` (enforced by RLS in the database).
    - Changes auto-push and auto-pull across the SAME account's devices.
@@ -591,7 +591,7 @@ function mergeRemoteIntoLocal(r) {
     if (JSON.stringify(merged) !== JSON.stringify(state[f] || [])) { state[f] = merged; changed = true; }
   });
 
-  // v1.9 bag repair — remote rows from legacy devices may lack the `bagsAuto`
+  // v1.8.5 bag repair — remote rows from legacy devices may lack the `bagsAuto`
   // flag (or carry a stale stored bag count). Normalize AFTER the union so the
   // Production panel's derived bags and every report's summed bags always
   // agree, on every device, no matter which device generated the row.

@@ -77,8 +77,8 @@ Give a working, low-literacy, multi-device shop owner one ledger that:
 | Table | Purpose | RLS |
 |---|---|---|
 | `profiles(id, email, role, status, created_at)` | Account approval gate (`pending/approved/rejected`) | self-read; admin-only updates; identity/role immutable |
-| `ledgers(user_id, payload, updated_at)` | ACTIVE per-account store (v1.9) — one whole-ledger JSON row per account | owner + approved (`auth.uid() = user_id`) |
-| `shared_ledgers(workspace_id PK, payload, updated_at)` | LEGACY migration source only — the app reads/writes it once (v1.9 adopts the old shared payload into the first opener's private row, then deletes it) | any *approved* account (kept only so old cached builds during the transition keep working) |
+| `ledgers(user_id, payload, updated_at)` | ACTIVE per-account store (v1.8.5) — one whole-ledger JSON row per account | owner + approved (`auth.uid() = user_id`) |
+| `shared_ledgers(workspace_id PK, payload, updated_at)` | LEGACY migration source only — locked to the owner; only the ADMIN may read/write it and only the ADMIN's first login adopts its payload into the admin's private `ledgers` row (then it is deleted) | admin only (select/insert/update) |
 
 Key server-side functions: `handle_new_user()`, `touch_ledger()`, `is_approved()`, `is_admin()`, `protect_profile_fields()`.
 ---
@@ -169,7 +169,7 @@ Key server-side functions: `handle_new_user()`, `touch_ledger()`, `is_approved()
 - **Password reset** (`authRequestPasswordReset`): requires Supabase SMTP/sender and Site-URL configuration to actually deliver emails; otherwise the confirmation message is misleading.
 - **Account provisioning**: accounts created before `handle_new_user` was installed have no profile row and are locked out until the backfill SQL (documented in `_supabase-setup.sql`) is run.
 - **Admin console**: functional, but only lists accounts that already have a profiles row.
-- **Per-account privacy**: since v1.9 each account stores its ledger in its own `ledgers.user_id` row (RLS-enforced). The old "one shared `shared_ledgers` row belongs to every approved account" model is gone; the first account to open after the upgrade adopts the legacy row once.
+- **Per-account privacy**: since v1.8.5 each account stores its ledger in its own `ledgers.user_id` row (RLS-enforced). The old "one shared `shared_ledgers` row belongs to every approved account" model is gone; the legacy `'main'` row is ADMIN-ONLY (old non-admin clients are denied reads) and is adopted exactly once into the admin's private row.
 
 ### Known gaps / technical debt
 

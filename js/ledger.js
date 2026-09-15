@@ -175,7 +175,7 @@ function deriveBagsFromPieces(pieces) {
   return Math.max(0, Math.floor((parseFloat(pieces) || 0) / rpb));
 }
 
-/* One-time bag repair (v1.9). Batches recorded before the `bagsAuto` flag
+/* One-time bag repair (v1.8.5). Batches recorded before the `bagsAuto` flag
    existed (legacy saved ledgers and sample rows) have NO flag, so the
    Production panel / Fry Timers derived bags live from pieces while the
    reports summed the STORED field — the same batch could show two different

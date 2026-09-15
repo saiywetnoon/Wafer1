@@ -88,7 +88,7 @@ function salesList() {
    the Fry Timers. The reports (dashboard, calendar, audit, CSV, printable,
    monthly) previously summed the STORED bag field while the panel DERIVED it
    live — so legacy batches and sample rows (e.g. 228 pieces with 38 stored
-   bags) showed "38" in reports but "45 (auto)" in the panel. After the v1.9
+   bags) showed "38" in reports but "45 (auto)" in the panel. After the v1.8.5
    normalization every stored auto-row matches the derived count anyway; this
    helper makes a mismatch impossible even for rows that were never normalized. */
 function productionBags(p) {
