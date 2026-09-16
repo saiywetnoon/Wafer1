@@ -592,6 +592,22 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
+### v1.11.10 — pan reports stamp their edit time, so device B keeps updating
+- **Fixed the "Device B stops updating" bug.** Pan auto-reports
+  (`saveProductionFromRun`) now bump the batch's own `updatedAt` timestamp on
+  every report (and new pan rows carry `updatedAt`/`createdAt`). Cross-device
+  sync resolves "same batch edited on two devices" by newest-`updatedAt`-wins —
+  previously a pan report on device A reached B with an unchanged/absent
+  timestamp, B's merge kept its stale row, and B even pushed the stale copy
+  back over the cloud, so B never showed subsequent rolls/bags no matter how
+  often A cooked. The first report always worked (a brand-new row is added to
+  B), every later one did not — that exact symptom is now fixed.
+- **Auto bag count is now visibly updated on the Production form too.** When a
+  pan report lands on the batch date currently shown in the Production tab, the
+  Pieces and Bags fields (and live readouts) refresh automatically, matching
+  the "Recent Production" table. If you're mid-typing on the form, your numbers
+  are never yanked.
+
 ### v1.11.9 — bags are FULLY AUTOMATIC (no manual bag entry, no button)
 - **Bags are always counted for you** from the full-set rule
   (`floor(pieces ÷ rolls per bag)`). There is no "update bags" button and no

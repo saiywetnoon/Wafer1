@@ -224,6 +224,14 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
   // floor(total ÷ rollsPerBag) — full sets only, never invented per round.
   const explicitBags = (typeof bags === 'number' && isFinite(bags) && bags > 0);
   const existing = (state.production || []).find(function (p) { return p.date === date; });
+  // Record-level write stamp. Every pan report that touches a batch MUST bump the
+  // row's updatedAt — cross-device sync resolves same-record clashes by newest
+  // updatedAt (LWW). Without this stamp a report made on device A arrives at
+  // device B with an identical/absent timestamp, the merge keeps B's stale row,
+  // and B stops updating for the rest of the day (it even re-pushes its stale
+  // copy over the cloud). The stamp also lets a FINISHED report always beat an
+  // older mix-only row.
+  const nowStamp = new Date().toISOString();
 
   // -------- Merge into an existing batch for the same day (no double deduct) --------
   if (existing) {
@@ -244,9 +252,16 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
     if (useBy && !existing.useBy) existing.useBy = useBy;
     if (!existing.usage || !Object.keys(existing.usage).length) existing.usage = Object.assign({}, runUsage);
     if (!existing.capital) existing.capital = Math.round(ingredientCostFor(existing.usage));
+    // The day's batch changed — stamp it so every other device can merge this edit.
+    existing.updatedAt = nowStamp;
+    if (!existing.createdAt) existing.createdAt = nowStamp;
     rebuildStockAndCogs();
     saveState();
     renderAll();
+    // If the Production form is showing THIS date, refresh just its Pieces/Bags
+    // fields and live readouts so the auto-derived bag count is visibly updated
+    // without touching the usage inputs the user may still be typing.
+    if (typeof refreshProductionFormCounts === 'function') { try { refreshProductionFormCounts(date); } catch (e) { /* best-effort */ } }
     triggerGoogleSync();
     clearDraft();
     $('editProdId').value = existing.id;
@@ -273,7 +288,8 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
     notes: notes || '',
     usage: Object.assign({}, runUsage),
     additionalCost: 0,
-    capital: 0, laborMinutes: 0, laborCost: 0, costPerPiece: 0
+    capital: 0, laborMinutes: 0, laborCost: 0, costPerPiece: 0,
+    updatedAt: nowStamp, createdAt: nowStamp
   };
   if (record.capital === 0) record.capital = Math.round(ingredientCostFor(record.usage));
   if (useBy) record.useBy = useBy;
@@ -287,6 +303,8 @@ function saveProductionFromRun(date, pieces, bags, usage, notes, useBy, quiet) {
   rebuildStockAndCogs();
   saveState();
   renderAll();
+  // Visible bag auto-update on the Production form for the batch just created.
+  if (typeof refreshProductionFormCounts === 'function') { try { refreshProductionFormCounts(date); } catch (e) { /* best-effort */ } }
   triggerGoogleSync();
   clearDraft();
   $('editProdId').value = '';

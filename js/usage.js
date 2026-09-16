@@ -128,6 +128,41 @@ function populateProductionForm(date) {
   updateDraftHint();
   return true;
 }
+
+/* Refresh ONLY the Pieces / Bags fields of the Production form when a pan
+   auto-report (or batch update) lands on the date currently shown. The form is
+   deliberately NOT re-populated on repeated same-date renderAll() calls (that
+   would fight the user's typing), so this scoped refresh is what makes the
+   auto-derived bag count VISIBLY update in the production tab as pans finish.
+   Deliberately touches nothing else (no usage inputs, no notes, no labor). */
+function refreshProductionFormCounts(date) {
+  try {
+    const dEl = $('logDate');
+    if (!dEl || dEl.value !== date) return;
+    // If the user is actively typing on the form, never yank their numbers.
+    if (draftTouched) return;
+    const batch = (state.production || []).find(function (p) { return p.date === date; });
+    if (!batch) return;
+    const piecesEl = $('logPieces');
+    if (piecesEl) piecesEl.value = batch.pieces || 0;
+    const bagsEl = $('logBagsProduced');
+    if (bagsEl) {
+      if (batch.bagsAuto === false) {
+        // Manual override stays — show the physically counted bag value.
+        bagsEl.value = batch.bags || 0;
+        if (typeof bagsEl.setAttribute === 'function') bagsEl.setAttribute('data-calc', '0');
+      } else {
+        // Auto batch: leave the field empty and let updateLive() auto-fill the
+        // derived bag count (floor(pieces ÷ rollsPerBag)) exactly like a fresh
+        // form — this is what makes the auto bag update VISIBLE in the tab.
+        bagsEl.value = '';
+        if (typeof bagsEl.setAttribute === 'function') bagsEl.setAttribute('data-calc', '1');
+      }
+    }
+    if (typeof updateUsageCosts === 'function') updateUsageCosts();
+    if (typeof refreshSaveButton === 'function') refreshSaveButton();
+  } catch (e) { /* best-effort — never break a pan report */ }
+}
 $('logDate').addEventListener('change', function () {
   const curD = $('logDate').value || today();
   // The user is now producing THIS batch — remember it (synced) so a reload or
