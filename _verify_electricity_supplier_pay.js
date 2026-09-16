@@ -187,6 +187,41 @@ renderElectricityBill();
 ok2(/9,300/.test(ebEl.innerHTML), 'electricity bill card shows 62 units -> 9,300 Ks');
 ok2(/15.5/.test(ebEl.innerHTML), 'electricity bill card shows 15.5 units per quarter');
 
+/* ---------- 4b) Electricity Bill pre-fills from the month's logged batches ---------- */
+ok2(Math.abs(electricityLoggedUnits('2026-09') - 12) < 0.001, 'electricityLoggedUnits("2026-09") = 4 + 8 = 12 units (from the batches)');
+ok2(Math.abs(electricityLoggedUnits('2026-08')) < 0.001, 'a month with no batches logs 0 units');
+
+// Pre-fill UI: one batch dated TODAY with 12 units -> the empty card must offer
+// one click to fill 12 and then show the 1,800 Ks tiered breakdown.
+state = {
+  production: [{ id: 'today-1', date: today(), usage: { Electricity: 12 } }],
+  prices: [{ name: 'Electricity', unit: 'unit', price: 150 }],
+  sales: [], customers: [], suppliers: [], purchases: [], payments: [],
+  customerPayments: [], expenses: [], recurringExpenses: [], waste: [], priceHistory: [],
+  recipes: [], inventoryMovements: [], inventory: {}, cash: { opening: 0, adjustments: [] },
+  entries: {}, draft: null, updatedAt: null, stock: { pieces: 0, cost: 0 },
+  settings: { hourlyWage: 1500 }, inventoryMovementVersion: 1
+};
+const ebStub = { innerHTML: '' };
+ebStub.querySelector = function (sel) {
+  if (!this._btn) this._btn = { addEventListener(type, fn) { this._fn = fn; } };
+  return this._btn;
+};
+const unitStub = { value: '' };
+const savedGetById = document.getElementById;
+document.getElementById = function (id) {
+  if (id === 'electricityBillResult') return ebStub;
+  if (id === 'electricityBillUnits') return unitStub;
+  return savedGetById(id);
+};
+renderElectricityBill();
+ok2(ebStub.innerHTML.indexOf('12') > -1, 'pre-fill caption names the 12 units this month already logged');
+ok2(ebStub.innerHTML.indexOf('Use 12 units') > -1, 'pre-fill shows the one-click "Use 12 units" button');
+ebStub.querySelector('[data-fill-electric]')._fn();
+ok2(unitStub.value === '12', 'clicking Use fills the Total units field with 12 (no typing needed)');
+ok2(/1,800/.test(ebStub.innerHTML), 'the filled 12 units render the tiered breakdown (12 units = 1,800 Ks)');
+document.getElementById = savedGetById;
+
 console.log(fail2 === 0 ? 'ALL TOOLS RENDER SMOKE CHECKS PASSED' : (fail2 + ' FAILED'));
 `;
 const src2 = read('config.js') + '\n' + read('helpers.js') + '\n' + read('tools.js') + '\n' + TEST_BODY2;

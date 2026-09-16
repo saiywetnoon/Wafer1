@@ -335,6 +335,21 @@ function electricityBillParts(totalUnits) {
   const total = parts.reduce(function (sum, p) { return sum + p; }, 0);
   return { units: units, quarter: quarter, rates: ELECTRICITY_RATES.slice(), parts: parts, total: total };
 }
+/* Total Electricity units the production batches of a month ('yyyy-mm') already
+   logged in their usage. The Electricity ingredient is recorded per batch on the
+   Production form, so the ledger knows the month's usage — the Electricity Bill
+   calculator pre-fills its "Total units" from this instead of forcing a manual
+   number (the meter on the supplier bill may differ, so it is only a pre-fill). */
+function electricityLoggedUnits(month) {
+  const m = (month || '').slice(0, 7);
+  let total = 0;
+  (state.production || []).forEach(function (p) {
+    if (!p || !p.date || p.date.slice(0, 7) !== m) return;
+    const u = parseFloat(p.usage && p.usage.Electricity) || 0;
+    if (u > 0) total += u;
+  });
+  return Math.round(total * 100) / 100;
+}
 /* Cost of ONE ingredient line (unit-aware). Electricity is special-cased to the
    tiered bill formula above, so its cost ignores the (informational) price-list
    value and always uses the 50/100/150/300 quarter rates. */

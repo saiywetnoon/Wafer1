@@ -559,7 +559,25 @@ function renderElectricityBill() {
   const inputEl = $('electricityBillUnits');
   const raw = inputEl ? inputEl.value : '';
   const units = parseFloat(raw);
+  // Pre-fill the meter total from what THIS month's batches already logged as
+  // Electricity usage (Production form), so the number is usually never typed.
+  const month = today().slice(0, 7);
+  const logged = (typeof electricityLoggedUnits === 'function') ? electricityLoggedUnits(month) : 0;
   if (isNaN(units) || units <= 0) {
+    if (logged > 0) {
+      el.innerHTML =
+        '<div class="text-[11px] text-gray-400 mb-1.5">Your batches in <b class="text-gray-200">' + esc(ingredientCostMonthLabel(month)) + '</b> already logged <b class="text-emerald-400">' + fmt(Math.round(logged * 100) / 100) + '</b> units of electricity.</div>' +
+        '<button data-fill-electric class="px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-gray-900 text-[11px] font-bold">Use ' + fmt(Math.round(logged * 100) / 100) + ' units from my batches</button>' +
+        '<div class="text-[10px] text-gray-500 mt-1.5">Check it against the meter on your bill — if they differ, type the meter number above instead.</div>';
+      const btn = el.querySelector && el.querySelector('[data-fill-electric]');
+      if (btn && btn.addEventListener && inputEl) {
+        btn.addEventListener('click', function () {
+          inputEl.value = String(Math.round(logged * 100) / 100);
+          renderElectricityBill();
+        });
+      }
+      return;
+    }
     el.innerHTML = '<span class="text-gray-500">Enter the meter’s total units to see the 4-quarter breakdown.</span>';
     return;
   }
