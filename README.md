@@ -86,26 +86,29 @@ interfere with each other. For each pan:
 - **Scaleable pan count** — ⚙ Settings now has "Number of frying pans (1–9)".
   Add/remove pans as your production line grows; each pan keeps its own theme
   and a dedicated shortcut key (1–9).
-- **Per-pan timing, rolls & bags** — ⚙ Settings has a **"Per-pan timings, rolls
-  & bags"** section: each pan can run its **own** fold + final duration with its
-  **own Rolls** and **own Bags** per finished batch (all set by you — uncheck
-  "Use global" to customise that pan, or "Use global for all" to clear every
-  override). The duration dropdown on each card is always anchored on that pan's
-  own total (so a selection is never out of step with its timing), and picking a
-  value updates that pan's own fold/final proportionally.
-- **Automatic roll + bag count → Production** — when a timer finishes, the pan
-  counts the **Rolls & Bags** you set for it. With **"Automatically report
-  finished batches to Production"** on (the default), those exact counts are
-  added straight into the Production panel and merged into the batch you're
-  producing — the date on the Production form, so a pan that finishes after
-  midnight keeps counting into that same batch and never starts a new day's
-  row:
-  **Pieces** grows by the Rolls and **Bags Prod.** grows by the Bags. The daily
-  recipe stays deducted exactly once. Turn auto-report off to keep the counts in
-  the Today's Batch Log (where you can also edit Rolls & Bags per pan) and use
-  the **Log finished batch → Production** button instead. A batch that fails to
-  report (e.g. a stock shortage) is kept so it can be retried, and a refresh can
-  never double-count a finished batch.
+- **Per-pan timing & rolls** — ⚙ Settings has a **"Per-pan timings & rolls"
+  section: each pan can run its **own** fold + final duration and counts its
+  **own Rolls** per finished batch (all set by you — uncheck "Use global" to
+  customise that pan, or "Use global for all" to clear every override). Bags
+  are NOT set per pan: they are always counted from FULL SETS of the day's
+  total rolls (`floor(pieces ÷ rolls per bag)`) inside the ledger. The
+  duration dropdown on each card is always anchored on that pan's own total (so
+  a selection is never out of step with its timing), and picking a value
+  updates that pan's own fold/final proportionally.
+- **Automatic roll count → Production (bags derived, never per-round)** — when a
+  timer finishes, the pan counts the **Rolls** you set for it. With
+  **"Automatically report finished batches to Production"** on (the default),
+  those rolls are added straight into the Production panel and merged into the
+  batch you're producing — the date on the Production form, so a pan that
+  finishes after midnight keeps counting into that same batch and never starts
+  a new day's row:
+  **Pieces** grows by the Rolls and **Bags** is re-derived from the new total
+  (`floor ÷ rolls per bag`, full sets only) unless you physically counted the
+  bags by hand. The daily recipe stays deducted exactly once. Turn auto-report
+  off to keep the counts in the Today's Batch Log (where you can also edit the
+  Rolls per pan) and use the **Log finished batch → Production** button
+  instead. A batch that fails to report (e.g. a stock shortage) is kept so it
+  can be retried, and a refresh can never double-count a finished batch.
 - **Manual reset** — reset any pan yourself at any time (the Reset button,
   `Shift+1..9`, or right-click / middle-click). Resetting a pan that already
   finished cancels its pending batch count, so a manual reset never double-reports
@@ -591,6 +594,25 @@ listed manual workflows before treating this release as complete.
 > upgrades are additive and not part of that script.
 
 ## Changelog
+
+### v1.8.5.4 — bags output stays automatic (form save no longer freezes the bag count)
+- **Fixed: an auto-derived bag count saved from the Production form no longer
+  locks the day's batch into MANUAL mode.** The form live-fills the "Total
+  Bags (Packed)" field (tagged `data-calc="1"`) the moment you type pieces.
+  Saving used to treat that auto-filled number as if you had typed it, so the
+  batch was stored as a manual override (`bagsAuto=false`) — and from then on
+  every pan auto-report added more **rolls** to the day but **froze the bags**
+  at the old number (the exact "bags output isn't automatically calculated"
+  symptom). Now the auto-filled value stays AUTO: the batch keeps re-deriving
+  `floor(pieces ÷ rolls per bag)` on every pan report. A genuinely typed bag
+  count still wins and stays manual.
+- **Live count is always in step.** Changing the Pieces field recomputes the
+  visible bag count in the same keystroke — no more brief empty field waiting
+  for the next input event.
+- **Calendar → Load into Production** keeps an auto batch auto too (same marker
+  set, so saving from a calendar jump can't freeze the bags either).
+- New regression net `_verify_bags_auto_output.js` (16 checks) reproduces the
+  exact complaint: form save → pan report → bags keep auto-calculating.
 
 ### v1.11.10 — pan reports stamp their edit time, so device B keeps updating
 - **Fixed the "Device B stops updating" bug.** Pan auto-reports

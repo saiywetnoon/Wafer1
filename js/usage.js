@@ -308,15 +308,21 @@ function updateLive() {
   const effectiveRpb = rpb > 0 ? rpb : (typeof DEFAULT_ROLLS_PER_BAG !== 'undefined' ? DEFAULT_ROLLS_PER_BAG : 5);
   const bagsFieldRaw = String(bagsInput ? bagsInput.value : '').trim();
   const bagsEntered = bagsFieldRaw !== '';
-  const bagsDerived = (!bagsEntered && parts > 0) ? Math.floor(parts / effectiveRpb) : 0;
-  const bagsShown = bagsEntered ? bags : bagsDerived;
+  const autoCalc = (typeof bagsInput.getAttribute === 'function') ? String(bagsInput.getAttribute('data-calc') || '') : '';
+  // AUTO mode while the field is empty OR still carrying the live auto value;
+  // only a genuinely typed count (data-calc="0", set the instant the user edits
+  // the field) is MANUAL. Deriving from the CURRENT pieces in the same pass
+  // (not from !bagsEntered) is what keeps the visible bag count in step with
+  // the pieces field — previously an auto-filled value made bagsDerived collapse
+  // to 0 for one event, clearing the field until the next keystroke.
+  const wantsAuto = !bagsEntered || autoCalc === '1';
+  const bagsDerived = (wantsAuto && parts > 0) ? Math.floor(parts / effectiveRpb) : 0;
+  const bagsShown = wantsAuto ? bagsDerived : bags;
   // Live auto-fill: put the derived bag count INTO the Bags field so it's a real,
   // visible, editable value (an "update" you can see). Only auto-fill when the
   // field is empty (or still showing the previous auto value) AND the user
   // hasn't typed a manual bag count on this trip.
   if (bagsInput) {
-    const autoCalc = (typeof bagsInput.getAttribute === 'function') ? String(bagsInput.getAttribute('data-calc') || '') : '';
-    const wantsAuto = !bagsEntered || autoCalc === '1';
     if (wantsAuto && parts > 0 && bagsDerived > 0) {
       if (bagsInput.value === '' || autoCalc === '1') {
         bagsInput.value = bagsDerived || '';

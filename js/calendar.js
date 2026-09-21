@@ -73,6 +73,10 @@ function loadEntryIntoForm(date) {
     draftUsage = Object.assign({}, batch.usage || {});
     $('additionalCost').value = batch.additionalCost || 0;
     $('logBagsProduced').value = batch.bags || 0;
+    // Keep the bag field's AUTO/MANUAL marker in sync: auto batches stay auto,
+    // so a later pan report keeps re-deriving the bag count instead of freezing
+    // it to this older value when the batch is saved from the Production tab.
+    if (typeof $('logBagsProduced').setAttribute === 'function') $('logBagsProduced').setAttribute('data-calc', (batch.bagsAuto === false) ? '0' : '1');
     $('logPieces').value = batch.pieces || 0;
     $('logLabor').value = batch.laborMinutes || 0;
     $('logWeightPerRoll').value = batch.weightPerRoll || 0;
@@ -82,6 +86,7 @@ function loadEntryIntoForm(date) {
     document.getElementById('editProdId').value = '';
     $('additionalCost').value = 0;
     $('logBagsProduced').value = 0;
+    if (typeof $('logBagsProduced').setAttribute === 'function') $('logBagsProduced').setAttribute('data-calc', '1');   // fresh form = auto mode
     $('logPieces').value = 0;
     $('logLabor').value = 0;
     $('logWeightPerRoll').value = 0;

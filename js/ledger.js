@@ -36,11 +36,19 @@ function saveProduction() {
       state.settings.rollsPerBag = localRpb;
     }
   } catch (e) { /* best-effort */ }
-  // Real packing rule: when the bag field is left EMPTY but pieces were entered,
-  // derive bags as FULL sets only — floor(pieces ÷ rollsPerBag). 16 rolls at
-  // 5/bag = 3 bags. If the user typed a bag count, always respect it.
-  const bagsFieldRaw = String($('logBagsProduced').value || '').trim();
-  const bagsEntered = bagsFieldRaw !== '';
+  // Real packing rule: bags are FULL SETS ONLY — floor(pieces ÷ rollsPerBag).
+  // 16 rolls at 5/bag = 3 bags. A typed bag count always wins, but the live
+  // form AUTO-FILLS this field (tagged data-calc="1") as soon as pieces are
+  // entered — that auto-filled value is NOT a manual count. Treating it as one
+  // used to lock the day's batch into MANUAL mode (bagsAuto=false), so the very
+  // first pan report that added more rolls raised the pieces but FROZE the bag
+  // count forever. Only a genuinely typed value (field non-empty AND the tag is
+  // not "1") is a manual override.
+  const bagsEl = $('logBagsProduced');
+  const bagsFieldRaw = String(bagsEl ? (bagsEl.value || '') : '').trim();
+  const bagsAutoTag = (bagsEl && typeof bagsEl.getAttribute === 'function')
+    ? String(bagsEl.getAttribute('data-calc') || '').trim() : '';
+  const bagsEntered = bagsFieldRaw !== '' && bagsAutoTag !== '1';
   const usage = currentUsage();
   const ingCost = ingredientCostFor(usage);
   const extra = parseFloat($('additionalCost').value) || 0;
