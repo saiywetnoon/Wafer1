@@ -268,6 +268,9 @@ function renderAuthBadge() {
   const lbl = $('authUserLabel'); if (lbl) lbl.textContent = (authEmail() || 'Sign out');
   const btn = $('authLogoutBtn'); if (btn) btn.classList.toggle('hidden', !authEmail());
   const admin = $('adminBtn'); if (admin) admin.classList.toggle('hidden', !authIsAdmin());
+  // The Users & Permissions tab is work for admins only.
+  const ut = $('usersTabBtn'); if (ut) ut.classList.toggle('hidden', !authIsAdmin());
+  const up = $('tab-users'); if (up) up.classList.toggle('hidden', !authIsAdmin());
   const cb = $('companyNameBtn'); if (cb) cb.classList.toggle('hidden', !!authEmail());
 }
 // @@AUTH3@@
@@ -328,6 +331,117 @@ async function adminAct(action, id, email) {
   const ok = !!(res && res.ok);
   setAdminMsg((res && (res.message || res.error)) || (ok ? (action === 'approve' ? 'Approved ' + email : 'Rejected ' + email) : 'Action failed.'), ok ? 'success' : 'error');
   await openAdminConsole();
+}
+
+/* ============================================================
+   USERS & PERMISSIONS TAB — full user list, active (approved)
+   list, permission (role), promote user ↔ admin.
+   Admin only; hidden for ordinary accounts (renderAuthBadge).
+   ============================================================ */
+async function renderUsersTab() {
+  const tab = $('tab-users'); if (!tab) return;
+  if (!authIsAdmin()) { tab.classList.add('hidden'); return; }
+  const list = $('usersList');
+  setUsersMsg('Loading accounts…', 'info');
+  if (list) list.innerHTML = '<div class="text-xs text-gray-500">Loading…</div>';
+  let users = [];
+  if (SUPA.configured()) {
+    users = await SUPA.listUsers();
+  } else {
+    const r = await authPost('listUsers', {});
+    users = (r && r.ok && r.users) ? r.users : [];
+  }
+  setUsersStats(users.length,
+    users.filter(function (u) { return (u.status || 'pending') === 'approved'; }).length,
+    users.filter(function (u) { return (u.status || 'pending') === 'pending'; }).length);
+  if (!users.length) {
+    if (list) list.innerHTML = '<div class="text-xs text-gray-500">No accounts yet. Share your app link and members can request an account.</div>';
+    const act = $('activeUsersList'); if (act) act.innerHTML = '<div class="text-xs text-gray-500">No approved accounts yet.</div>';
+    setUsersMsg('');
+    safeIcons();
+    return;
+  }
+  if (list) list.innerHTML = users.map(function (u) { return usersRow(u); }).join('');
+  const active = users.filter(function (u) { return (u.status || 'pending') === 'approved'; });
+  const actList = $('activeUsersList');
+  if (actList) actList.innerHTML = active.length
+    ? active.map(function (u) { return activeUserRow(u); }).join('')
+    : '<div class="text-xs text-gray-500">No approved accounts yet.</div>';
+  setUsersMsg('');
+  safeIcons();
+}
+function setUsersStats(total, active, pending) {
+  const fill = function (id, v) { const x = $(id); if (x) x.textContent = String(v); };
+  fill('usersStatTotal', total); fill('usersStatActive', active); fill('usersStatPending', pending);
+}
+function setUsersMsg(text, type) {
+  const el = $('usersMsg'); if (!el) return;
+  el.textContent = text || '';
+  const colors = { error: 'text-red-400', success: 'text-emerald-400', info: 'text-gray-400' };
+  el.className = 'text-xs font-semibold mt-3 ' + (colors[type] || colors.info);
+}
+function usersRow(u) {
+  const st = u.status || 'pending';
+  const email = esc(u.email || '');
+  const isMe = (u.id || '') === authToken();
+  const idSafe = esc(u.id || '').replace(/'/g, "\\'");
+  const emSafe = email.replace(/'/g, "\\'");
+  const statusBadge = st === 'approved'
+    ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500 text-gray-900 font-bold">APPROVED</span>'
+    : st === 'rejected'
+    ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-red-500 text-white font-bold">REJECTED</span>'
+    : '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500 text-gray-900 font-bold">PENDING</span>';
+  const roleChip = u.role === 'admin'
+    ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/30 text-purple-300 font-bold">ADMIN</span>'
+    : '<span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 font-bold">USER</span>';
+  const when = esc(String(u.created_at || u.createdAt || '').replace('T', ' ').slice(0, 16) || '—');
+  let actions = '';
+  if (st === 'pending') {
+    actions = '<button onclick="usersAct(\'approve\',\'' + idSafe + '\',\'' + emSafe + '\')" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold">Approve</button> '
+      + '<button onclick="usersAct(\'reject\',\'' + idSafe + '\',\'' + emSafe + '\')" class="px-2 py-1 rounded bg-red-700/70 hover:bg-red-600 text-red-100 text-[10px] font-bold">Reject</button>';
+  } else if (st === 'approved') {
+    if (u.role === 'admin') {
+      actions = isMe
+        ? '<span class="text-[10px] text-gray-500">You</span>'
+        : '<button onclick="usersAct(\'demote\',\'' + idSafe + '\',\'' + emSafe + '\')" class="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-[10px] font-bold">Remove Admin</button>';
+    } else {
+      actions = '<button onclick="usersAct(\'promote\',\'' + idSafe + '\',\'' + emSafe + '\')" class="px-2 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold">Make Admin</button>';
+    }
+  }
+  return '<div class="flex items-center justify-between gap-2 py-2.5 border-b border-gray-700 last:border-0">' +
+    '<div class="min-w-0"><div class="text-sm font-semibold truncate">' + email + roleChip + '</div>' +
+    '<div class="text-[10px] text-gray-500">joined ' + when + '</div></div>' +
+    '<div class="flex items-center gap-1.5 shrink-0">' + statusBadge + actions + '</div></div>';
+}
+function activeUserRow(u) {
+  const email = esc(u.email || '');
+  const roleChip = u.role === 'admin'
+    ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/30 text-purple-300 font-bold">ADMIN</span>'
+    : '<span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 font-bold">USER</span>';
+  return '<div class="flex items-center justify-between gap-2 py-1.5 border-b border-gray-800 last:border-0">' +
+    '<span class="text-xs truncate">' + email + '</span>' + roleChip + '</div>';
+}
+async function usersAct(action, id, email) {
+  if (!id) { setUsersMsg('This account has no valid ID.', 'error'); return; }
+  let res;
+  if (action === 'approve' || action === 'reject') {
+    if (SUPA.configured()) res = await SUPA.setAccountStatus(id, action === 'approve' ? 'approved' : 'rejected');
+    else res = await authPost(action, { email: email });
+  } else if (action === 'promote' || action === 'demote') {
+    const role = action === 'promote' ? 'admin' : 'user';
+    if (SUPA.configured()) res = await SUPA.setUserRole(id, role);
+    else res = await authPost('setRole', { email: email, role: role });
+  }
+  const ok = !!(res && res.ok);
+  const msg = (res && (res.message || res.error)) || (ok ? usersActionPast(action, email) : 'Action failed.');
+  // Re-render the lists FIRST, then stamp the result message so the re-render
+  // (which clears the panel message) never wipes the feedback the admin just saw.
+  await renderUsersTab();
+  setUsersMsg(msg, ok ? 'success' : 'error');
+}
+function usersActionPast(action, email) {
+  const past = { approve: 'Approved ', reject: 'Rejected ', promote: 'Made admin: ', demote: 'Removed admin: ' };
+  return (past[action] || '') + (email || '');
 }
 
 /* ============================================================

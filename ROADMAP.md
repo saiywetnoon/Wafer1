@@ -14,7 +14,7 @@ approved account's data kept private.
 
 | Area | Status | What is complete |
 |---|---|---|
-| Email/password accounts | ✅ | Supabase Auth gate, approved/pending/rejected account states, first account becomes admin. |
+| Email/password accounts | ✅ | Supabase Auth gate, approved/pending/rejected account states, first account becomes admin. Admins can manage everyone from the Users tab: approve/reject requests, promote a user to admin, demote an admin (last admin protected). |
 | Database privacy | ✅ | RLS restricts profiles and ledger access; pending users cannot access ledgers. |
 | Multi-device sync | ✅ | Supabase Realtime receives updates. When two devices both hold data that differs, a pop-up shows the diff and asks which copy is **official**: Accept (other device's data replaces this one) or **Keep Mine** (this device's data is uploaded to the cloud as official). Choices persist per copy so refresh never re-asks; an empty device always pulls and an empty cloud always adopts local. No copy is overwritten or merged silently. Whole-ledger writes are still one JSON row (a record-level DB is on the roadmap). |
 | Production and sales | ✅ | Production adds finished goods; sales use weighted-average COGS. |
@@ -42,6 +42,8 @@ Legend: ✅ complete · 🟡 usable but incomplete · ⬜ not started
 - [x] An ordinary user cannot set their own status to `approved`.
 - [x] Pending and rejected users cannot access their ledger through the API.
 - [x] An admin can view and approve/reject account requests.
+- [x] An admin can promote a user to admin and demote an admin back to user
+  (admin-only `profile_set_role` RPC; the last admin cannot be demoted).
 - [x] Realtime setup does not remove other tables from the shared Supabase
   publication.
 

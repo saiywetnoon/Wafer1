@@ -793,6 +793,7 @@ document.querySelectorAll('.tab-btn').forEach(function (btn) {
     if (btn.dataset.tab === 'cash') renderCash();
     if (btn.dataset.tab === 'sync') renderSyncTab();
     if (btn.dataset.tab === 'sales') { updateSaleLive(); renderSalesTab(); }
+    if (btn.dataset.tab === 'users') { renderUsersTab(); }
   });
 });
 

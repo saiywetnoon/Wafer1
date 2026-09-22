@@ -595,6 +595,28 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
+### v1.14.0 — Users & Permissions tab (user list, active list, promote to admin)
+- **New admin-only **Users** tab** (sidebar → Manage → Users) that shows the
+  whole account directory at a glance:
+  - **Total / Active / Pending** summary cards.
+  - **All accounts** list — every profile with email, role chip
+    (ADMIN/USER), status badge (APPROVED/REJECTED/PENDING), join date, and
+    the right action per row: **Approve**/**Reject** for pending requests,
+    **Make Admin** to promote a user, or **Remove Admin** to demote an admin.
+  - **Active (approved)** list — just the accounts that can actually sign in,
+    with their role.
+  - Your own row is marked **You** (you cannot demote yourself from the UI).
+- **Permissions are enforced in the database, not just the UI.** A new
+  admin-only RPC (`profile_set_role`) changes a profile's role; the SQL trigger
+  and RLS still block every ordinary user from touching roles/status, and the
+  **last admin can never be demoted** — somebody must always remain who can
+  approve accounts. (Run the updated section of `_supabase-setup.sql` once in
+  the Supabase SQL editor to deploy the RPC.)
+- The old topbar **Admin** button (Approve/Reject modal) still works — the new
+  tab is the fuller home for the same account management.
+- New regression net `_verify_users_tab.js` (28 checks) covers listing, active
+  list, stats, action routing, escaping, and the non-admin block.
+
 ### v1.8.5.4 — bags output stays automatic (form save no longer freezes the bag count)
 - **Fixed: an auto-derived bag count saved from the Production form no longer
   locks the day's batch into MANUAL mode.** The form live-fills the "Total

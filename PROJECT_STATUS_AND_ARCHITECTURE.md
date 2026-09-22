@@ -80,7 +80,7 @@ Give a working, low-literacy, multi-device shop owner one ledger that:
 | `ledgers(user_id, payload, updated_at)` | ACTIVE per-account store (v1.8.5) — one whole-ledger JSON row per account | owner + approved (`auth.uid() = user_id`) |
 | `shared_ledgers(workspace_id PK, payload, updated_at)` | LEGACY migration source only — locked to the owner; only the ADMIN may read/write it and only the ADMIN's first login adopts its payload into the admin's private `ledgers` row (then it is deleted) | admin only (select/insert/update) |
 
-Key server-side functions: `handle_new_user()`, `touch_ledger()`, `is_approved()`, `is_admin()`, `protect_profile_fields()`.
+Key server-side functions: `handle_new_user()`, `touch_ledger()`, `is_approved()`, `is_admin()`, `protect_profile_fields()`, `profile_set_role()` (admin-only role changes, last-admin guard).
 ---
 
 ## 3. Core Module Breakdown

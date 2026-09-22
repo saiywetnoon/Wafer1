@@ -6,7 +6,7 @@
    - every main navigation label has a translation. */
 const fs = require('fs');
 const path = require('path');
-const dir = 'd:\\wafer\\Wafer_documentary\\dail-ledger v1.7\\js';
+const dir = path.join(__dirname, 'js');
 const read = (f) => fs.readFileSync(path.join(dir, f), 'utf8');
 
 global.window = global;
@@ -52,7 +52,7 @@ var empties = keys.filter(function (k) { return !String(I18N_MY[k]).trim(); });
 ok(empties.length === 0, 'no empty translations');
 
 ['Production', 'Fry Timers', 'Sales & Stock', 'Dashboard', 'Inventory', 'Customers',
- 'Suppliers', 'Cash Drawer', 'Business Tools', 'Sync & Backup'].forEach(function (label) {
+ 'Suppliers', 'Users', 'Cash Drawer', 'Business Tools', 'Sync & Backup'].forEach(function (label) {
   ok(I18N_MY[label] !== undefined, 'nav label translated: ' + label);
 });
 

@@ -286,5 +286,16 @@ const SUPA = {
     const { error } = await sb.from('profiles')
       .update({ status: status }).eq('id', id);
     return error ? { error: error.message } : { ok: true };
+  },
+  /* Role / permission change (v1.14.0): promote a user to admin, or demote an
+     admin back to user. Goes through the `profile_set_role` RPC because the
+     profiles table is deliberately write-locked — the function re-checks the
+     caller is an admin and refuses to demote the LAST admin. */
+  async setUserRole(id, role) {
+    const sb = this.init(); if (!sb) return { error: 'unconfigured' };
+    if (role !== 'admin' && role !== 'user') return { error: 'Invalid role.' };
+    const { data, error } = await sb.rpc('profile_set_role', { p_user_id: id, p_role: role });
+    if (error) return { error: String((error && (error.message || error.code)) || 'role update failed') };
+    return { ok: true, data: data };
   }
 };

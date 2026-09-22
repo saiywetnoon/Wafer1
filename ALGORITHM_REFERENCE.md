@@ -301,7 +301,8 @@ settings{}, inventoryMovementVersion, version, updatedAt`.
 | `authRequestPasswordReset()` / `authApplyPasswordReset()` | **Email-link flow** | Request sends the reset email; apply consumes the URL-hash tokens and updates the password. | O(1) |
 | `maybeRecoveryFlow()` | **URL-hash detection + deferred apply** | Regex `/type=recovery/` on `location.hash`; matched ⇒ wait 1.5 s (`setTimeout`) for the auth library to finish booting, then apply. | O(1) |
 | `authBootstrap()` | **Gate sequence** | Restore session → require an approved user → otherwise show the auth screen. The ledger never boots unauthenticated. | O(1) |
-| `openAdminConsole()` / `adminAct(action, id, email)` | **Role-protected CRUD** | List accounts with status; `approve / reject / promote / demote` guarded by `authIsAdmin()`. | O(users) |
+| `openAdminConsole()` / `adminAct(action, id, email)` | **Role-protected CRUD** | List accounts with status; `approve / reject` guarded by `authIsAdmin()`. | O(users) |
+| `renderUsersTab()` / `usersRow()` / `activeUserRow()` / `usersAct(action, id, email)` | **Users & Permissions tab** | Admin-only tab (button hidden by `renderAuthBadge` for non-admins). Renders the full account directory + an Active (approved) list + Total/Active/Pending stats; approve/reject route through `SUPA.setAccountStatus`, promote/demote through `SUPA.setUserRole` → RPC `profile_set_role` (SQL re-checks admin + last-admin guard). Own row renders "You" (no self-demote). | O(users) |
 | `authPost(action, extra)` | **Endpoint abstraction** | All admin/signup HTTP calls funnel through one helper (transport swappable). | O(1) |
 | `maybeImportLegacy()` | **One-shot migration hook** | Offers to import pre-account local data into the fresh workspace (flag-guarded). | O(n) |
 

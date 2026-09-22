@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark" data-build="v1.13.11">
+<html lang="en" class="dark" data-build="v1.14.0">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -142,6 +142,9 @@ tailwind.config = {
           </button>
           <button data-tab="suppliers" role="tab" aria-selected="false" class="tab-btn flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
             <i data-lucide="store" class="w-4 h-4"></i> Suppliers
+          </button>
+          <button id="usersTabBtn" data-tab="users" role="tab" aria-selected="false" class="tab-btn hidden flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-gray-200 whitespace-nowrap transition">
+            <i data-lucide="users-round" class="w-4 h-4"></i> Users
           </button>
         </div>
         <div class="nav-group">
@@ -1385,6 +1388,41 @@ tailwind.config = {
         <i data-lucide="info" class="w-3.5 h-3.5 inline text-amber-400"></i>
         <b>How this works:</b> Sales are assumed to be cash on delivery. Stock purchases count as cash-out when you note what you paid (<b>Paid Now</b> + later supplier payments). Ingredients consumed in daily entries are a <b>cost</b>, not a cash outlay — that's a separate P&amp;L figure. Use manual adjustments for anything the app can't infer. This gives you a running "does the cash drawer match the books?" sanity check each week.
       </p>
+    </div>
+  </section>
+
+  <!-- ===================== USERS & PERMISSIONS (admin only) ===================== -->
+  <section id="tab-users" class="tab-panel hidden">
+    <div class="grid sm:grid-cols-3 gap-3 mb-4">
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <div class="text-xs text-gray-400 font-semibold mb-1">Total users</div>
+        <div id="usersStatTotal" class="text-3xl font-extrabold text-gray-100">—</div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <div class="text-xs text-gray-400 font-semibold mb-1">Active accounts</div>
+        <div id="usersStatActive" class="text-3xl font-extrabold text-emerald-400">—</div>
+      </div>
+      <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+        <div class="text-xs text-gray-400 font-semibold mb-1">Pending requests</div>
+        <div id="usersStatPending" class="text-3xl font-extrabold text-amber-400">—</div>
+      </div>
+    </div>
+    <div class="card bg-gray-900 rounded-xl p-5 border border-gray-800">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h3 class="font-bold text-base flex items-center gap-2"><i data-lucide="users-round" class="w-5 h-5 text-purple-400"></i> Account permissions</h3>
+        <p class="text-xs text-gray-500">Approve pending requests, or promote a user to admin.</p>
+      </div>
+      <div class="grid lg:grid-cols-2 gap-6">
+        <div>
+          <h4 class="font-bold text-sm text-gray-300 mb-2">All accounts</h4>
+          <div id="usersList" class="text-sm"></div>
+        </div>
+        <div>
+          <h4 class="font-bold text-sm text-gray-300 mb-2">Active (approved)</h4>
+          <div id="activeUsersList" class="text-sm"></div>
+        </div>
+      </div>
+      <div id="usersMsg" class="text-xs font-semibold mt-3"></div>
     </div>
   </section>
 

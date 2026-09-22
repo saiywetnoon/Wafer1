@@ -102,10 +102,14 @@ language plpgsql
 set search_path = public
 as $$
 begin
+  -- Identity (id/email) is always immutable. The ROLE may change ONLY when the
+  -- current user is an admin (checked via public.is_admin() = the CALLER's own
+  -- profile, not the target row). Ordinary users are hard-blocked here AND by
+  -- the profiles_update RLS policy, so nobody can self-promote.
   if new.id is distinct from old.id
      or new.email is distinct from old.email
-     or new.role is distinct from old.role then
-    raise exception 'Profile identity and role cannot be changed';
+     or (new.role is distinct from old.role and not public.is_admin()) then
+    raise exception 'Profile identity cannot be changed; role changes require admin rights';
   end if;
   return new;
 end;
@@ -115,6 +119,43 @@ drop trigger if exists profile_protect_fields on public.profiles;
 create trigger profile_protect_fields
   before update on public.profiles
   for each row execute procedure public.protect_profile_fields();
+
+-- Role change (v1.14.0): promote a user to admin, or demote an admin back to
+-- user. ADMIN ONLY, enforced BOTH in the app and in the function itself. The
+-- LAST admin can never be demoted — somebody must always exist who can approve
+-- accounts and manage permissions.
+create or replace function public.profile_set_role(p_user_id uuid, p_role text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_admins bigint;
+begin
+  if not public.is_admin() then
+    raise exception 'Only an admin can change roles';
+  end if;
+  if p_role is null or p_role not in ('admin', 'user') then
+    raise exception 'Role must be admin or user';
+  end if;
+  if p_user_id is null then
+    raise exception 'Missing user id';
+  end if;
+  -- Refuse to remove the last admin (would lock everyone out of approvals).
+  if p_role = 'user' then
+    select count(*) into v_admins from public.profiles where role = 'admin';
+    if v_admins <= 1 then
+      raise exception 'Cannot demote the last admin';
+    end if;
+  end if;
+  update public.profiles set role = p_role where id = p_user_id;
+  return found;
+end;
+$$;
+
+grant execute on function public.profile_set_role(uuid, text) to authenticated;
+grant execute on function public.profile_set_role(uuid, text) to service_role;
 
 drop policy if exists profiles_select on public.profiles;
 create policy profiles_select on public.profiles
