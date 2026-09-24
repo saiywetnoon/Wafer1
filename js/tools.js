@@ -4,6 +4,7 @@
 function renderTools() {
   renderRecipes();
   renderBreakEven();
+  renderCompareProfit();
   renderWaste();
   renderPriceHistory();
   renderExpenses();
@@ -236,7 +237,167 @@ function removeRecurring(id) {
   renderRecurring();
 }
 
-/* ---------- Forecast ---------- */
+/* ---------- Compare Price & Pack (Profit Matrix) ----------
+   What-if for TODAY'S batch: "if I sell at a different price, packed with
+   more/fewer pieces per bag, or rolled at a different grams-per-roll, what is
+   my profit?" Uses the same costing convention as Break-Even / Target-Profit:
+
+     profit = (price × bags) − (capital + labor)
+     ppb mode: bags = floor(pieces ÷ packValue)          (packing knob)
+     gpr mode: pieces = floor(mixGrams ÷ packValue)      (rolling knob),
+               bags   = floor(pieces ÷ currentPiecesPerBag)
+
+   compareProfitScenario is PURE so the verify harness can unit-test it. */
+function compareProfitScenario(mixGrams, basePieces, currentPpb, capital, laborCost, priceBag, packValue, packMode) {
+  priceBag = parseFloat(priceBag) || 0;
+  packValue = parseFloat(packValue) || 0;
+  currentPpb = parseFloat(currentPpb) > 0 ? parseFloat(currentPpb) : 5;
+  mixGrams = parseFloat(mixGrams) || 0;
+  capital = parseFloat(capital) || 0;
+  laborCost = parseFloat(laborCost) || 0;
+  let pieces = parseFloat(basePieces) || 0;
+  if (packMode === 'gpr') {
+    pieces = packValue > 0 ? Math.floor(mixGrams / packValue) : 0;
+  }
+  const bags = packMode === 'gpr'
+    ? Math.floor(pieces / currentPpb)
+    : (packValue > 0 ? Math.floor(pieces / packValue) : 0);
+  const revenue = priceBag * Math.max(0, bags);
+  const profit = Math.round((revenue - capital - laborCost) * 100) / 100;
+  return {
+    pieces: Math.max(0, pieces),
+    bags: Math.max(0, bags),
+    revenue: Math.max(0, revenue),
+    profit: profit,
+    margin: revenue > 0 ? (profit / revenue) * 100 : 0
+  };
+}
+
+function comparePackDefault() {
+  const mode = ($('cpPackMode') || {}).value || 'ppb';
+  if (mode === 'gpr') {
+    const wpr = recentWeightPerRoll() > 0 ? recentWeightPerRoll() : 20;
+    return Math.max(1, wpr - 2) + ', ' + wpr + ', ' + (wpr + 2);
+  }
+  const ppb = stockAvgPiecesPerBag() || DEFAULT_ROLLS_PER_BAG;
+  return Math.max(1, ppb - 1) + ', ' + ppb + ', ' + (ppb + 1);
+}
+
+function comparePriceDefault() {
+  const base = lastSalePrice();
+  if (!(base > 0)) return '80, 100, 120, 150';
+  return [base - 20, base - 10, base, base + 10, base + 20]
+    .filter(function (v) { return v > 0; })
+    .join(', ');
+}
+
+function renderCompareProfit() {
+  const el = $('cpMatrix');
+  const base = $('cpBaseline');
+  if (!el || !base) return;
+
+  // Baseline from the SAME live sources as the other calculators.
+  const usage = currentUsage();
+  const capital = ingredientCostFor(usage) + (parseFloat($('additionalCost').value) || 0);
+  const wage = parseFloat($('hourlyWage').value) || state.settings.hourlyWage || 0;
+  const laborMin = parseFloat(($('logLabor') || {}).value) || 0;
+  const laborCost = (laborMin / 60) * wage;
+  const mixGrams = totalMixWeightFor(usage);
+  const wpr = recentWeightPerRoll();
+  const formPieces = parseFloat(($('logPieces') || {}).value) || 0;
+  const basePieces = formPieces > 0 ? formPieces : (wpr > 0 ? Math.floor(mixGrams / wpr) : 0);
+  const ppb = stockAvgPiecesPerBag() || DEFAULT_ROLLS_PER_BAG;
+  const priceBag = lastSalePrice();
+  const mode = ($('cpPackMode') || {}).value || 'ppb';
+
+  base.innerHTML =
+    '<span class="text-emerald-400 font-bold tabular-nums">' + fmt(basePieces) + ' pcs · ' +
+    fmt(Math.max(0, Math.floor(basePieces / ppb))) + ' bags</span>' +
+    ' <span class="text-gray-500">· capital ' + fmtKs(Math.round(capital)) +
+    ' · labor ' + fmtKs(Math.round(laborCost)) +
+    ' · price ' + fmtKs(Math.round(priceBag)) + '/bag</span>';
+
+  // Trial inputs — prefill only while empty so the user's typing is kept.
+  const priceEl = $('cpPrices');
+  const packEl = $('cpPacks');
+  if (priceEl && !priceEl.value.trim()) priceEl.value = comparePriceDefault();
+  if (packEl && !packEl.value.trim()) packEl.value = comparePackDefault();
+
+  const prices = String(priceEl ? priceEl.value : '').split(',')
+    .map(function (s) { return parseFloat(s); })
+    .filter(function (v) { return isFinite(v) && v > 0; })
+    .sort(function (a, b) { return a - b; });
+  const packVals = String(packEl ? packEl.value : '').split(',')
+    .map(function (s) { return parseFloat(s); })
+    .filter(function (v) { return isFinite(v) && v > 0; })
+    .sort(function (a, b) { return a - b; });
+  if (!prices.length || !packVals.length) {
+    el.innerHTML = '<span class="text-gray-500">Enter at least one trial price and one pack value.</span>';
+    return;
+  }
+  prices.splice(8);
+  packVals.splice(8);
+
+  // Find the best (max profit) cell first so it can be highlighted.
+  let bestRow = 0, bestCol = 0;
+  let bestProfit = -Infinity;
+  prices.forEach(function (pr, ri) {
+    packVals.forEach(function (pv, ci) {
+      const r = compareProfitScenario(mixGrams, basePieces, ppb, capital, laborCost, pr, pv, mode);
+      if (r.profit > bestProfit) { bestProfit = r.profit; bestRow = ri; bestCol = ci; }
+    });
+  });
+
+  const unitLabel = mode === 'gpr' ? 'g/roll' : 'pcs/bag';
+  const basePack = mode === 'gpr' ? (wpr > 0 ? wpr : -1) : ppb;
+  const sign = bestProfit < 0 ? '−' : '';
+  let html =
+    '<div class="overflow-x-auto scrollbar-thin"><table class="w-full text-xs">' +
+    '<thead><tr class="text-left text-gray-400 border-b border-gray-700">' +
+    '<th class="py-1 pr-2">Price (Ks)</th>' +
+    packVals.map(function (pv) {
+      const isBase = Math.abs(pv - basePack) < 0.001;
+      return '<th class="py-1 px-2 text-right' + (isBase ? ' text-amber-400 font-bold' : '') + '">' +
+        fmt(Math.round(pv * 100) / 100) + ' ' + unitLabel + (isBase ? ' ●' : '') + '</th>';
+    }).join('') +
+    '</tr></thead><tbody>' +
+    prices.map(function (pr, ri) {
+      const isBasePrice = Math.abs(pr - priceBag) < 0.001;
+      return '<tr class="border-b border-gray-800">' +
+        '<td class="py-1 pr-2 text-left text-gray-200 whitespace-nowrap' + (isBasePrice ? ' text-amber-400 font-bold' : '') + '">' +
+        fmt(Math.round(pr)) + '<span class="text-[9px] text-gray-500"> Ks</span>' + (isBasePrice ? ' ●' : '') + '</td>' +
+        packVals.map(function (pv, ci) {
+          const r = compareProfitScenario(mixGrams, basePieces, ppb, capital, laborCost, pr, pv, mode);
+          const isBest = (ri === bestRow && ci === bestCol);
+          return '<td class="py-1 px-2 text-right tabular-nums' + (isBest ? ' bg-emerald-900/40' : '') + '">' +
+            '<div class="' + (r.profit >= 0 ? 'text-emerald-400' : 'text-red-400') + '">' +
+            (r.profit < 0 ? '−' : '') + fmtKs(Math.round(Math.abs(r.profit))) + '</div>' +
+            '<div class="text-[9px] text-gray-500">' + fmt(r.bags) + ' bags' + (isBest ? ' ★' : '') + '</div></td>';
+        }).join('') +
+      '</tr>';
+    }).join('') +
+    '</tbody></table></div>' +
+    '<div class="text-[10px] text-gray-500 mt-1.5">Best: <b class="text-emerald-400">' + sign + fmtKs(Math.round(Math.abs(bestProfit))) +
+    '</b> at ' + fmt(Math.round(prices[bestRow])) + ' Ks × ' + fmt(Math.round(packVals[bestCol] * 100) / 100) + ' ' + unitLabel +
+    ' — ' + (mode === 'gpr' ? 'thinner/thicker rolls change the roll count' : 'bigger/smaller bags change the bag count') + '.</div>';
+  el.innerHTML = html;
+}
+try {
+  ['cpPrices', 'cpPacks'].forEach(function (id) {
+    const el = $(id);
+    if (el && el.addEventListener) el.addEventListener('input', renderCompareProfit);
+  });
+  const modeEl = $('cpPackMode');
+  if (modeEl && modeEl.addEventListener) modeEl.addEventListener('change', function () {
+    const packEl = $('cpPacks');
+    if (packEl) packEl.value = comparePackDefault();   // knob switched → re-default trials
+    renderCompareProfit();
+  });
+  ['logPieces', 'logLabor', 'additionalCost'].forEach(function (id) {
+    const el = $(id);
+    if (el && el.addEventListener) el.addEventListener('input', renderCompareProfit);
+  });
+} catch (e) { /* optional calculator — never crash the Tools tab */ }
 function renderForecast() {
   const box = $('forecastBox');
   const entries = entriesProdSales();

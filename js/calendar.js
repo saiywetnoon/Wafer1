@@ -95,7 +95,7 @@ function loadEntryIntoForm(date) {
   }
   safeIcons();
   state.prices.forEach(function (ing) {
-    const qty = draftUsage[ing.name] !== undefined ? draftUsage[ing.name] : (DEFAULT_USAGE[ing.name] || 0);
+    const qty = draftUsage[ing.name] !== undefined ? draftUsage[ing.name] : defaultUsageFor(ing.name);
     const input = document.querySelector('.usage-input[data-name="' + ing.name + '"]');
     if (input) input.value = qty;
   });

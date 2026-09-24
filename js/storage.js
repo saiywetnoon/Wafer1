@@ -6,7 +6,7 @@ let state = {
   production: [],       // batches you ROLLED: { id, date, pieces, bags, usage, additionalCost, capital, laborMinutes, laborCost, costPerPiece }
   sales: [],            // what you SOLD: { id, date, bags, pieces, price, amount, cogs, avgCost, net }
   stock: { pieces: 0, cost: 0 }, // finished goods ready to sell (cost basis for cogs)
-  settings: { hourlyWage: 1500, rollsPerBag: DEFAULT_ROLLS_PER_BAG },
+  settings: { hourlyWage: 1500, rollsPerBag: DEFAULT_ROLLS_PER_BAG, defaultUsage: null }, // defaultUsage: admin-saved default recipe ({ name: qty })
   inventory: {},   // { ingredientName: { stock (derived snapshot), lowAlert } }
   inventoryMovements: [], // [{ id, date, ingredientName, qty (+/-), type, reason, referenceId }]
   inventoryMovementVersion: 0,

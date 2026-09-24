@@ -9,8 +9,15 @@ function currentUsage() {
   return usage;
 }
 
+/* The recipe that pre-fills "Today's Qty": the admin-saved default
+   (state.settings.defaultUsage) when one exists, else the base DEFAULT_USAGE. */
+function defaultUsageMap() {
+  const custom = state.settings && state.settings.defaultUsage;
+  return (custom && typeof custom === 'object' && Object.keys(custom).length) ? custom : DEFAULT_USAGE;
+}
+
 function defaultUsageFor(name) {
-  if (DEFAULT_USAGE[name] !== undefined) return DEFAULT_USAGE[name];
+  if (defaultUsageMap()[name] !== undefined) return defaultUsageMap()[name];
   return 0;
 }
 
@@ -181,7 +188,7 @@ $('logDate').addEventListener('change', function () {
 function setDefaultProductionUsage(date) {
   if (Object.keys(draftUsage).length) return;
   const batch = (state.production || []).find(function (production) { return production.date === date; }) || previousProductionUsage(date);
-  draftUsage = Object.assign({}, batch && batch.usage ? batch.usage : DEFAULT_USAGE);
+  draftUsage = Object.assign({}, batch && batch.usage ? batch.usage : defaultUsageMap());
 }
 
 function renderUsageTable(force) {
@@ -197,7 +204,7 @@ function renderUsageTable(force) {
   const tbody = $('usageTable');
   const usage = currentUsage();
   tbody.innerHTML = state.prices.map(function (ing) {
-    const qty = usage[ing.name] !== undefined ? usage[ing.name] : (DEFAULT_USAGE[ing.name] || 0);
+    const qty = usage[ing.name] !== undefined ? usage[ing.name] : (defaultUsageMap()[ing.name] || 0);
     const cost = ingredientCostSingle(ing, qty);
     const weight = Math.round(ingredientWeightGrams(ing, qty));
     return '<tr class="border-b border-gray-800">' +
@@ -290,6 +297,35 @@ $('copyYesterdayBtn').addEventListener('click', function () {
   draftTouched = true;
   updateDraftHint();
   showToast("Copied yesterday's (" + yDate + ') usage into today\'s form.');
+});
+
+/* ---------- Default recipe save / apply (admin) ----------
+   The recipe that pre-fills "Today's Qty" every day. An admin can capture the
+   current form quantities as the standing default (state.settings.defaultUsage)
+   with the "Save as Default Recipe" button; it persists with the state and
+   feeds every future pre-fill (production form, calendar editor). The
+   "Use Standing Orders" button applies the standing recipe to today's form. */
+$('saveDefaultUsageBtn').addEventListener('click', function () {
+  if (typeof authIsAdmin === 'function' && !authIsAdmin()) {
+    showToast('Only an admin can change the default recipe.', 'error');
+    return;
+  }
+  state.settings = state.settings || {};
+  state.settings.defaultUsage = Object.assign({}, currentUsage());
+  persistState();
+  showToast('Today\'s quantities saved as the default recipe.');
+});
+$('standOrderBtn').addEventListener('click', function () {
+  const recipe = defaultUsageMap();
+  draftUsage = Object.assign({}, recipe);
+  state.prices.forEach(function (ing) {
+    const input = document.querySelector('.usage-input[data-name="' + ing.name + '"]');
+    if (input) input.value = recipe[ing.name] || 0;
+  });
+  updateUsageCosts();
+  draftTouched = true;
+  updateDraftHint();
+  showToast('Applied the default recipe to today\'s quantities.');
 });
 
 /* ============================================================

@@ -19,6 +19,8 @@ function renderAll() {
   renderCustomers();
   renderSuppliers();
   renderCash();
+  if (typeof renderAdminRecipe === 'function') { try { renderAdminRecipe(); } catch (e) { /* admin panel best-effort */ } }
+  if (typeof renderAdminCompare === 'function') { try { renderAdminCompare(); } catch (e) { /* admin panel best-effort */ } }
   updateUsageCosts();
   updateGoogleSyncStatus();
   const stEl = $('storageUsed');

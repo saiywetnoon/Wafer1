@@ -595,6 +595,31 @@ listed manual workflows before treating this release as complete.
 
 ## Changelog
 
+### v1.17.0 — Admin Default Recipe Manager + Production Profit Compare
+- **Admin-only Default Recipe Manager** (Users tab → Default Recipe Manager):
+  manually edit the standing recipe that pre-fills "Today's Qty" every day —
+  one row per ingredient with a live, unit-aware quantity input (g items typed
+  in grams, counted items in units), showing the per-line unit price, mix
+  weight and line cost, plus live totals for mix weight, ingredient cost and
+  expected rolls/bags.
+  - **Save as Default Recipe** writes the same `state.settings.defaultUsage`
+    store the Production form's "Save as Default Recipe" button uses, so there
+    is a single shared default and **zero migration** (same `{ name: qty }`
+    shape, plus a small provenance stamp: who/when it was last changed).
+  - **Reset to Built-in** deletes the custom default so forms fall back to the
+    factory `DEFAULT_USAGE` recipe. The source badge shows CUSTOM vs BUILT-IN.
+- **Admin-only Profit Across Recipes &amp; Batches** (Users tab): one table of
+  the last few actual production batches + the active default recipe (as a
+  "what-if") + every saved Tools recipe, all priced at today's last sale price
+  using the app's standard `profit = (bag price × bags) − (ingredient cost +
+  labour)` convention. Columns: mix weight, pieces, bags, ingredient cost,
+  labour, cost/piece, cost/bag, revenue, profit and margin; the most profitable
+  row is highlighted, and **Use in editor** loads any recipe into the Default
+  Recipe editor above.
+- New regression net `_verify_admin_recipe.js` unit-tests the pure math
+  (unit-aware costing incl. tiered electricity, mix-weight, expected
+  rolls/bags, median labour, profit/margin) and statically checks the wiring.
+
 ### v1.14.0 — Users & Permissions tab (user list, active list, promote to admin)
 - **New admin-only **Users** tab** (sidebar → Manage → Users) that shows the
   whole account directory at a glance:

@@ -271,6 +271,8 @@ function renderAuthBadge() {
   // The Users & Permissions tab is work for admins only.
   const ut = $('usersTabBtn'); if (ut) ut.classList.toggle('hidden', !authIsAdmin());
   const up = $('tab-users'); if (up) up.classList.toggle('hidden', !authIsAdmin());
+  // The Default Recipe manager (Production tab) is admin-only too.
+  const dr = $('saveDefaultUsageBtn'); if (dr) dr.classList.toggle('hidden', !authIsAdmin());
   const cb = $('companyNameBtn'); if (cb) cb.classList.toggle('hidden', !!authEmail());
 }
 // @@AUTH3@@

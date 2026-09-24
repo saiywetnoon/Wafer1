@@ -155,6 +155,24 @@ Legend: ✅ complete · 🟡 usable but incomplete · ⬜ not started
 - [x] Monthly Profit Report now shows the month's **Total Money Out** and a full **"Where the money went"** category breakdown (materials, labor, purchases paid, supplier payments, one-time expenses, cash-outs); spending-only months are selectable.
 - [x] `_verify_money_out_ui.js` covers the Calendar + Money Out wiring and the monthly money-out report.
 
+### Admin recipe & profit compare (v1.17.0)
+
+- [x] **Default Recipe Manager** (Users tab, admin-only): manually edit the
+  standing recipe that pre-fills every day's form — unit-aware per-ingredient
+  quantity inputs with live line cost, mix weight, ingredient cost and expected
+  rolls/bags. **Save** writes the same `state.settings.defaultUsage` the
+  Production form's "Save as Default Recipe" button uses (single shared
+  default, zero migration); **Reset to Built-in** falls back to the factory
+  `DEFAULT_USAGE`. Source badge shows CUSTOM vs BUILT-IN plus who/when.
+- [x] **Profit Across Recipes & Batches** (Users tab, admin-only): recent real
+  batches + the active default recipe + every saved Tools recipe compared at
+  today's last sale price with the app's standard
+  `profit = (price × bags) − (capital + labour)`; best-margin row highlighted;
+  **Use in editor** loads a recipe into the Default Recipe editor.
+- [x] `_verify_admin_recipe.js` harness covers the unit-aware costing math
+  (incl. tiered electricity), mix-weight, expected rolls/bags, median labour,
+  profit/margin, and the static wiring/build stamp.
+
 ## Following release — Daily operations
 
 ### 3. Cash close and exception control
